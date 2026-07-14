@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+
+<html class="light" lang="ka"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>PlayPoint - Game Frame</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed": "#002109",
+                    "inverse-on-surface": "#f1f1f1",
+                    "on-error": "#ffffff",
+                    "secondary": "#006e2f",
+                    "on-error-container": "#93000a",
+                    "on-background": "#1a1c1c",
+                    "outline": "#767586",
+                    "on-primary-container": "#fffbff",
+                    "primary": "#4648d4",
+                    "error": "#ba1a1a",
+                    "surface-variant": "#e2e2e2",
+                    "inverse-surface": "#2f3131",
+                    "secondary-fixed-dim": "#4ae176",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "surface-container-highest": "#e2e2e2",
+                    "on-secondary-container": "#007432",
+                    "on-tertiary-container": "#fffbff",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "surface-container": "#eeeeee",
+                    "tertiary": "#825100",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "background": "#f9f9f9",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-container-lowest": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "surface-bright": "#f9f9f9",
+                    "surface-container-low": "#f3f3f3",
+                    "inverse-primary": "#c0c1ff",
+                    "secondary-container": "#6bff8f",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-fixed-variant": "#005321",
+                    "surface": "#f9f9f9",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "on-primary": "#ffffff",
+                    "on-surface": "#1a1c1c",
+                    "surface-tint": "#494bd6",
+                    "on-surface-variant": "#464554",
+                    "primary-container": "#6063ee",
+                    "primary-fixed": "#e1e0ff",
+                    "surface-dim": "#dadada",
+                    "surface-container-high": "#e8e8e8",
+                    "on-primary-fixed": "#07006c",
+                    "secondary-fixed": "#6bff8f",
+                    "on-tertiary-fixed": "#2a1700",
+                    "tertiary-container": "#a36700",
+                    "on-secondary": "#ffffff",
+                    "outline-variant": "#c7c4d7"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.16px",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "lg": "24px",
+                    "base": "4px",
+                    "xs": "8px",
+                    "sm": "12px",
+                    "container-margin": "20px",
+                    "xl": "32px",
+                    "md": "16px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "label-sm": ["Inter"],
+                    "headline-lg-mobile": ["Montserrat"],
+                    "display-lg": ["Montserrat"],
+                    "headline-lg": ["Montserrat"],
+                    "body-md": ["Inter"],
+                    "score-md": ["Montserrat"]
+            },
+            "fontSize": {
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "score-md": ["18px", {"lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .fill-icon {
+            font-variation-settings: 'FILL' 1;
+        }
+        body {
+            overscroll-behavior-y: contain;
+        }
+        .glass-tag {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        /* Custom animation for the score jump */
+        @keyframes score-pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .animate-score {
+            animation: score-pop 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col overflow-hidden">
+<!-- Top Navigation Shell (The Anchor) -->
+<!-- Applying Shared Component Logic: TopAppBar style_shell_layout & style_bg_color -->
+<header class="flex justify-between items-center w-full px-container-margin py-md bg-surface dark:bg-inverse-surface shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] z-50">
+<div class="flex items-center gap-sm">
+<button class="p-xs rounded-full hover:bg-surface-variant/50 transition-colors active:scale-95 duration-150 flex items-center justify-center" onclick="window.history.back()">
+<span class="material-symbols-outlined text-primary text-[28px]">arrow_back_ios_new</span>
+</button>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary tracking-tight">სნეიკი</h1>
+</div>
+<div class="flex items-center gap-md">
+<!-- Score Display -->
+<div class="flex flex-col items-end">
+<span class="text-label-sm font-label-sm text-on-surface-variant leading-none">ქულა</span>
+<span class="font-score-md text-score-md text-primary-container" id="score">1,240</span>
+</div>
+<!-- Timer Display -->
+<div class="flex items-center gap-xs bg-secondary-container px-sm py-xs rounded-xl shadow-sm">
+<span class="material-symbols-outlined text-on-secondary-container text-md">timer</span>
+<span class="font-score-md text-score-md text-on-secondary-container" id="timer">02:45</span>
+</div>
+</div>
+</header>
+<!-- Main Game Area (Iframe Canvas) -->
+<main class="relative flex-grow w-full bg-surface-dim overflow-hidden">
+<!-- Background Atmospheric Element -->
+<div class="absolute inset-0 opacity-10 pointer-events-none">
+
+</div>
+<!-- The Game Iframe Placeholder -->
+<div class="relative w-full h-full flex items-center justify-center">
+<!-- Simulated Iframe Content -->
+<div class="w-full h-full max-w-4xl mx-auto shadow-2xl relative bg-black overflow-hidden md:rounded-xl md:my-lg md:h-[calc(100%-48px)]">
+<div class="w-full h-full bg-cover bg-center" data-alt="A vibrant 2D flat-plus style game screen of a modern Snake game. The background is a dark deep violet grid with glowing neon-green snake elements. High-energy aesthetic with saturated primary colors, soft ambient shadows on the interactive elements, and a clean minimalist UI overlay typical of a mobile casual gaming app." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD3iykm8fp1S4u2YieIJ73FG5VzpBl5FY3MxiAkp3K-OkoL3WEAxPBiAjDDE19039pwuK7ikjxCykBhj_Ow_TYfe1ATXLCRPNoZzCP-Pn636j4hCja-OZyDMvuixqTYJziniK9Wn1r71OiT9bH4dpqG6Sl35vMGsn0ark2MD4HtJJXD8MCf-zTSoY8dSL7G3l_KTb58ixhSbCl4DZf8_JYVi4tgTEzK1BHG83ZmqTeU6O0fO3EAm8zq')"></div>
+<!-- Immersive Overlay Elements -->
+<div class="absolute top-md right-md flex flex-col gap-xs">
+<button class="bg-surface-container-lowest/20 backdrop-blur-md p-sm rounded-full text-white hover:bg-white/30 transition-all">
+<span class="material-symbols-outlined">pause</span>
+</button>
+<button class="bg-surface-container-lowest/20 backdrop-blur-md p-sm rounded-full text-white hover:bg-white/30 transition-all">
+<span class="material-symbols-outlined">volume_up</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer / Sponsor Section -->
+<footer class="w-full py-xs px-container-margin bg-surface-container-lowest flex justify-center items-center gap-sm">
+<span class="text-label-sm font-label-sm text-outline uppercase tracking-widest">Powered By</span>
+<div class="flex items-center gap-xs glass-tag px-md py-1 rounded-full">
+<div class="w-5 h-5 rounded-full overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional minimalist company logo icon featuring abstract geometric shapes in a vibrant blue and white color scheme. The style is clean and modern, suitable for a tech sponsor in a high-energy gaming application." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC7YBgyxyq91pmDa6kzR8tv67UIVLjNlSI5cP6r50GLpr_J6XCvSDuJtwm8nm2F1L_WD-tFlkrZnjnTaXJ-Ghn_49TV30JIvgqCFOqI9VmkKqSD1_jnUsyNpnhnVzEWTIQoFa4tG1zJgyuIEqdr5cXlaWYucUtl-UgalyfU508wyBQDuT-PV0SdhYa9tDDtXHa-on-zBMan-CnxPh8ls_hEP9Mj0XnOz24BHv2visBfrYVVdU0uWxjX"/>
+</div>
+<span class="text-label-sm font-label-sm text-on-surface font-bold tracking-tight">CloudGaming Pro</span>
+</div>
+</footer>
+<!-- Bottom Navigation Suppressed as per Task-Focused/Linear Journey Rule -->
+<script>
+        // Simple Micro-interactions for the Game Screen
+        
+        // Timer Logic
+        let seconds = 165; // 2:45
+        const timerEl = document.getElementById('timer');
+        
+        setInterval(() => {
+            seconds++;
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            timerEl.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }, 1000);
+
+        // Score Simulation
+        const scoreEl = document.getElementById('score');
+        let currentScore = 1240;
+
+        function incrementScore() {
+            const added = Math.floor(Math.random() * 50) + 10;
+            currentScore += added;
+            scoreEl.innerText = currentScore.toLocaleString();
+            
+            // Visual feedback
+            scoreEl.classList.add('animate-score');
+            setTimeout(() => {
+                scoreEl.classList.remove('animate-score');
+            }, 300);
+        }
+
+        // Simulating random score jumps
+        setInterval(() => {
+            if (Math.random() > 0.7) incrementScore();
+        }, 3000);
+
+        // Prevent accidental gestures in the "Iframe" area
+        document.querySelector('main').addEventListener('touchmove', (e) => {
+            if (e.target.closest('main')) {
+                // Keep the "game" focused
+            }
+        }, { passive: false });
+    </script>
+<script src="../../shared/prototype-links.js"></script>
+</body></html>

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+
+<html lang="ka"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PlayPoint - Rewards</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&amp;family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-fixed": "#6bff8f",
+                    "inverse-primary": "#c0c1ff",
+                    "error-container": "#ffdad6",
+                    "on-error-container": "#93000a",
+                    "on-surface": "#1a1c1c",
+                    "surface": "#f9f9f9",
+                    "on-secondary-container": "#007432",
+                    "surface-dim": "#dadada",
+                    "surface-container": "#eeeeee",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-fixed": "#002109",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "secondary-container": "#6bff8f",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed": "#07006c",
+                    "surface-bright": "#f9f9f9",
+                    "inverse-surface": "#2f3131",
+                    "primary": "#4648d4",
+                    "on-primary": "#ffffff",
+                    "primary-container": "#6063ee",
+                    "tertiary": "#825100",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "surface-container-highest": "#e2e2e2",
+                    "surface-container-high": "#e8e8e8",
+                    "on-tertiary-container": "#fffbff",
+                    "secondary-fixed-dim": "#4ae176",
+                    "surface-container-low": "#f3f3f3",
+                    "tertiary-container": "#a36700",
+                    "on-secondary-fixed-variant": "#005321",
+                    "primary-fixed": "#e1e0ff",
+                    "on-surface-variant": "#464554",
+                    "outline-variant": "#c7c4d7",
+                    "inverse-on-surface": "#f1f1f1",
+                    "secondary": "#006e2f",
+                    "background": "#f9f9f9",
+                    "outline": "#767586",
+                    "on-primary-container": "#fffbff",
+                    "on-tertiary-fixed": "#2a1700",
+                    "error": "#ba1a1a",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-tint": "#494bd6",
+                    "on-error": "#ffffff",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "on-background": "#1a1c1c",
+                    "surface-variant": "#e2e2e2"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.16px",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "md": "16px",
+                    "xl": "32px",
+                    "xs": "8px",
+                    "base": "4px",
+                    "container-margin": "20px",
+                    "lg": "24px",
+                    "gutter": "16px",
+                    "sm": "12px"
+            },
+            "fontFamily": {
+                    "display-lg": ["Montserrat"],
+                    "headline-lg": ["Montserrat"],
+                    "label-sm": ["Inter"],
+                    "body-md": ["Inter"],
+                    "headline-lg-mobile": ["Montserrat"],
+                    "score-md": ["Montserrat"]
+            },
+            "fontSize": {
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                    "score-md": ["18px", {"lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { -webkit-tap-highlight-color: transparent; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .reward-card-gradient {
+            background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(0,0,0,0.6) 100%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] bg-surface dark:bg-inverse-surface flex justify-between items-center px-container-margin py-md">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container-high border-2 border-primary">
+<img class="w-full h-full object-cover" data-alt="A professional close-up studio portrait of a young adult with a friendly expression. The lighting is soft and high-key, emphasizing a clean and modern aesthetic. The background is a solid, neutral light gray, keeping the focus entirely on the person. This high-resolution image maintains a professional yet accessible digital profile style consistent with a modern gaming and rewards platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwpUTTCSbtfvKr4h8cHknjXM4ecusL1qbpsUM6DwnrO-umybW8Q4zIm86kB0nxrXqXCoLyocyV1rtjgss7tXZGbF8DpT-tyUvMnRaosFCLcFZs4VkaG7utMHXmKSR2593ocnAXGdjSZOQ9HtwRp6bbzzcltUOstleNjwdukFidgdWjRUBYy3iPUESL0xLsWlVbh5vbKYsRR3I2m4mxxpoCUkSuVAQOxQu_V_aLZoOW-Zy7Zs_rGnnv"/>
+</div>
+<h1 class="font-display-lg text-headline-lg-mobile md:text-headline-lg text-primary dark:text-inverse-primary tracking-tight">PlayPoint</h1>
+</div>
+<div class="flex items-center bg-primary-container px-sm py-xs rounded-full shadow-sm hover:opacity-80 transition-opacity active:scale-95 duration-150 cursor-pointer">
+<span class="material-symbols-outlined text-[20px] text-on-primary-container mr-1" style="font-variation-settings: 'FILL' 1;">stars</span>
+<span class="font-headline-lg-mobile text-on-primary-container">2,450 pts</span>
+</div>
+</header>
+<main class="mt-20 px-container-margin">
+<!-- Title & Intro -->
+<div class="py-lg">
+<h2 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-xs">პრიზები</h2>
+<p class="text-on-surface-variant font-body-md">გადაცვალე შენი ქულები საუკეთესო საჩუქრებში</p>
+</div>
+<!-- Categories / Tabs -->
+<div class="flex overflow-x-auto gap-sm hide-scrollbar pb-md mb-md">
+<button class="px-lg py-sm rounded-full bg-primary text-on-primary whitespace-nowrap font-label-sm shadow-md active:scale-95 transition-all">All Rewards</button>
+<button class="px-lg py-sm rounded-full bg-surface-container-high text-on-surface-variant whitespace-nowrap font-label-sm hover:bg-surface-variant/50 active:scale-95 transition-all">Food</button>
+<button class="px-lg py-sm rounded-full bg-surface-container-high text-on-surface-variant whitespace-nowrap font-label-sm hover:bg-surface-variant/50 active:scale-95 transition-all">Leisure</button>
+<button class="px-lg py-sm rounded-full bg-surface-container-high text-on-surface-variant whitespace-nowrap font-label-sm hover:bg-surface-variant/50 active:scale-95 transition-all">Tech</button>
+<button class="px-lg py-sm rounded-full bg-surface-container-high text-on-surface-variant whitespace-nowrap font-label-sm hover:bg-surface-variant/50 active:scale-95 transition-all">Gaming</button>
+</div>
+<!-- Featured Sponsor Banner -->
+<section class="mb-xl">
+<div class="relative w-full aspect-[430/160] rounded-xl overflow-hidden shadow-lg group">
+<div class="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" data-alt="A wide cinematic shot of a sleek, futuristic tech lounge with neon accents in primary blue and vibrant green. The environment is clean and high-end, featuring glass surfaces and holographic displays. Soft ambient light illuminates the space, creating an inviting and modern gaming atmosphere. Professional 3D rendering style with a shallow depth of field." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAicg58xQn8FgQJ7Z4S3L26zPt6zxwnWfP3vbr6OvOG20P3HAjrrpMGK9xAPX7EPVbv4yyJ4vvOcEaGP7Fj_dz2-uxjpxUhDMBZiuwNegpeFxjPnohxNLKIiegDT0ZoYonwr3ImOydip4CIwVBVvBH9Ee643VDMXb6UamUJMXQRzYOWndVN-Tp4FYwXhTwvOb2mbJwWA-IsBQiXkTNm2H4BpHyzOnd9EsmyJgxFmfMa3ymNUHVmlItW')"></div>
+<div class="absolute inset-0 bg-gradient-to-r from-primary/80 to-transparent flex flex-col justify-center px-lg text-white">
+<span class="inline-block px-sm py-[2px] bg-white/20 backdrop-blur-md rounded-full text-[10px] font-bold uppercase tracking-wider mb-xs self-start">Sponsored</span>
+<h3 class="font-headline-lg text-headline-lg-mobile">Double Points Weekend</h3>
+<p class="text-sm opacity-90 max-w-[200px]">Earn x2 PlayPoints at all TechStore locations.</p>
+</div>
+</div>
+</section>
+<!-- Rewards Grid -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-md">
+<!-- Reward Card 1 -->
+<div class="flex flex-col gap-xs group">
+<div class="relative aspect-square bg-surface-container rounded-xl overflow-hidden shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] active:scale-[0.98] transition-transform">
+<img class="w-full h-full object-cover" data-alt="A high-resolution product shot of a gourmet double cheeseburger with melting cheese and fresh lettuce, isolated on a vibrant yellow and orange background. The lighting is commercial and warm, highlighting the textures of the bun and juicy patty. The style is appetizing and modern, designed for a premium food rewards app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC80LiRy9NtvclN_ruEEhqtM73dWrYsawyLOIttNP1GrxFYwgdPUkMW2Km05sdIZ0_6UEb8M0r8uydSkgiM88cJLfGOc_QIGlz-SuuAAiN9p92F2UvPsFCO3Uzl9mFU0soscE1cCakTCHHDTx9HRXQ-m1WpbhvjIJcfD1H51n9gQZftpTJ-h1nP5Fzt3ZAkfAL4sNM0vzV9yq6TL986q6X1TKC4wjyz-vtWbUQwGRyYxtfY2wuDMdA4"/>
+<div class="absolute top-2 left-2 w-8 h-8 rounded-full bg-white p-1 shadow-sm">
+<img class="w-full h-full object-contain" data-alt="A minimalist vector logo for a burger brand, featuring a clean stylized bun icon in dark green and white. The design is modern, flat, and professional, optimized for small-scale visibility as a sponsor icon in a UI layout." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4mcbUU58C3eZXvHSnlWDPEUDCPPeH76Z9qmP6LWoCp0VVUScFuaE-hOCwa6wsE0yZEFrWJUTozMmTjeDHp1tKDKFsMjjeQjNqMN82rTAJee4n0ZgODicXRj2dXRkgDod429d7RMNMH9vljNofOmP9sq52PAUQ0OvUi6m6FVruxb14T8ZstMJUC70S4FHbcgzC6RqjO-qPiFw0YJU_K1RV_dqimBrx910GZfh4R3udJpfYdWHj5YZb"/>
+</div>
+<div class="absolute bottom-2 right-2 bg-secondary-container text-on-secondary-container px-sm py-1 rounded-full font-label-sm shadow-sm">
+                        500 pts
+                    </div>
+</div>
+<div>
+<h4 class="font-label-sm text-on-surface truncate">King Burger Combo</h4>
+<p class="text-[10px] text-on-surface-variant">Burger Palace</p>
+</div>
+</div>
+<!-- Reward Card 2 -->
+<div class="flex flex-col gap-xs group">
+<div class="relative aspect-square bg-surface-container rounded-xl overflow-hidden shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] active:scale-[0.98] transition-transform">
+<img class="w-full h-full object-cover" data-alt="A sleek, modern pair of over-ear wireless headphones in matte black, presented in a minimalist studio setting with sharp, cool-toned lighting. The image emphasizes the premium build quality and ergonomic design. High-end product photography style with subtle reflections and a clean aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZGiyl_bsYR1u0r-Gr8rwngF4ndt7AgriTHAHWyL6ksWsydLz5jCndGLjMxpy0YL59akCIpd0pili9WeVdgGFPFtPceJ2mV_-UfPspQvC3IdJumAWo3IjtjJ06vmfESLpsK8_LcbCMf0mpbtKuMrGJFQ6KOaWmmKAp3j8-e_iKF1d4H-v5AxawlEVMFRuZHksyMCF1hdbZFT49cz735tQIPzPvsn7tx3mdNws9WQINbvPsgCvuYhC0"/>
+<div class="absolute top-2 left-2 w-8 h-8 rounded-full bg-white p-1 shadow-sm">
+<img class="w-full h-full object-contain" data-alt="A professional tech company logo consisting of a geometric abstract shape in shades of primary blue. The logo is clean, modern, and high-contrast, fitting for a premium electronics sponsor." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA67IEsXOLN-20GvX79vMLXkQAvqegx7Ow1jEExDHXS0m6qy-vFD2a_GbBlhHuqxeTh9V_AWlT1mVBfecF5S8QosAiYg7n_3GvIzqOHISe2kN1fabSEJgGdFsRoh48OQ6H0aCTWGeJl-AbkioCDw2cSzCTldXqF9fQc9dtKu13lfryd_kmOfp1jEkpFpvwGG1oFq0zcD1KsmvtqQbhy-D41CYAo0dxOr5esGKPhLllJi-pLPkss1BtJ"/>
+</div>
+<div class="absolute bottom-2 right-2 bg-secondary-container text-on-secondary-container px-sm py-1 rounded-full font-label-sm shadow-sm">
+                        12,000 pts
+                    </div>
+</div>
+<div>
+<h4 class="font-label-sm text-on-surface truncate">Sonic Pro X2</h4>
+<p class="text-[10px] text-on-surface-variant">TechWorld</p>
+</div>
+</div>
+<!-- Reward Card 3 -->
+<div class="flex flex-col gap-xs group">
+<div class="relative aspect-square bg-surface-container rounded-xl overflow-hidden shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] active:scale-[0.98] transition-transform">
+<img class="w-full h-full object-cover" data-alt="A vibrant and colorful interior of a modern cinema lobby, featuring soft neon purple and blue ambient lighting. Plush seating areas and digital poster displays create a luxury leisure atmosphere. Professional architectural photography with a focus on atmosphere and inviting spaces." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDp-tRt01epFFTXrZrfMyIOm5E5cxjGlCzFSn24uLk0MhB-TNvztkTgaCX_2dL3w11SQQ-r02o5oREzwjfizsxXQBHBa6io3d3-HH89-CAQQWA-NLmXIPT16IGhYv3roLVF8vSA3wFsnFs6JUn2g-nz-yBMyvdcanwXxtZHHl1RyhsCQbDY31Vyo-L6n1p48LDo9hK5C8LYkZXylY5fHPFC-1jMDIlfrkeEwZXGVCt_eD4MrbZp3cuU"/>
+<div class="absolute top-2 left-2 w-8 h-8 rounded-full bg-white p-1 shadow-sm">
+<img class="w-full h-full object-contain" data-alt="A minimalist film reel logo icon in a vibrant secondary green color. The design is bold and simple, perfect for a cinema or entertainment sponsor's digital representation." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFLnFnDPq6X6yVClygFYRFmZbvjqn7kRNFcyx5gimv5s5f9Nte_3qfRXuGfOOTFGDEZ6vrr-SWSO8PKO8M63aAIpsB0vdkZ5ipMZj2aARMbUI-KfxrVgwog8ZCh9lZ5g9Seg_yZQH3rmZ9DWky8eXKIUrhRDZ7-A4fohIusSOw8QHgH3egB9djlImyRZEzkpK5LMD8DTAkHDo0GeI40XxSSXPMfepr2VT2U6hRyV907Bx4FlDnurZn"/>
+</div>
+<div class="absolute bottom-2 right-2 bg-secondary-container text-on-secondary-container px-sm py-1 rounded-full font-label-sm shadow-sm">
+                        1,200 pts
+                    </div>
+</div>
+<div>
+<h4 class="font-label-sm text-on-surface truncate">Movie Ticket for Two</h4>
+<p class="text-[10px] text-on-surface-variant">StarCinema</p>
+</div>
+</div>
+<!-- Reward Card 4 -->
+<div class="flex flex-col gap-xs group">
+<div class="relative aspect-square bg-surface-container rounded-xl overflow-hidden shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] active:scale-[0.98] transition-transform">
+<img class="w-full h-full object-cover" data-alt="An artisanal iced latte in a clear tall glass, showing beautiful coffee and milk swirls, topped with a dusting of cinnamon. The setting is a bright, sun-drenched modern cafe with wooden textures. The lighting is warm and natural, creating a cozy and high-quality lifestyle image." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBj4AbWoJiOoWswxAPijHQaJhONw8MZwxzSE_1Dbo7np6esoAl3AM_sKlrmZayAFr8mYJC33-HvRb158Ig-fV5s6AX8WQp6CKX8wqo4kY5y38kivBcYoF3rvkYABcUrmKyeUuFfhQBg5FzmVOc1GoiUCSmN5MFNRa8vhMUty2JFoM-pr10ZNToEwr3u3GIBkNOW78BxM1Ncst793hfxUFds37Ac76tIRgGRdSGr2WIRRJhmFQBcKcoB"/>
+<div class="absolute top-2 left-2 w-8 h-8 rounded-full bg-white p-1 shadow-sm">
+<img class="w-full h-full object-contain" data-alt="A clean coffee bean logo mark in a sophisticated brown and gold palette. Modern typography and minimalist lines make it feel like a premium boutique coffee brand icon." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNpyi9GylsLpUHItScnN1duuq3VgWDS5svN-LCdRUx2S792Fl50eMQANFHEh_gW8xsTSmZGom6C1aAwADOo5Bj-lYoQiCOwuSWd8Z2aml3xqPvBmzuStKx1bWTWHMtpePB05S_CCQ8dveVJPqxETRsGGuGhNI5W-5RX54_ME4Q8FLl6c6JcYULVujwR_9HU4tINRsxNCVKfcA1yKWjKgtda2yakiGrRLjqMY6QrStYluBbKBjpemfV"/>
+</div>
+<div class="absolute bottom-2 right-2 bg-secondary-container text-on-secondary-container px-sm py-1 rounded-full font-label-sm shadow-sm">
+                        350 pts
+                    </div>
+</div>
+<div>
+<h4 class="font-label-sm text-on-surface truncate">Any Large Coffee</h4>
+<p class="text-[10px] text-on-surface-variant">Bean &amp; Brew</p>
+</div>
+</div>
+<!-- Reward Card 5 -->
+<div class="flex flex-col gap-xs group">
+<div class="relative aspect-square bg-surface-container rounded-xl overflow-hidden shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] active:scale-[0.98] transition-transform">
+<img class="w-full h-full object-cover" data-alt="A professional high-performance gaming mouse with customizable RGB lighting glowing in a deep purple hue. The mouse is positioned on a high-quality textured gaming mat. Sharp studio lighting highlights the ergonomic curves and tech features. Modern esports aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAWJiBf6-YKh4l_gnPB3_Nlq9q9Yd_6m8P8oWEmQwW362a9fB1KLguUUGP8nXR36P8YYAu6k4DWudo9loZd1eEWx_LMQw22GvURgF4NcOYvJeYpv2IPU5XIEcX-bn79jLoUvqV0JsnXmLTICJz22p7zzy6zgsAMGeWtmsu34cnmTEgN5eN-oVs3A7f5y20g8gtivb6ElzHu91u6DEZvSDixiSiQUn4W-k2gMiN6iCRQj3vXfAELWg7R"/>
+<div class="absolute top-2 left-2 w-8 h-8 rounded-full bg-white p-1 shadow-sm">
+<img class="w-full h-full object-contain" data-alt="A stylized lightning bolt logo representing energy and speed, rendered in a bold primary blue. The design is sleek and minimalist, suitable for a gaming hardware brand." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBScGD4gdsSqU9wjv74D7JIR6XH5hlapd_ZBejjLseLLlSG2pbDfXgzCfqgUkfofK3V6tvA7Inzdf2XCKoOHsoJtJsb-lN8zvTFejEuw80Bl_PDTDtFDkYwnArQTaTX1ivCssqbi7Pivy7o0QtFH5slpjAZrrr96mgPZ9oqFfN4e1TD_Y20gQk_vJDm798kDNV6HkhcYUtN3A792erXIbSkuc_LibGgqB05JOiE0WMJ67j2j3zpbV_9"/>
+</div>
+<div class="absolute bottom-2 right-2 bg-secondary-container text-on-secondary-container px-sm py-1 rounded-full font-label-sm shadow-sm">
+                        8,500 pts
+                    </div>
+</div>
+<div>
+<h4 class="font-label-sm text-on-surface truncate">Viper Pro Mouse</h4>
+<p class="text-[10px] text-on-surface-variant">GamerZone</p>
+</div>
+</div>
+<!-- Reward Card 6 -->
+<div class="flex flex-col gap-xs group">
+<div class="relative aspect-square bg-surface-container rounded-xl overflow-hidden shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] active:scale-[0.98] transition-transform">
+<img class="w-full h-full object-cover" data-alt="A stack of premium, colorful cotton t-shirts in various vibrant shades, neatly folded on a clean white surface. The lighting is bright and even, showcasing the soft fabric texture and vivid colors. Minimalist fashion photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAD5V0iQh-IUMjFLGgPlazFZgDdHQfwppni0lSJSJzn0tAybKw-vAq_3lma4AjXs6k7dMErCy5G0Jr-hDv-Gk5SF4ayVeYXX75LHxeZeL3zUpl9o7Q3-Ajp7d0py_pfhDaiuOh5N41jBMz_ZgvHFWcEbazy1krhOBWnE-BuH74Lhk5o2OnrZmQn80brVN-ST6bU9SE5DBVd-GDojNYVeUQ_tsSuod3s8rIZAgBGOjVEmU8J_RMo03pj"/>
+<div class="absolute top-2 left-2 w-8 h-8 rounded-full bg-white p-1 shadow-sm">
+<img class="w-full h-full object-contain" data-alt="A clean clothing hanger logo icon in a minimal black and white style. The design is professional and fits a modern apparel brand's aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-8ZSukkqwrDSE2RD6xKMsPG8Qt7TVg9VGFjbCHxdFsHC28ihVwR4fhWpHRx3FETeYf7WVUKIabYuBNTLtHhQ5wBktwpU1qosUn0BZsNewsxJJ6eHOF-ZENknlGGZ9jO9kckDZnCn7i-cHut0Vy8vg5-kcWMjhw-x8tyyipGzOU8vwftkjdMjQs3AMRItte0szMW3vovkV9IDCdFiYjsa_YMC5Ku9KygpY_WekeXXOJRLkPi_KvQA6"/>
+</div>
+<div class="absolute bottom-2 right-2 bg-secondary-container text-on-secondary-container px-sm py-1 rounded-full font-label-sm shadow-sm">
+                        2,000 pts
+                    </div>
+</div>
+<div>
+<h4 class="font-label-sm text-on-surface truncate">Custom Brand Tee</h4>
+<p class="text-[10px] text-on-surface-variant">StyleHub</p>
+</div>
+</div>
+</div>
+<!-- Empty State / Load More simulation -->
+<div class="py-xl flex flex-col items-center justify-center text-center opacity-40">
+<span class="material-symbols-outlined text-4xl mb-xs">inventory_2</span>
+<p class="text-sm">More rewards coming soon</p>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full h-[64px] z-50 flex justify-around items-center bg-surface-container-lowest dark:bg-inverse-surface px-md pb-safe border-t border-outline-variant dark:border-outline shadow-[0_-2px_10px_0_rgba(0,0,0,0.03)]">
+<!-- Home -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:bg-surface-variant/50 dark:hover:bg-surface-variant/10 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-sm text-label-sm mt-1">Home</span>
+</a>
+<!-- Ranks -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:bg-surface-variant/50 dark:hover:bg-surface-variant/10 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+<span class="font-label-sm text-label-sm mt-1">Ranks</span>
+</a>
+<!-- Rewards (Active) -->
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary rounded-xl px-4 py-1 transition-all active:scale-90 duration-200 shadow-sm" href="#">
+<span class="material-symbols-outlined" data-icon="redeem" style="font-variation-settings: 'FILL' 1;">redeem</span>
+<span class="font-label-sm text-label-sm mt-1">Rewards</span>
+</a>
+<!-- Me -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:bg-surface-variant/50 dark:hover:bg-surface-variant/10 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-sm text-label-sm mt-1">Me</span>
+</a>
+</nav>
+<script>
+        // Simple micro-interaction for category buttons
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Clear previous active states (simplified)
+                buttons.forEach(b => {
+                    if (b.classList.contains('bg-primary')) {
+                        b.classList.replace('bg-primary', 'bg-surface-container-high');
+                        b.classList.replace('text-on-primary', 'text-on-surface-variant');
+                        b.classList.remove('shadow-md');
+                    }
+                });
+                // Set current as active
+                btn.classList.replace('bg-surface-container-high', 'bg-primary');
+                btn.classList.replace('text-on-surface-variant', 'text-on-primary');
+                btn.classList.add('shadow-md');
+            });
+        });
+
+        // Background scroll effect
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('header');
+            if (window.scrollY > 20) {
+                header.classList.add('backdrop-blur-md', 'bg-surface/90');
+            } else {
+                header.classList.remove('backdrop-blur-md', 'bg-surface/90');
+            }
+        });
+    </script>
+<script src="../../shared/prototype-links.js"></script>
+</body></html>

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ka">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PlayPoint MVP Prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Montserrat:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --primary: #4648d4;
+        --primary-soft: #e1e0ff;
+        --secondary: #6bff8f;
+        --surface: #f9f9f9;
+        --card: #ffffff;
+        --text: #1a1c1c;
+        --muted: #5f6068;
+        --line: #dedceb;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--surface);
+        color: var(--text);
+      }
+
+      .shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: minmax(280px, 360px) 1fr;
+      }
+
+      .sidebar {
+        padding: 28px;
+        border-right: 1px solid var(--line);
+        background: var(--card);
+        overflow-y: auto;
+      }
+
+      .brand {
+        margin: 0 0 8px;
+        font-family: Montserrat, Inter, sans-serif;
+        font-size: 34px;
+        line-height: 1;
+        color: var(--primary);
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        margin: 0 0 24px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .section-title {
+        margin: 24px 0 10px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 800;
+      }
+
+      .nav-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .nav-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .nav-link small {
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .nav-link.active {
+        border-color: var(--primary);
+        background: var(--primary-soft);
+        color: #07006c;
+      }
+
+      .journey {
+        padding: 12px;
+        border-radius: 14px;
+        background: #f3f3f3;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      .stage {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--primary);
+        flex: 0 0 auto;
+      }
+
+      .preview {
+        min-width: 0;
+        padding: 28px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .preview-top {
+        width: min(100%, 520px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .screen-title {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .open-link {
+        color: var(--primary);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .phone {
+        width: min(100%, 430px);
+        height: min(884px, calc(100vh - 112px));
+        min-height: 640px;
+        border: 12px solid #191a22;
+        border-radius: 42px;
+        background: #fff;
+        box-shadow: 0 24px 60px rgba(26, 28, 28, 0.2);
+        overflow: hidden;
+      }
+
+      iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #fff;
+      }
+
+      @media (max-width: 860px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .preview {
+          padding: 18px;
+        }
+
+        .phone {
+          border-width: 8px;
+          border-radius: 32px;
+          height: 760px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <h1 class="brand">PlayPoint</h1>
+        <p class="subtitle">
+          MVP პროტოტიპის საერთო ფაილი. აქედან მოწმდება სრული გზა: რეგისტრაცია, თამაში,
+          ქულები, ლიდერბორდი, პრიზები და პროფილი.
+        </p>
+
+        <div class="journey">
+          <strong>ძირითადი flow:</strong>
+          <div class="stage"><span class="dot"></span> Splash -> Phone -> OTP -> Profile setup</div>
+          <div class="stage"><span class="dot"></span> Home -> Loading -> Game -> Score popup</div>
+          <div class="stage"><span class="dot"></span> Leaderboard -> Rewards -> Profile</div>
+        </div>
+
+        <h2 class="section-title">Onboarding</h2>
+        <nav class="nav-list" aria-label="Onboarding screens">
+          <a class="nav-link" href="screens/splash/index.html" data-title="Splash">Splash <small>start</small></a>
+          <a class="nav-link" href="screens/phone-login/index.html" data-title="Phone login">Phone <small>login</small></a>
+          <a class="nav-link" href="screens/otp-verification/index.html" data-title="OTP verification">OTP <small>verify</small></a>
+          <a class="nav-link" href="screens/profile-setup/index.html" data-title="Profile setup">Setup <small>+50 pts</small></a>
+        </nav>
+
+        <h2 class="section-title">Core App</h2>
+        <nav class="nav-list" aria-label="Core app screens">
+          <a class="nav-link active" href="screens/home/index.html" data-title="Home dashboard">Home <small>games</small></a>
+          <a class="nav-link" href="screens/game-loading/index.html" data-title="Sponsored game loading">Loading <small>sponsor</small></a>
+          <a class="nav-link" href="screens/game-frame/index.html" data-title="Game frame">Game <small>play</small></a>
+          <a class="nav-link" href="screens/score-popup/index.html" data-title="Score popup">Score <small>points</small></a>
+        </nav>
+
+        <h2 class="section-title">Retention & Monetization</h2>
+        <nav class="nav-list" aria-label="Retention screens">
+          <a class="nav-link" href="screens/leaderboard-daily/index.html" data-title="Daily leaderboard">Daily ranks <small>24h</small></a>
+          <a class="nav-link" href="screens/leaderboard-weekly/index.html" data-title="Weekly leaderboard">Weekly ranks <small>prize</small></a>
+          <a class="nav-link" href="screens/rewards/index.html" data-title="Rewards catalog">Rewards <small>redeem</small></a>
+          <a class="nav-link" href="screens/profile/index.html" data-title="Profile">Profile <small>history</small></a>
+          <a class="nav-link" href="screens/edit-profile/index.html" data-title="Edit profile">Edit profile <small>settings</small></a>
+        </nav>
+      </aside>
+
+      <main class="preview">
+        <div class="preview-top">
+          <h2 class="screen-title" id="screen-title">Home dashboard</h2>
+          <a class="open-link" id="open-link" href="screens/home/index.html">Open screen</a>
+        </div>
+        <div class="phone">
+          <iframe id="preview-frame" title="PlayPoint screen preview" src="screens/home/index.html"></iframe>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      const frame = document.getElementById("preview-frame");
+      const title = document.getElementById("screen-title");
+      const openLink = document.getElementById("open-link");
+      const links = Array.from(document.querySelectorAll(".nav-link"));
+
+      function setScreen(link) {
+        links.forEach((item) => item.classList.toggle("active", item === link));
+        frame.src = link.getAttribute("href");
+        title.textContent = link.dataset.title || link.textContent.trim();
+        openLink.href = link.getAttribute("href");
+      }
+
+      links.forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          setScreen(link);
+        });
+      });
+    </script>
+  </body>
+</html>

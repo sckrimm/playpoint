@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+
+<html lang="ka"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>PlayPoint Profile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-fixed": "#6bff8f",
+                    "inverse-primary": "#c0c1ff",
+                    "error-container": "#ffdad6",
+                    "on-error-container": "#93000a",
+                    "on-surface": "#1a1c1c",
+                    "surface": "#f9f9f9",
+                    "on-secondary-container": "#007432",
+                    "surface-dim": "#dadada",
+                    "surface-container": "#eeeeee",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-fixed": "#002109",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "secondary-container": "#6bff8f",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed": "#07006c",
+                    "surface-bright": "#f9f9f9",
+                    "inverse-surface": "#2f3131",
+                    "primary": "#4648d4",
+                    "on-primary": "#ffffff",
+                    "primary-container": "#6063ee",
+                    "tertiary": "#825100",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "surface-container-highest": "#e2e2e2",
+                    "surface-container-high": "#e8e8e8",
+                    "on-tertiary-container": "#fffbff",
+                    "secondary-fixed-dim": "#4ae176",
+                    "surface-container-low": "#f3f3f3",
+                    "tertiary-container": "#a36700",
+                    "on-secondary-fixed-variant": "#005321",
+                    "primary-fixed": "#e1e0ff",
+                    "on-surface-variant": "#464554",
+                    "outline-variant": "#c7c4d7",
+                    "inverse-on-surface": "#f1f1f1",
+                    "secondary": "#006e2f",
+                    "background": "#f9f9f9",
+                    "outline": "#767586",
+                    "on-primary-container": "#fffbff",
+                    "on-tertiary-fixed": "#2a1700",
+                    "error": "#ba1a1a",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-tint": "#494bd6",
+                    "on-error": "#ffffff",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "on-background": "#1a1c1c",
+                    "surface-variant": "#e2e2e2"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "16px",
+                    "xl": "24px",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "md": "16px",
+                    "xl": "32px",
+                    "xs": "8px",
+                    "base": "4px",
+                    "container-margin": "20px",
+                    "lg": "24px",
+                    "gutter": "16px",
+                    "sm": "12px"
+            },
+            "fontFamily": {
+                    "display-lg": ["Montserrat"],
+                    "headline-lg": ["Montserrat"],
+                    "label-sm": ["Inter"],
+                    "body-md": ["Inter"],
+                    "headline-lg-mobile": ["Montserrat"],
+                    "score-md": ["Montserrat"]
+            },
+            "fontSize": {
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                    "score-md": ["18px", {"lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #f9f9f9;
+            color: #1a1c1c;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+        }
+        .glass-tag {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .bento-card {
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .bento-card:active {
+            transform: scale(0.97);
+        }
+        .safe-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md text-body-md mb-24">
+<!-- Top App Bar -->
+<header class="sticky top-0 z-40 flex justify-between items-center w-full px-container-margin py-md bg-surface shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] docked full-width">
+<h1 class="font-display-lg text-headline-lg-mobile md:text-display-lg text-primary tracking-tight">პროფილი</h1>
+<div class="flex items-center gap-sm">
+<button class="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-on-surface-variant">settings</span>
+</button>
+<div class="flex items-center bg-secondary-container text-on-secondary-container px-sm py-1 rounded-full font-label-sm shadow-sm">
+<span class="material-symbols-outlined text-[18px] mr-1" style="font-variation-settings: 'FILL' 1;">stars</span>
+                2,450 pts
+            </div>
+</div>
+</header>
+<main class="px-container-margin mt-lg max-w-2xl mx-auto">
+<!-- Profile Hero Section -->
+<section class="flex flex-col items-center mb-xl">
+<div class="relative mb-md">
+<div class="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-primary to-secondary-fixed shadow-lg">
+<img class="w-full h-full rounded-full object-cover border-4 border-surface" data-alt="A professional and friendly studio portrait of a young adult with a creative and tech-savvy look. The lighting is high-key and optimistic, following a modern light-mode aesthetic. The background is a soft, out-of-focus gradient of vibrant primary blue and mint green. High-quality digital photography with a crisp, clean finish." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDgHa_5dAnW6WKYAdBKVojD3DSVCWPqpbpmJsmWwG7AVhhR0ZflE0Za9bbMn0AHlZDHV7PZwTbX4A10uYHzZsiTaL2km4OoqYnVAL_JMH7B-DOQaAAUrrW3hv2PRfX-IEOaZlRjaPZZLH8_lkLatiJ0LLCN1xqv4xupCmkSiNcwUiziUCAuLPn99MwoYp7sQlRUxStknGH1yKZp0KrfBSOhyIYZwSCaiUpMsrS-GBMCtq-PBZko1pjG"/>
+</div>
+<div class="absolute bottom-0 right-0 bg-primary text-on-primary w-8 h-8 rounded-full flex items-center justify-center border-2 border-surface shadow-md">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</div>
+</div>
+<h2 class="font-headline-lg-mobile md:font-headline-lg text-on-surface mb-1">ნიკოლოზ ბერიძე</h2>
+<p class="text-on-surface-variant opacity-70 font-label-sm">მოთამაშე #88219</p>
+</section>
+<!-- Stats Bento Grid -->
+<section class="grid grid-cols-2 gap-md mb-xl">
+<div class="bento-card col-span-2 p-lg bg-primary-container text-on-primary-container rounded-xl shadow-[0_4px_12px_0_rgba(70,72,212,0.15)] flex justify-between items-center relative overflow-hidden">
+<div class="z-10">
+<p class="font-label-sm opacity-80 mb-1">ჯამური ბალანსი</p>
+<h3 class="text-display-lg font-display-lg leading-none">2,450</h3>
+<p class="text-label-sm mt-2 flex items-center">
+<span class="material-symbols-outlined text-[16px] mr-1">trending_up</span>
+                        +120 დღეს
+                    </p>
+</div>
+<div class="z-10 bg-surface-container-lowest/20 p-md rounded-xl backdrop-blur-md">
+<span class="material-symbols-outlined text-[48px]" style="font-variation-settings: 'FILL' 1;">account_balance_wallet</span>
+</div>
+<!-- Atmospheric background element -->
+<div class="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
+</div>
+<div class="bento-card p-md bg-surface-container-lowest rounded-xl shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] border border-outline-variant/30">
+<span class="material-symbols-outlined text-secondary mb-sm">military_tech</span>
+<p class="text-label-sm text-on-surface-variant">რეიტინგი</p>
+<h4 class="font-headline-lg-mobile text-on-surface">#12</h4>
+</div>
+<div class="bento-card p-md bg-surface-container-lowest rounded-xl shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] border border-outline-variant/30">
+<span class="material-symbols-outlined text-tertiary mb-sm">videogame_asset</span>
+<p class="text-label-sm text-on-surface-variant">თამაშები</p>
+<h4 class="font-headline-lg-mobile text-on-surface">158</h4>
+</div>
+</section>
+<!-- Section: My Rewards -->
+<section class="mb-xl">
+<div class="flex justify-between items-center mb-md">
+<h3 class="font-headline-lg-mobile text-on-surface">ჩემი პრიზები</h3>
+<button class="text-primary font-label-sm">ყველა</button>
+</div>
+<div class="space-y-sm">
+<!-- Reward Item 1 -->
+<div class="flex items-center p-md bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant/20 hover:border-primary/30 transition-colors">
+<div class="w-12 h-12 bg-secondary-fixed/30 rounded-lg flex items-center justify-center mr-md">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">redeem</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-sm text-on-surface">Amazon სასაჩუქრე ბარათი</h4>
+<p class="text-[11px] text-on-surface-variant">გააქტიურებულია 12.05.2024</p>
+</div>
+<div class="glass-tag px-sm py-1 rounded-full text-[10px] font-bold text-secondary-container bg-secondary uppercase tracking-wider">
+                        Active
+                    </div>
+</div>
+<!-- Reward Item 2 -->
+<div class="flex items-center p-md bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant/20">
+<div class="w-12 h-12 bg-surface-variant rounded-lg flex items-center justify-center mr-md">
+<span class="material-symbols-outlined text-outline" style="font-variation-settings: 'FILL' 1;">movie</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-sm text-on-surface">კინოს 2 ბილეთი</h4>
+<p class="text-[11px] text-on-surface-variant">ვადაგასულია 01.05.2024</p>
+</div>
+<div class="px-sm py-1 rounded-full text-[10px] font-bold text-on-surface-variant bg-surface-variant uppercase tracking-wider">
+                        Used
+                    </div>
+</div>
+</div>
+</section>
+<!-- Section: Game History -->
+<section class="mb-xl">
+<h3 class="font-headline-lg-mobile text-on-surface mb-md">თამაშების ისტორია</h3>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden border border-outline-variant/20">
+<!-- History Item 1 -->
+<div class="flex items-center px-md py-sm border-b border-outline-variant/10">
+<div class="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center mr-md">
+<span class="material-symbols-outlined text-primary text-[20px]">quiz</span>
+</div>
+<div class="flex-1">
+<h4 class="text-label-sm text-on-surface font-semibold">Daily Trivia</h4>
+<p class="text-[11px] text-on-surface-variant">დღეს, 14:20</p>
+</div>
+<div class="text-right">
+<span class="block text-label-sm font-bold text-secondary">+50 pts</span>
+<span class="text-[10px] text-on-surface-variant">Won</span>
+</div>
+</div>
+<!-- History Item 2 -->
+<div class="flex items-center px-md py-sm border-b border-outline-variant/10">
+<div class="w-10 h-10 bg-tertiary/10 rounded-full flex items-center justify-center mr-md">
+<span class="material-symbols-outlined text-tertiary text-[20px]">sports_esports</span>
+</div>
+<div class="flex-1">
+<h4 class="text-label-sm text-on-surface font-semibold">Speed Clicker</h4>
+<p class="text-[11px] text-on-surface-variant">გუშინ, 18:45</p>
+</div>
+<div class="text-right">
+<span class="block text-label-sm font-bold text-secondary">+120 pts</span>
+<span class="text-[10px] text-on-surface-variant">New Record</span>
+</div>
+</div>
+<!-- History Item 3 -->
+<div class="flex items-center px-md py-sm">
+<div class="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center mr-md">
+<span class="material-symbols-outlined text-primary text-[20px]">psychology</span>
+</div>
+<div class="flex-1">
+<h4 class="text-label-sm text-on-surface font-semibold">Memory Match</h4>
+<p class="text-[11px] text-on-surface-variant">15 მაისი, 12:00</p>
+</div>
+<div class="text-right">
+<span class="block text-label-sm font-bold text-error">-10 pts</span>
+<span class="text-[10px] text-on-surface-variant">Entry Fee</span>
+</div>
+</div>
+</div>
+<button class="w-full mt-md py-sm border-2 border-dashed border-outline-variant rounded-xl text-on-surface-variant font-label-sm hover:bg-surface-variant/20 transition-colors">
+                მეტის ნახვა
+            </button>
+</section>
+<!-- Logout Action -->
+<section class="pb-xl">
+<button class="w-full flex items-center justify-center gap-2 py-md px-lg bg-surface-container-high text-error font-bold rounded-xl active:scale-95 transition-all duration-150">
+<span class="material-symbols-outlined">logout</span>
+                გასვლა
+            </button>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center bg-surface-container-lowest dark:bg-inverse-surface px-md pb-safe h-[64px] z-50 border-t border-outline-variant dark:border-outline shadow-[0_-2px_10px_0_rgba(0,0,0,0.03)]">
+<!-- Home -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:bg-surface-variant/50 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<!-- Ranks -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:bg-surface-variant/50 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined">leaderboard</span>
+<span class="font-label-sm text-label-sm">Ranks</span>
+</a>
+<!-- Rewards -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:bg-surface-variant/50 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined">redeem</span>
+<span class="font-label-sm text-label-sm">Rewards</span>
+</a>
+<!-- Me (Active) -->
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary rounded-xl px-4 py-1 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-label-sm text-label-sm">Me</span>
+</a>
+</nav>
+<script>
+        // Micro-interaction for point counter
+        document.addEventListener('DOMContentLoaded', () => {
+            const pointsDisplay = document.querySelector('h3.text-display-lg');
+            if(pointsDisplay) {
+                let currentPoints = 0;
+                const targetPoints = 2450;
+                const duration = 1500;
+                const startTime = performance.now();
+
+                function updateCounter(currentTime) {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const easedProgress = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+                    
+                    currentPoints = Math.floor(easedProgress * targetPoints);
+                    pointsDisplay.textContent = currentPoints.toLocaleString();
+
+                    if (progress < 1) {
+                        requestAnimationFrame(updateCounter);
+                    }
+                }
+                requestAnimationFrame(updateCounter);
+            }
+
+            // Simple hover effect for bento cards
+            const cards = document.querySelectorAll('.bento-card');
+            cards.forEach(card => {
+                card.addEventListener('mouseenter', () => {
+                    card.style.transform = 'translateY(-4px)';
+                });
+                card.addEventListener('mouseleave', () => {
+                    card.style.transform = 'translateY(0px)';
+                });
+            });
+        });
+    </script>
+<script src="../../shared/prototype-links.js"></script>
+</body></html>

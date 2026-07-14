@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+
+<html lang="ka"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>PlayPoint - კვირის რეიტინგი</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed": "#002109",
+                    "inverse-on-surface": "#f1f1f1",
+                    "on-error": "#ffffff",
+                    "secondary": "#006e2f",
+                    "on-error-container": "#93000a",
+                    "on-background": "#1a1c1c",
+                    "outline": "#767586",
+                    "on-primary-container": "#fffbff",
+                    "primary": "#4648d4",
+                    "error": "#ba1a1a",
+                    "surface-variant": "#e2e2e2",
+                    "inverse-surface": "#2f3131",
+                    "secondary-fixed-dim": "#4ae176",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "surface-container-highest": "#e2e2e2",
+                    "on-secondary-container": "#007432",
+                    "on-tertiary-container": "#fffbff",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "surface-container": "#eeeeee",
+                    "tertiary": "#825100",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "background": "#f9f9f9",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-container-lowest": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "surface-bright": "#f9f9f9",
+                    "surface-container-low": "#f3f3f3",
+                    "inverse-primary": "#c0c1ff",
+                    "secondary-container": "#6bff8f",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-fixed-variant": "#005321",
+                    "surface": "#f9f9f9",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "on-primary": "#ffffff",
+                    "on-surface": "#1a1c1c",
+                    "surface-tint": "#494bd6",
+                    "on-surface-variant": "#464554",
+                    "primary-container": "#6063ee",
+                    "primary-fixed": "#e1e0ff",
+                    "surface-dim": "#dadada",
+                    "surface-container-high": "#e8e8e8",
+                    "on-primary-fixed": "#07006c",
+                    "secondary-fixed": "#6bff8f",
+                    "on-tertiary-fixed": "#2a1700",
+                    "tertiary-container": "#a36700",
+                    "on-secondary": "#ffffff",
+                    "outline-variant": "#c7c4d7"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "16px",
+                    "xl": "24px",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "lg": "24px",
+                    "base": "4px",
+                    "xs": "8px",
+                    "sm": "12px",
+                    "container-margin": "20px",
+                    "xl": "32px",
+                    "md": "16px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "label-sm": ["Inter"],
+                    "headline-lg-mobile": ["Montserrat"],
+                    "display-lg": ["Montserrat"],
+                    "headline-lg": ["Montserrat"],
+                    "body-md": ["Inter"],
+                    "score-md": ["Montserrat"]
+            },
+            "fontSize": {
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "score-md": ["18px", {"lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #f9f9f9;
+            color: #1a1c1c;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .podium-gradient-1 { background: linear-gradient(180deg, #FFD700 0%, #FFA000 100%); }
+        .podium-gradient-2 { background: linear-gradient(180deg, #C0C0C0 0%, #9E9E9E 100%); }
+        .podium-gradient-3 { background: linear-gradient(180deg, #CD7F32 0%, #A0522D 100%); }
+        .glass-tag {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .podium-card {
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .podium-card:active {
+            transform: scale(0.95);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md text-body-md pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 bg-surface shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] flex justify-between items-center px-container-margin py-md">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary">
+<img class="w-full h-full object-cover" data-alt="A professional studio portrait of a young gamer with a friendly expression, set against a vibrant purple and blue neon background that reflects the high-energy PlayPoint brand aesthetic. The lighting is soft but dynamic, highlighting clean features and a modern haircut, emphasizing a personalized user profile experience." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJkvBaL4v17b5Svscey8z0DmPcfHbtBETvCbNeKg--aqfVww6otkZOEnWciriUBw1Vl6XsFzNgUUmD_iyIfgCW51NfL4VQZT0y0iLZREDyevDu_BBa1Go2HyLD42sxu4ehfcqjdg_j62yXR8tIuXlPd6u8Jj4-8_sp44a3hKu1wGstQeQ2JSnNtkJ_e_QsFLDnp-zcpiTmuo6qIgvDRjJ7oQhDkEuVx7nb0f51tf0hG8PsUfo44zvK"/>
+</div>
+<h1 class="font-display-lg text-headline-lg-mobile md:text-display-lg text-primary tracking-tight">PlayPoint</h1>
+</div>
+<div class="flex items-center bg-primary-container text-on-primary-container px-sm py-xs rounded-full font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined mr-1 text-[18px]" style="font-variation-settings: 'FILL' 1;">stars</span>
+            2,450 pts
+        </div>
+</header>
+<main class="mt-20 px-container-margin">
+<!-- Section Header & Tabs -->
+<div class="flex flex-col gap-md mb-lg">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">კვირის რეიტინგი</h2>
+<div class="flex bg-surface-container p-1 rounded-xl">
+<button class="flex-1 py-2 text-label-sm font-label-sm text-on-surface-variant hover:opacity-80 transition-opacity">დღიური</button>
+<button class="flex-1 py-2 text-label-sm font-label-sm bg-surface-container-lowest text-primary rounded-lg shadow-sm">ყოველკვირეული</button>
+</div>
+</div>
+<!-- Podium Section -->
+<div class="flex items-end justify-center gap-xs mb-xl pt-12">
+<!-- 2nd Place -->
+<div class="podium-card flex flex-col items-center w-1/3">
+<div class="relative mb-xs">
+<div class="w-16 h-16 rounded-full border-4 border-[#C0C0C0] overflow-hidden shadow-lg">
+<img class="w-full h-full object-cover" data-alt="A stylized digital avatar of a female competitive player with teal hair and futuristic glasses, set against a soft grey and metallic background. The artistic style is clean 2D flat-plus with subtle gradients, perfectly fitting a gaming leaderboard second-place podium spot." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDC-VKEEGUcbVRjLwt_TMLqJ-d9Vw9Dh28STtV1xfuytTiReg0o6U9bOkd_G09EcgZMo7VkieGFn6qi35H_yDdtBHDrBvVFtfgiO_3eKwbLp9GY8haHzz5pUzIk44V4g3vYWfRKOSByObJtSSdO3mrEWOeDO3RF2wZfpNPq27zN3-cjt388L_fn3kd3Xw_OrtcN4t6j6UXhVMJP39aWPW4-27MuoZgR--XMrEOOZVp7CmxSuOIPuMK5"/>
+</div>
+<div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#C0C0C0] text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-[12px] border-2 border-white">2</div>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface mb-1">ნიკა</p>
+<div class="podium-gradient-2 w-full h-24 rounded-t-xl flex flex-col items-center justify-center text-white shadow-md">
+<span class="font-score-md text-[14px]">12,450</span>
+<span class="text-[10px] opacity-80">ქულა</span>
+</div>
+</div>
+<!-- 1st Place -->
+<div class="podium-card flex flex-col items-center w-1/3 -mt-8">
+<div class="relative mb-xs">
+<span class="material-symbols-outlined absolute -top-8 left-1/2 -translate-x-1/2 text-[#FFD700] text-[32px] animate-bounce" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+<div class="w-20 h-20 rounded-full border-4 border-[#FFD700] overflow-hidden shadow-xl">
+<img class="w-full h-full object-cover" data-alt="A high-quality 3D rendered avatar of a charismatic male player with a golden crown, set against a glowing amber and sunburst yellow background. The character has a confident smile and modern streetwear, embodying the peak of achievement in a high-energy mobile gaming app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5A7GeuP7Rkvodh9WyMeclf8C082zIzsM7g6Y1qGSEL_U7GVU-GMHks3HcZnUUvUONe4oj8LAK5wq0abitTFnbVKl3MZe0y7v1cT97w1HSB-wFWu0iAf8U0QUQfu5iGCVaaYv7fUVo2dqFT1bTxDYNvtLjN6Am8adYdCRFuxEMUy_hTP6ce0JFME6ucL1-H2h8FXVQnE9rylsIJRHFM0icHrP6JjFp7D86j30Omo8WTvBPvYaLY6_C"/>
+</div>
+<div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#FFD700] text-white w-7 h-7 rounded-full flex items-center justify-center font-bold text-[14px] border-2 border-white">1</div>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface font-bold mb-1">ლუკა</p>
+<div class="podium-gradient-1 w-full h-32 rounded-t-xl flex flex-col items-center justify-center text-white shadow-lg">
+<span class="font-score-md text-score-md">15,800</span>
+<span class="text-[12px] opacity-90 font-bold uppercase tracking-widest">ქულა</span>
+</div>
+</div>
+<!-- 3rd Place -->
+<div class="podium-card flex flex-col items-center w-1/3">
+<div class="relative mb-xs">
+<div class="w-16 h-16 rounded-full border-4 border-[#CD7F32] overflow-hidden shadow-lg">
+<img class="w-full h-full object-cover" data-alt="A colorful digital illustration of a young gamer with headphones, vibrant orange lighting, and a focused expression. The background features subtle geometric patterns in bronze tones, designed as a 2D flat-plus avatar for a third-place ranking on a weekly leaderboard." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDKe3D4N1WbwlUG3XSiMzcRnghwrj4q_UIxtrkyslsK3bWxAGFjdWbW-xNf2KiFQ4oaR7Tl7e0wpbOh2dak9QCN2sFDEc3eBsl46QZVERN-u_bWysWIrw1gV-7s-CM_xFkWMmDQw2do6iinHGpvidy3gPiLVN6nhZaor4Wk4IqPOjYno1OTSmqT-CFOaNIJDFzNg8MtcR6wYc4J-yEM8ipLI6kha0cFmfg33ylrrF388y1yqi_xIuCF"/>
+</div>
+<div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#CD7F32] text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-[12px] border-2 border-white">3</div>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface mb-1">ანი</p>
+<div class="podium-gradient-3 w-full h-20 rounded-t-xl flex flex-col items-center justify-center text-white shadow-md">
+<span class="font-score-md text-[14px]">10,120</span>
+<span class="text-[10px] opacity-80">ქულა</span>
+</div>
+</div>
+</div>
+<!-- Leaderboard List 4-10 -->
+<div class="bg-surface-container-lowest rounded-xl shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] overflow-hidden mb-lg">
+<!-- Item 4 -->
+<div class="flex items-center justify-between px-md py-sm border-b border-outline-variant hover:bg-surface-variant/20 transition-colors">
+<div class="flex items-center gap-sm">
+<span class="font-score-md text-on-surface-variant w-6">4</span>
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A diverse collection of small, minimalist circular avatars representing various gaming personalities, using a consistent vibrant color palette of primary blues and secondary greens. Each avatar has a clean, modern aesthetic suitable for a high-traffic mobile app leaderboard list." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBYodwxsbVjEDyjAjjESxazXTGD7KyOu2XrR6OsHKz_Boj36CvLYdKquaD-XpjOydB6ieGNQJb4W7KEt0tiOHOTIe3OlKTK22Q3uWOEwetGTs5FWNrqx-8rWgZfB_WfwoGkHInOrw8dKXWH191lbbwDtUuqT1AmrOovGHITm01z9w_ONxwrBwcWKNnSCBP9jABhVs6FjQY8nD6IfXnI7Qz1YfK5DGLYqSyc9-5cWfjJWD_Z194HMH_x"/>
+</div>
+<span class="font-label-sm text-on-surface">გიორგი</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-score-md text-[14px] text-primary">9,450</span>
+<span class="text-[10px] text-on-surface-variant uppercase">pts</span>
+</div>
+</div>
+<!-- Item 5 -->
+<div class="flex items-center justify-between px-md py-sm border-b border-outline-variant hover:bg-surface-variant/20 transition-colors">
+<div class="flex items-center gap-sm">
+<span class="font-score-md text-on-surface-variant w-6">5</span>
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A professional profile icon of a person wearing a virtual reality headset, rendered in a clean vector style with soft shadows. The color scheme focuses on deep indigos and bright cyan accents, maintaining the playful yet professional atmosphere of the PlayPoint design system." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBW77C7AVbkEHS0lpkBTqpdgeKa5kN3EljveuYQ1MCU4aUBn1HCkXDxkrmlf3VfhdcM-pQmg45-6qpc0wg_3UUQFT6EOcmrjCbYS8KSjxz1nXsGzKwB6gd3IDPXDe7p7RbO6dJ-p7rMlQ0uuWwgB9aJT8QPDF2CRpg5Sh6jlZskhn1ijWB5SbaKZaCIsTWRRF06gp7OebD-ouDAGqge4HGHWnoX64HZAoSqm4qYlZTLBjkkp9vOy51l"/>
+</div>
+<span class="font-label-sm text-on-surface">ელენე</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-score-md text-[14px] text-primary">8,200</span>
+<span class="text-[10px] text-on-surface-variant uppercase">pts</span>
+</div>
+</div>
+<!-- Item 6 (Current User Simulation) -->
+<div class="flex items-center justify-between px-md py-sm border-b border-outline-variant bg-primary-fixed/30">
+<div class="flex items-center gap-sm">
+<span class="font-score-md text-primary w-6">6</span>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary">
+<img class="w-full h-full object-cover" data-alt="A close-up profile picture of a cheerful user with vibrant lighting, matching the primary brand color of PlayPoint. The image is bright and energetic, with a blurred background that hints at a modern gaming setup, emphasizing the user's active participation in the community." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJbOTGA_MIFcQlf78Cigl2l6yd1Fc9G7c6BjMHpf43Udf5HzFf2iEwRw_nllh0rJgyZmpeI4fCTLaibSMLrn-fo37-d137u2ahkFjYhgPp_kN2tymLFoUR0LXjdMujJD-y64B4FyjbBX1yAx3qfGzEFUraXCvzvnttZkW_IpsWq8LW9IG7t0U3z9QDQCyXX9ua8zmxrnk2HPGcGL9a0Z5DQ-lBV4GN_5ct1tsn8E35qR2gtituIt6E"/>
+</div>
+<span class="font-label-sm text-on-surface font-bold">შენ (თამარი)</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-score-md text-[14px] text-primary">7,900</span>
+<span class="text-[10px] text-on-surface-variant uppercase">pts</span>
+</div>
+</div>
+<!-- Item 7 -->
+<div class="flex items-center justify-between px-md py-sm border-b border-outline-variant hover:bg-surface-variant/20 transition-colors">
+<div class="flex items-center gap-sm">
+<span class="font-score-md text-on-surface-variant w-6">7</span>
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A stylized vector portrait of a gamer with a baseball cap and sleek modern tech-wear. The art style uses bold lines and a saturated color palette of primary blue and secondary green, fitting the 2D flat-plus aesthetic requirements of the leaderboard UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCIug9YXvJxAe4ay3YsRJU1I3pCDtpv7RXrndQT87byqWcdN1hCXxI2_IHKJQAMC0OJ0TJMItti97n07QjmHv1W_Yt5NfJOexrK_h6mS5gI9TcvL1SNqsHhacA-iajxFVHxh4tSZZk_R9FXY4WFVKkrmVYHKJowiGoUQKxLkjuYoPWPx5LUrF_IyjI9reexBWtQc8RPzv3OwOFKe3cLYPsbI-BkPSOKcxugDUimAViTknShtg_GfGLp"/>
+</div>
+<span class="font-label-sm text-on-surface">დათო</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-score-md text-[14px] text-primary">7,400</span>
+<span class="text-[10px] text-on-surface-variant uppercase">pts</span>
+</div>
+</div>
+</div>
+<!-- Weekly Challenge Sponsored Banner -->
+<div class="relative w-full aspect-[430/160] rounded-xl overflow-hidden shadow-lg mb-8 bg-primary">
+<div class="absolute inset-0 bg-gradient-to-r from-primary/80 to-transparent z-10"></div>
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="A high-energy marketing banner for a gaming challenge, featuring abstract 3D shapes like floating game controllers and golden coins in a dynamic, explosive composition. The background is a deep purple with neon blue and pink accents, creating a sense of excitement and reward. The style is modern, sleek, and high-contrast." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPtJdZIqp7DWm62WHnvt7Co6fQ67HuHg8TRIeF57uDAsUWMhyhyoOsxiymztT3fDqMjnXZkfJ4wuUi-rujhkjRuEfP6RyGdrzsMYq_29e-z7ifZu4nCdQgVnwsW1NMtPYjQftydS7KeAi9X6qH1hl3NFue9MSVq6fG-sKLWdXZgGWbc0ZgGqJf5aDchjk91Rc9BXQ59JMWlt654RcaQvwgDFWWuDYVNr85DSL1hEP0RWWs1nrlQnJI"/>
+<div class="relative z-20 h-full p-md flex flex-col justify-between">
+<div>
+<div class="glass-tag inline-block px-3 py-1 rounded-full text-white text-[10px] font-bold uppercase tracking-widest mb-1">სპონსორი: TechnoWorld</div>
+<h3 class="text-white font-headline-lg-mobile text-headline-lg-mobile leading-tight">კვირის გამოწვევა</h3>
+<p class="text-white/80 text-[12px]">მოიგე ახალი PlayStation 5!</p>
+</div>
+<button class="bg-secondary-container text-on-secondary-container self-start px-lg py-xs rounded-xl font-label-sm text-label-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all">
+                    მიიღე მონაწილეობა
+                </button>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full h-[64px] z-50 bg-surface-container-lowest border-t border-outline-variant flex justify-around items-center px-md pb-safe shadow-[0_-2px_10px_0_rgba(0,0,0,0.03)]">
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant/50 transition-all active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-xl px-4 py-1 active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined" data-icon="leaderboard" style="font-variation-settings: 'FILL' 1;">leaderboard</span>
+<span class="font-label-sm text-label-sm">Ranks</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant/50 transition-all active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="redeem">redeem</span>
+<span class="font-label-sm text-label-sm">Rewards</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant/50 transition-all active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-sm text-label-sm">Me</span>
+</button>
+</nav>
+<script>
+        // Simple micro-interaction for tab switching simulation
+        const buttons = document.querySelectorAll('.bg-surface-container button');
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                buttons.forEach(b => {
+                    b.classList.remove('bg-surface-container-lowest', 'text-primary', 'shadow-sm');
+                    b.classList.add('text-on-surface-variant');
+                });
+                btn.classList.add('bg-surface-container-lowest', 'text-primary', 'shadow-sm');
+                btn.classList.remove('text-on-surface-variant');
+            });
+        });
+
+        // Add a slight tilt effect to podium cards on hover for a "gaming" feel
+        const podiumCards = document.querySelectorAll('.podium-card');
+        podiumCards.forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const centerX = rect.width / 2;
+                const rotateY = (x - centerX) / 10;
+                card.style.transform = `perspective(1000px) rotateY(${rotateY}deg)`;
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = `perspective(1000px) rotateY(0deg)`;
+            });
+        });
+    </script>
+<script src="../../shared/prototype-links.js"></script>
+</body></html>

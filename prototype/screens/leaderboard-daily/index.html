@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html class="light" lang="ka"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>PlayPoint - ლიდერბორდი</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-fixed": "#6bff8f",
+                    "inverse-primary": "#c0c1ff",
+                    "error-container": "#ffdad6",
+                    "on-error-container": "#93000a",
+                    "on-surface": "#1a1c1c",
+                    "surface": "#f9f9f9",
+                    "on-secondary-container": "#007432",
+                    "surface-dim": "#dadada",
+                    "surface-container": "#eeeeee",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-fixed": "#002109",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "secondary-container": "#6bff8f",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed": "#07006c",
+                    "surface-bright": "#f9f9f9",
+                    "inverse-surface": "#2f3131",
+                    "primary": "#4648d4",
+                    "on-primary": "#ffffff",
+                    "primary-container": "#6063ee",
+                    "tertiary": "#825100",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "surface-container-highest": "#e2e2e2",
+                    "surface-container-high": "#e8e8e8",
+                    "on-tertiary-container": "#fffbff",
+                    "secondary-fixed-dim": "#4ae176",
+                    "surface-container-low": "#f3f3f3",
+                    "tertiary-container": "#a36700",
+                    "on-secondary-fixed-variant": "#005321",
+                    "primary-fixed": "#e1e0ff",
+                    "on-surface-variant": "#464554",
+                    "outline-variant": "#c7c4d7",
+                    "inverse-on-surface": "#f1f1f1",
+                    "secondary": "#006e2f",
+                    "background": "#f9f9f9",
+                    "outline": "#767586",
+                    "on-primary-container": "#fffbff",
+                    "on-tertiary-fixed": "#2a1700",
+                    "error": "#ba1a1a",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-tint": "#494bd6",
+                    "on-error": "#ffffff",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "on-background": "#1a1c1c",
+                    "surface-variant": "#e2e2e2"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "16px",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "md": "16px",
+                    "xl": "32px",
+                    "xs": "8px",
+                    "base": "4px",
+                    "container-margin": "20px",
+                    "lg": "24px",
+                    "gutter": "16px",
+                    "sm": "12px"
+            },
+            "fontFamily": {
+                    "display-lg": ["Montserrat"],
+                    "headline-lg": ["Montserrat"],
+                    "label-sm": ["Inter"],
+                    "body-md": ["Inter"],
+                    "headline-lg-mobile": ["Montserrat"],
+                    "score-md": ["Montserrat"]
+            },
+            "fontSize": {
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                    "score-md": ["18px", {"lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .bento-glow {
+            box-shadow: 0 4px 12px 0 rgba(70, 72, 212, 0.15);
+        }
+        .active-tab-indicator {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        body {
+            background-color: #f9f9f9;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .scroll-hide::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md text-on-surface mb-24">
+<!-- Top App Bar -->
+<header class="fixed top-0 left-0 w-full z-50 bg-surface shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] flex justify-between items-center px-container-margin py-md">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional high-quality 3D avatar profile picture of a young male gamer with stylish headphones, rendered in a vibrant, friendly digital art style with soft studio lighting. The color palette features pops of primary blue and electric green against a clean, light mode background, embodying a modern playful aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1w40Ks7euT7rS2x7ZedXAAlBg8bHQ7G7Hp2jnI3LhBlnYNixcrFJ6MPV6PBiUpjbFtfkkTB3EL9UJIakNLtryUM56XBaluWEAdOx8-JTtwCezuIz0HIA3cR3Z4uLSKouG29e9pX6bYlHci_1NyFmYGy3euxHrPctoQgmd4nNR0fDcx8dljXPpYmeF1wTTCUKqoBGLi8UYBze3FMLZtThvjrmGNAn9Zb-UxgzeCPSCqUnYJAHrXQum"/>
+</div>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile md:font-headline-lg md:text-headline-lg text-primary tracking-tight">ლიდერბორდი</h1>
+</div>
+<div class="bg-secondary-container text-on-secondary-container px-sm py-1.5 rounded-full font-label-sm text-label-sm flex items-center gap-1 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">stars</span>
+            2,450 pts
+        </div>
+</header>
+<main class="mt-20 px-container-margin">
+<!-- Tabs Section -->
+<div class="flex bg-surface-container-low p-1 rounded-xl mb-lg">
+<button class="flex-1 py-2 rounded-lg font-label-sm text-label-sm active-tab-indicator bg-surface-container-lowest text-primary shadow-sm" id="tab-daily" onclick="switchTab('daily')">დღიური</button>
+<button class="flex-1 py-2 rounded-lg font-label-sm text-label-sm active-tab-indicator text-on-surface-variant" id="tab-weekly" onclick="switchTab('weekly')">კვირის</button>
+</div>
+<!-- Podium / Top 3 -->
+<div class="grid grid-cols-3 gap-base items-end mb-xl pt-8">
+<!-- 2nd Place -->
+<div class="flex flex-col items-center">
+<div class="relative mb-sm">
+<div class="w-16 h-16 rounded-full border-4 border-[#C0C0C0] p-0.5 overflow-hidden">
+<img class="w-full h-full object-cover rounded-full" data-alt="A colorful, vibrant 2D flat-plus digital illustration of a female character with pink hair and gaming glasses, set against a saturated soft lavender background. The lighting is bright and optimistic, reflecting a modern playful UI design language with high-contrast elements and smooth edges." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA6m38eah1IKAUPOjeQDaqYE6p-Kasay6MsbhIjbhqQxsbRjBFm3AS7FGGJTKBzCHS22nlyEkLUlWWmMC2zZiG3lIgds_W8vF9L81NZ331PaxL1ut9Hll_f4HbYZVMr-ZBmvpzACincjO7LtFVQMbGB36rMsRqqOmV4PWr1aTvVhTEzMq1At3nu6Fr2Ka-kOjmIAKMlKh8cTqWlQLsjtRBT-wLH86pJqHpLmDJ3p13kCOPr1w829rc4"/>
+</div>
+<div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#C0C0C0] text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">2</div>
+</div>
+<span class="font-label-sm text-label-sm text-center truncate w-full">ნინო</span>
+<span class="font-score-md text-score-md text-primary">12,840</span>
+</div>
+<!-- 1st Place -->
+<div class="flex flex-col items-center scale-110 -translate-y-4">
+<div class="relative mb-sm">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 text-[#FFD700] animate-bounce">
+<span class="material-symbols-outlined text-[32px]" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+</div>
+<div class="w-20 h-20 rounded-full border-4 border-[#FFD700] p-1 overflow-hidden shadow-lg">
+<img class="w-full h-full object-cover rounded-full" data-alt="A premium 3D digital portrait of a cool urban character wearing a streetwear cap and a stylish hoodie. The background is a glowing electric blue gradient with subtle geometric patterns. The overall look is high-energy and dopamine-driven, perfectly suited for a top-tier gaming leaderboard interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQXzkxMFp00KrvLDjHen2-uaiK0acYG08v5yfRJti19Ccewr4o4tVw25Ipxl0XomTX85zWmUYfT7dUv3K5rGbTvpg_lbBctcaIY-93TDP4TpL0XGc0OczReouOrak6Dn6pFWCSqQXNlq2pdsQCeq4s0oVqVc4NAvVzp6g33qHw3T3sRhtdrIuWbpCLAC-ZgBsSFZF1S1y16G59wk8tr4zZLZhxB4NUOocB6QQhxH48ESseknhB7cQ4"/>
+</div>
+<div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#FFD700] text-on-tertiary-fixed w-7 h-7 rounded-full flex items-center justify-center font-bold text-sm">1</div>
+</div>
+<span class="font-label-sm text-label-sm text-center truncate w-full font-bold">გიორგი</span>
+<span class="font-score-md text-score-md text-primary">15,200</span>
+</div>
+<!-- 3rd Place -->
+<div class="flex flex-col items-center">
+<div class="relative mb-sm">
+<div class="w-16 h-16 rounded-full border-4 border-[#CD7F32] p-0.5 overflow-hidden">
+<img class="w-full h-full object-cover rounded-full" data-alt="A stylized minimalist digital art piece showing a friendly avatar with a yellow beanie and a bright smile. The style is 2D flat-plus with clean vectors and soft ambient shadows. The colors are warm and inviting, using a palette of sunset oranges and soft yellows that align with a reward-focused user experience." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCnsUuQbimDjEh12shhgBUcyfZ-6ME1j7y_TkPqV1MH0Umo8mDArS8jpolMjR056RpRK6nP38q-3jDSM-GuIqqMduNF9WzmgQdbEgUp__5cCfnZ0qoG5WPc7x-gNIPQ1tLKux1WiTtnLIZwY_WoGZbHC2QiK2V2KGarcUoKlMLgCaz9GA1eIpQAXetFijV-pg3hJb8gxqrcY_GPLPEng9CQ2ZBr_IyVE4z7qj3csskW_6yC4UfZWVsr"/>
+</div>
+<div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#CD7F32] text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">3</div>
+</div>
+<span class="font-label-sm text-label-sm text-center truncate w-full">ანი</span>
+<span class="font-score-md text-score-md text-primary">11,950</span>
+</div>
+</div>
+<!-- Main Leaderboard List -->
+<div class="bg-surface-container-lowest rounded-xl bento-glow overflow-hidden mb-xl">
+<div class="divide-y divide-outline-variant">
+<!-- Rank 4 -->
+<div class="flex items-center gap-md px-md py-4 hover:bg-surface-variant/20 transition-colors">
+<span class="w-6 font-score-md text-on-surface-variant">4</span>
+<div class="w-12 h-12 rounded-xl bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Close-up digital illustration of a sleek 3D robot head mascot with glowing neon eyes. The aesthetic is futuristic yet approachable, using a palette of dark charcoal and vibrant cyan accents. The image is crisp, professional, and designed to look high-end within a modern playful mobile app UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDq2G5-QH5o9im5BN2msMtaZoZ-o0249KuqTndoiBUv6MHpGcFYLmqFBf-bMDkHr8QpmSMiTxxpDMdt2XJxr-hUA3L8at4nYOw0LcRk7RjtmEH3e34eIjlAH9yg2zCb8zhRM18OYtSJDXfE9acCGTTI8K10F_ulOiIAoPFL0BnLYXp06vPK7wCLPPKvwos5jM5SD4ugdaAcblWpur_izThU9NhzYgRBi2X8T_bzB9aXqRCbDnn3PmBw"/>
+</div>
+<div class="flex-1">
+<p class="font-label-sm text-label-sm">დათო</p>
+<p class="text-[10px] text-on-surface-variant">14 მოგება</p>
+</div>
+<span class="font-score-md text-score-md text-on-surface">10,400</span>
+</div>
+<!-- Rank 5 -->
+<div class="flex items-center gap-md px-md py-4 hover:bg-surface-variant/20 transition-colors">
+<span class="w-6 font-score-md text-on-surface-variant">5</span>
+<div class="w-12 h-12 rounded-xl bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Digital art of a cool avatar wearing VR goggles, featuring bright purple and neon green highlights. The style is clean and flat-plus with intentional soft depth. The background is a subtle gradient, ensuring the character pop as a high-engagement leaderboard asset for a gaming platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQmNVQ_00MlzQKxQIT4xTbWP56q1zrNLy9sz_gp6zVAwRCS2DdxzJTrcI9BFO_siluVrxUqwG8lDGfUYgVXyHewNA8x2f5aGkbw29RY6KXhkLnqhchFzI0QNtm2d4O3t9XdCx7sOvZoUs5RW32AoZ-5-zYK8LngYB9azvR8l0mG_BLUUY-4KumPRyUev2nTAjopHbWVZFE8KhXnKEeA7cBuylps4tTbIFhdfs9QCYTnXhdpelH3GJd"/>
+</div>
+<div class="flex-1">
+<p class="font-label-sm text-label-sm">ლუკა</p>
+<p class="text-[10px] text-on-surface-variant">11 მოგება</p>
+</div>
+<span class="font-score-md text-score-md text-on-surface">9,850</span>
+</div>
+<!-- Rank 6 (Current User Highlighted) -->
+<div class="flex items-center gap-md px-md py-4 bg-primary/5 border-l-4 border-primary">
+<span class="w-6 font-score-md text-primary">6</span>
+<div class="w-12 h-12 rounded-xl bg-primary-container overflow-hidden ring-2 ring-primary ring-offset-1">
+<img class="w-full h-full object-cover" data-alt="A professional high-quality 3D avatar profile picture of a young male gamer with stylish headphones, rendered in a vibrant, friendly digital art style with soft studio lighting. The color palette features pops of primary blue and electric green against a clean, light mode background, embodying a modern playful aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAVl9cxiVvrOHfsY7AoIC7uLp79AzBT-In6H7bcYicT5LRA8mGQVVgmCQV-Jqg59sOKzOZM23jqWGtB0Dfsk6OxLwP7inr6PF_WzcC8mIIC6Cbc_4KfHWREeE3Dt605apZtgmbRBOezRYtdeQsjvK7EhLsv0mvu33iUK-MD1M0dlu1UQl6IWb7zY_AIjJfw_IiuHlvqlhQnW5s4tnc2EsObdHRITaSqB8yRuZQGNIiTrMOOsM0r0j8b"/>
+</div>
+<div class="flex-1">
+<p class="font-label-sm text-label-sm text-primary font-bold">შენ (მე)</p>
+<p class="text-[10px] text-primary">9 მოგება</p>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-score-md text-score-md text-primary">2,450</span>
+<span class="text-[8px] text-primary-container font-bold">+120 დღეს</span>
+</div>
+</div>
+<!-- Rank 7 -->
+<div class="flex items-center gap-md px-md py-4 hover:bg-surface-variant/20 transition-colors">
+<span class="w-6 font-score-md text-on-surface-variant">7</span>
+<div class="w-12 h-12 rounded-xl bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Creative digital drawing of a retro-style joystick with wings, designed as a playful avatar. High-contrast colors of orange and turquoise are used on a soft gray background. The lines are clean and the style is modern and gaming-oriented, maintaining the dopamine-driven visual tone of the app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAn2PR7MchMiHvgyoGe6i2jnqsN8ln8LdFHEyqWjfI8a9j01_wjPNbDvxqa2bVk5W_WjSmoJ28LHxPRkJdKC6hsum_Lyvy1uPqqJrZ5gMKushqRCxOATtM0VY0Drm_HMNohktWBbRBiMb9cmDe6yRLi0CoaC9FjouAiu7er0zhBn2K-iZfS0D7VewvIlADTyuKO1XCgMUUPLVzk2ITLYhQri7HQfiwkpl9VflvqogoSX5Mlt8y25WPM"/>
+</div>
+<div class="flex-1">
+<p class="font-label-sm text-label-sm">მარიამი</p>
+<p class="text-[10px] text-on-surface-variant">8 მოგება</p>
+</div>
+<span class="font-score-md text-score-md text-on-surface">1,900</span>
+</div>
+</div>
+</div>
+<!-- Sponsor Banner -->
+<div class="relative w-full aspect-[430/160] rounded-lg overflow-hidden bento-glow mb-xl">
+<img class="w-full h-full object-cover" data-alt="A high-end cinematic advertisement banner for a premium gaming headset. The image features sleek, dark metallic hardware with vibrant neon blue lighting accents. The background is a soft-focus abstract digital environment with hints of primary blue and deep shadows. The mood is high-tech, professional, and exhilarating." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBFqE_Qj2FHX51P5huMlCHWj5Q_Qi7AWKMUyK7WNo_mDbKN4GyoIOYgO6lhEsAscKzfJHNDm7Y6kXPtp3uBdRLJE9gwdwUXS8l0xhH7btzr5byZg8A7-WVvhHFO9gJdDouOd-4TrpgTg9t84pusx06QgjKK3Yys87wKj7gqDIfKG64JYb9RQt9NSybRVbz-ZP0SvrBX0eX74I6ydesa3ynwnwrUi9957QaZiFJY3Ldo5lJbHbaEGJHj"/>
+<div class="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent flex flex-col justify-center px-lg">
+<span class="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white text-[10px] font-bold tracking-wider uppercase">სპონსორი</span>
+<h3 class="text-white font-headline-lg-mobile text-headline-lg-mobile leading-tight mb-1">მოიგე Razer-ის<br/>ყურსასმენები</h3>
+<p class="text-white/80 text-[12px]">ითამაშე და დააგროვე ქულები</p>
+<button class="mt-md bg-secondary text-white w-max px-md py-2 rounded-xl font-label-sm text-label-sm active:scale-95 transition-transform">გაიგე მეტი</button>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full h-[64px] z-50 flex justify-around items-center bg-surface-container-lowest dark:bg-inverse-surface px-md pb-safe border-t border-outline-variant shadow-[0_-2px_10px_0_rgba(0,0,0,0.03)]">
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant/50 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-xl px-4 py-1 active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard" style="font-variation-settings: 'FILL' 1;">leaderboard</span>
+<span class="font-label-sm text-label-sm">Ranks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant/50 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="redeem">redeem</span>
+<span class="font-label-sm text-label-sm">Rewards</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant/50 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-sm text-label-sm">Me</span>
+</a>
+</nav>
+<script>
+        function switchTab(type) {
+            const daily = document.getElementById('tab-daily');
+            const weekly = document.getElementById('tab-weekly');
+            
+            if (type === 'daily') {
+                daily.classList.add('bg-surface-container-lowest', 'text-primary', 'shadow-sm');
+                daily.classList.remove('text-on-surface-variant');
+                weekly.classList.remove('bg-surface-container-lowest', 'text-primary', 'shadow-sm');
+                weekly.classList.add('text-on-surface-variant');
+            } else {
+                weekly.classList.add('bg-surface-container-lowest', 'text-primary', 'shadow-sm');
+                weekly.classList.remove('text-on-surface-variant');
+                daily.classList.remove('bg-surface-container-lowest', 'text-primary', 'shadow-sm');
+                daily.classList.add('text-on-surface-variant');
+            }
+        }
+    </script>
+<script src="../../shared/prototype-links.js"></script>
+</body></html>

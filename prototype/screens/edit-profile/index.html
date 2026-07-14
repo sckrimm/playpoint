@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+
+<html lang="ka"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>პროფილის რედაქტირება - PlayPoint</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Montserrat:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed": "#002109",
+                    "inverse-on-surface": "#f1f1f1",
+                    "on-error": "#ffffff",
+                    "secondary": "#006e2f",
+                    "on-error-container": "#93000a",
+                    "on-background": "#1a1c1c",
+                    "outline": "#767586",
+                    "on-primary-container": "#fffbff",
+                    "primary": "#4648d4",
+                    "error": "#ba1a1a",
+                    "surface-variant": "#e2e2e2",
+                    "inverse-surface": "#2f3131",
+                    "secondary-fixed-dim": "#4ae176",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "surface-container-highest": "#e2e2e2",
+                    "on-secondary-container": "#007432",
+                    "on-tertiary-container": "#fffbff",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "surface-container": "#eeeeee",
+                    "tertiary": "#825100",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "background": "#f9f9f9",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-container-lowest": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "surface-bright": "#f9f9f9",
+                    "surface-container-low": "#f3f3f3",
+                    "inverse-primary": "#c0c1ff",
+                    "secondary-container": "#6bff8f",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-fixed-variant": "#005321",
+                    "surface": "#f9f9f9",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "on-primary": "#ffffff",
+                    "on-surface": "#1a1c1c",
+                    "surface-tint": "#494bd6",
+                    "on-surface-variant": "#464554",
+                    "primary-container": "#6063ee",
+                    "primary-fixed": "#e1e0ff",
+                    "surface-dim": "#dadada",
+                    "surface-container-high": "#e8e8e8",
+                    "on-primary-fixed": "#07006c",
+                    "secondary-fixed": "#6bff8f",
+                    "on-tertiary-fixed": "#2a1700",
+                    "tertiary-container": "#a36700",
+                    "on-secondary": "#ffffff",
+                    "outline-variant": "#c7c4d7"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "16px",
+                    "xl": "24px",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "lg": "24px",
+                    "base": "4px",
+                    "xs": "8px",
+                    "sm": "12px",
+                    "container-margin": "20px",
+                    "xl": "32px",
+                    "md": "16px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "label-sm": ["Inter"],
+                    "headline-lg-mobile": ["Montserrat"],
+                    "display-lg": ["Montserrat"],
+                    "headline-lg": ["Montserrat"],
+                    "body-md": ["Inter"],
+                    "score-md": ["Montserrat"]
+            },
+            "fontSize": {
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "score-md": ["18px", {"lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #f9f9f9;
+            color: #1a1c1c;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .input-focus-ring:focus-within {
+            box-shadow: 0 0 0 2px #4648d433;
+            border-color: #4648d4;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .fill-icon {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+<!-- Top AppBar (JSON Mapping: TopAppBar) -->
+<!-- Suppressed destination check: This is a sub-page (Edit Profile), using 'Back' action logic -->
+<header class="sticky top-0 z-50 bg-surface dark:bg-inverse-surface shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] flex justify-between items-center w-full px-container-margin py-md">
+<div class="flex items-center gap-xs">
+<button class="p-xs rounded-full hover:bg-surface-variant transition-colors" onclick="history.back()">
+<span class="material-symbols-outlined text-on-surface">arrow_back</span>
+</button>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile md:font-headline-lg md:text-headline-lg text-primary dark:text-inverse-primary">
+                პროფილის რედაქტირება
+            </h1>
+</div>
+<div class="flex items-center gap-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-sm py-xs rounded-full">
+                2,450 pts
+             </span>
+</div>
+</header>
+<main class="flex-grow w-full max-w-md mx-auto px-container-margin py-xl space-y-xl">
+<!-- Profile Picture Section -->
+<section class="flex flex-col items-center">
+<div class="relative group">
+<div class="w-32 h-32 rounded-full border-4 border-surface-container-lowest shadow-md overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A professional and friendly profile headshot of a young adult, set against a vibrant purple and blue gradient background. The lighting is soft and studio-quality, creating a modern and energetic aesthetic consistent with a premium gaming platform. The subject has a cheerful expression, and the image is sharp with a clean, circular composition." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD9vbI_zEe82dviF4DAtoknlqZxDTpDnchX_8IAByG8Vb7sAJ9boyFp5SwqzHOjegps5oMlQnU28cebuCqNhNZ2epBN495NBMpxZYD8BNl9MReiGt1Hf-cy6M11Q6Z_ZReE4cmAZvaeHRnaXhQ6NihBeYrYKiG2zuB9DOQkb9S_JHEj76nBrlS_ZEpfZgrWGmqW4ZFwxMQuJHY0RMf9nQXOJd2VTubnCbrTfOpePQURHM7wHCWE5-5_"/>
+</div>
+<button aria-label="Edit Profile Picture" class="absolute bottom-0 right-0 p-sm bg-primary text-on-primary rounded-full shadow-lg border-2 border-surface active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span>
+</button>
+</div>
+<p class="mt-md font-label-sm text-label-sm text-on-surface-variant">შეცვალეთ ფოტო</p>
+</section>
+<!-- Form Section -->
+<form class="space-y-lg" onsubmit="event.preventDefault();">
+<!-- Name Input -->
+<div class="space-y-xs">
+<label class="font-label-sm text-label-sm text-on-surface-variant ml-xs" for="name">სახელი</label>
+<div class="relative flex items-center bg-surface-container-lowest border border-outline-variant rounded-xl px-md py-sm transition-all focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary">
+<span class="material-symbols-outlined text-outline mr-sm">person</span>
+<input class="w-full bg-transparent border-none p-0 focus:ring-0 font-body-md text-body-md text-on-surface" id="name" name="name" placeholder="შეიყვანეთ სახელი" type="text" value="გიორგი მახარაძე"/>
+</div>
+</div>
+<!-- Phone Input (Read-only/Disabled as per prompt) -->
+<div class="space-y-xs">
+<label class="font-label-sm text-label-sm text-on-surface-variant ml-xs" for="phone">ტელეფონი</label>
+<div class="relative flex items-center bg-surface-container border border-outline-variant rounded-xl px-md py-sm opacity-70">
+<span class="material-symbols-outlined text-outline mr-sm">call</span>
+<input class="w-full bg-transparent border-none p-0 focus:ring-0 font-body-md text-body-md text-on-surface cursor-not-allowed" id="phone" name="phone" readonly="" type="text" value="+995 555 12 34 56"/>
+<span class="material-symbols-outlined text-outline text-sm" data-icon="lock" style="font-variation-settings: 'FILL' 1;">lock</span>
+</div>
+<p class="text-[11px] text-outline ml-xs italic">ნომრის შეცვლა შეუძლებელია</p>
+</div>
+<!-- Email Input (Optional) -->
+<div class="space-y-xs">
+<label class="font-label-sm text-label-sm text-on-surface-variant ml-xs" for="email">ელ-ფოსტა (არასავალდებულო)</label>
+<div class="relative flex items-center bg-surface-container-lowest border border-outline-variant rounded-xl px-md py-sm transition-all focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary">
+<span class="material-symbols-outlined text-outline mr-sm">mail</span>
+<input class="w-full bg-transparent border-none p-0 focus:ring-0 font-body-md text-body-md text-on-surface" id="email" name="email" placeholder="email@example.com" type="email" value="giorgi.m@example.ge"/>
+</div>
+</div>
+</form>
+<!-- Decorative Info Card (Bento-style element) -->
+<div class="bg-primary-container/10 border border-primary-container/20 rounded-xl p-md flex items-start gap-md">
+<div class="bg-primary-container text-on-primary-container p-sm rounded-lg">
+<span class="material-symbols-outlined" data-icon="verified_user" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+</div>
+<div>
+<h4 class="font-label-sm text-label-sm text-primary">პროფილის უსაფრთხოება</h4>
+<p class="text-[13px] text-on-surface-variant leading-tight mt-1">თქვენი მონაცემები დაცულია და გამოიყენება მხოლოდ იდენტიფიკაციისთვის.</p>
+</div>
+</div>
+</main>
+<!-- Bottom Action Button -->
+<footer class="sticky bottom-0 p-container-margin bg-surface-container-lowest/80 backdrop-blur-md">
+<button class="w-full h-[48px] bg-primary text-on-primary font-bold rounded-[14px] shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-sm" type="submit">
+<span>შენახვა</span>
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</button>
+</footer>
+<!-- BottomNavBar (JSON Mapping: BottomNavBar) -->
+<!-- Shell Visibility & Relevance: Suppressed for Edit Profile to prioritize Task-Focus -->
+<!-- Note: Following "The UX Goal" - Hiding shell for task-focused journey -->
+<script>
+        // Micro-interaction for the save button
+        document.querySelector('button[type="submit"]').addEventListener('click', function() {
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span>';
+            btn.disabled = true;
+            
+            setTimeout(() => {
+                btn.innerHTML = 'შენახულია! <span class="material-symbols-outlined">done_all</span>';
+                btn.classList.replace('bg-primary', 'bg-secondary');
+                
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.replace('bg-secondary', 'bg-primary');
+                    btn.disabled = false;
+                }, 2000);
+            }, 1000);
+        });
+
+        // OTP inputs interaction (if applicable in future steps)
+        // Currently handled by plain inputs as per specific screen request
+    </script>
+<script src="../../shared/prototype-links.js"></script>
+</body></html>

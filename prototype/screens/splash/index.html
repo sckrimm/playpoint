@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+
+<html lang="ka"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PlayPoint | Splash Screen</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-fixed": "#6bff8f",
+                    "inverse-primary": "#c0c1ff",
+                    "error-container": "#ffdad6",
+                    "on-error-container": "#93000a",
+                    "on-surface": "#1a1c1c",
+                    "surface": "#f9f9f9",
+                    "on-secondary-container": "#007432",
+                    "surface-dim": "#dadada",
+                    "surface-container": "#eeeeee",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-fixed": "#002109",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "secondary-container": "#6bff8f",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed": "#07006c",
+                    "surface-bright": "#f9f9f9",
+                    "inverse-surface": "#2f3131",
+                    "primary": "#4648d4",
+                    "on-primary": "#ffffff",
+                    "primary-container": "#6063ee",
+                    "tertiary": "#825100",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "surface-container-highest": "#e2e2e2",
+                    "surface-container-high": "#e8e8e8",
+                    "on-tertiary-container": "#fffbff",
+                    "secondary-fixed-dim": "#4ae176",
+                    "surface-container-low": "#f3f3f3",
+                    "tertiary-container": "#a36700",
+                    "on-secondary-fixed-variant": "#005321",
+                    "primary-fixed": "#e1e0ff",
+                    "on-surface-variant": "#464554",
+                    "outline-variant": "#c7c4d7",
+                    "inverse-on-surface": "#f1f1f1",
+                    "secondary": "#006e2f",
+                    "background": "#f9f9f9",
+                    "outline": "#767586",
+                    "on-primary-container": "#fffbff",
+                    "on-tertiary-fixed": "#2a1700",
+                    "error": "#ba1a1a",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-tint": "#494bd6",
+                    "on-error": "#ffffff",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "on-background": "#1a1c1c",
+                    "surface-variant": "#e2e2e2"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "md": "16px",
+                    "xl": "32px",
+                    "xs": "8px",
+                    "base": "4px",
+                    "container-margin": "20px",
+                    "lg": "24px",
+                    "gutter": "16px",
+                    "sm": "12px"
+            },
+            "fontFamily": {
+                    "display-lg": ["Montserrat"],
+                    "headline-lg": ["Montserrat"],
+                    "label-sm": ["Inter"],
+                    "body-md": ["Inter"],
+                    "headline-lg-mobile": ["Montserrat"],
+                    "score-md": ["Montserrat"]
+            },
+            "fontSize": {
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                    "score-md": ["18px", {"lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        .float-animation { animation: float 4s ease-in-out infinite; }
+        .pulse-animation { animation: pulse-soft 3s ease-in-out infinite; }
+        
+        body {
+            background-color: #f9f9f9;
+            overflow: hidden;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .logo-gradient {
+            background: linear-gradient(135deg, #4648d4 0%, #6063ee 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Ambient glow for the 2D flat-plus look */
+        .ambient-glow {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(70, 72, 212, 0.1) 0%, rgba(255, 255, 255, 0) 70%);
+            z-index: -1;
+            border-radius: 9999px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="flex flex-col items-center justify-center min-h-screen relative">
+<!-- Atmospheric Visual Layer -->
+<div class="ambient-glow top-1/4 -left-20 pulse-animation"></div>
+<div class="ambient-glow bottom-1/4 -right-20 pulse-animation" style="animation-delay: 1.5s;"></div>
+<!-- Main Content Container -->
+<main class="flex flex-col items-center justify-center px-container-margin z-10">
+<!-- Animated Logo Group -->
+<div class="relative mb-lg flex flex-col items-center float-animation">
+<!-- Icon Symbol -->
+<div class="w-32 h-32 md:w-40 md:h-40 bg-primary-container rounded-3xl shadow-[0_12px_24px_rgba(70,72,212,0.2)] flex items-center justify-center mb-md transform rotate-3 hover:rotate-0 transition-transform duration-500">
+<span class="material-symbols-outlined text-[64px] md:text-[80px] text-on-primary-container" data-icon="sports_esports" style="font-variation-settings: 'FILL' 1;">sports_esports</span>
+</div>
+<!-- Brand Text -->
+<h1 class="font-display-lg text-display-lg tracking-tight logo-gradient">
+                PlayPoint
+            </h1>
+</div>
+<!-- Tagline -->
+<div class="text-center">
+<p class="font-headline-lg-mobile text-headline-lg-mobile md:font-headline-lg md:text-headline-lg text-on-surface-variant max-w-[280px] md:max-w-none">
+                ითამაშე, დააგროვე, მოიგე
+            </p>
+</div>
+<!-- Loading Indicator -->
+<div class="mt-xl flex items-center gap-xs">
+<div class="w-3 h-3 rounded-full bg-primary pulse-animation"></div>
+<div class="w-3 h-3 rounded-full bg-secondary-fixed pulse-animation" style="animation-delay: 0.2s;"></div>
+<div class="w-3 h-3 rounded-full bg-tertiary-container pulse-animation" style="animation-delay: 0.4s;"></div>
+</div>
+</main>
+<!-- Background Illustrations (Decorative) -->
+<div class="absolute inset-0 pointer-events-none opacity-20 overflow-hidden">
+<span class="material-symbols-outlined absolute top-10 left-10 text-primary transform -rotate-12" style="font-size: 48px;">star</span>
+<span class="material-symbols-outlined absolute top-20 right-20 text-secondary transform rotate-12" style="font-size: 56px;">redeem</span>
+<span class="material-symbols-outlined absolute bottom-20 left-15 text-tertiary transform rotate-45" style="font-size: 40px;">leaderboard</span>
+<span class="material-symbols-outlined absolute bottom-10 right-10 text-primary transform -rotate-6" style="font-size: 64px;">videogame_asset</span>
+</div>
+<!-- Micro-interaction for entering the app -->
+<script>
+        document.body.addEventListener('click', () => {
+            // Visual feedback on click
+            const main = document.querySelector('main');
+            main.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease';
+            main.style.transform = 'scale(0.95)';
+            main.style.opacity = '0';
+            
+            setTimeout(() => {
+                window.location.href = '../phone-login/index.html';
+            }, 600);
+        });
+    </script>
+<script src="../../shared/prototype-links.js"></script>
+</body></html>

@@ -1,0 +1,24 @@
+{
+  "name": "playpoint",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PlayPoint mobile-first gamified engagement MVP.",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "server/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @playpoint/web",
+    "build": "npm run build -w @playpoint/web",
+    "preview": "npm run preview -w @playpoint/web",
+    "typecheck": "npm run typecheck -w @playpoint/web",
+    "lint": "npm run lint -w @playpoint/web",
+    "api:dev": "npm run dev -w @playpoint/api",
+    "api:typecheck": "npm run typecheck -w @playpoint/api"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

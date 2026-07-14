@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum OtpPurpose {
+  login
+  phone_change
+}
+
+enum AttemptStatus {
+  started
+  finished
+  abandoned
+  rejected
+}
+
+enum ScoreVerificationStatus {
+  pending
+  verified
+  suspicious
+}
+
+enum BrandPackage {
+  basic
+  plus
+  premium
+}
+
+enum CampaignStatus {
+  draft
+  active
+  paused
+  completed
+}
+
+enum BannerPlacement {
+  home
+  game_loading
+  leaderboard
+}
+
+enum RewardClaimStatus {
+  pending
+  approved
+  rejected
+  delivered
+}
+
+model User {
+  id             String          @id @default(cuid())
+  phone          String          @unique
+  displayName    String
+  avatarUrl      String?
+  totalPoints    Int             @default(0)
+  coins          Int             @default(14)
+  role           UserRole        @default(user)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  otpCodes       OtpCode[]
+  sessions       UserSession[]
+  attempts       GameAttempt[]
+  scores         Score[]
+  rewardClaims   RewardClaim[]
+  analyticsEvents AnalyticsEvent[]
+
+  @@index([role])
+}
+
+model OtpCode {
+  id        String     @id @default(cuid())
+  phone     String
+  codeHash  String
+  purpose   OtpPurpose @default(login)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime   @default(now())
+  userId    String?
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phone, purpose, expiresAt])
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Game {
+  id                String        @id @default(cuid())
+  slug              String        @unique
+  title             String
+  description       String?
+  iconUrl           String?
+  iframeUrl         String?
+  active            Boolean       @default(true)
+  sortOrder         Int           @default(0)
+  dailyAttemptLimit Int           @default(3)
+  scoringRule       Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  attempts          GameAttempt[]
+  scores            Score[]
+
+  @@index([active, sortOrder])
+}
+
+model GameAttempt {
+  id          String        @id @default(cuid())
+  status      AttemptStatus @default(started)
+  startedAt   DateTime      @default(now())
+  finishedAt  DateTime?
+  scoreToken  String        @unique
+  clientMeta  Json?
+  userId      String
+  gameId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game        Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  score       Score?
+
+  @@index([userId, gameId, startedAt])
+  @@index([status])
+}
+
+model Score {
+  id                 String                  @id @default(cuid())
+  rawScore           Int
+  playPoints         Int
+  durationSeconds    Int
+  hits               Int?
+  misses             Int?
+  accuracy           Int?
+  maxCombo           Int?
+  verificationStatus ScoreVerificationStatus @default(verified)
+  suspiciousReason   String?
+  createdAt          DateTime                @default(now())
+  userId             String
+  gameId             String
+  attemptId          String?                 @unique
+  user               User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game               Game                    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  attempt            GameAttempt?            @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([gameId, createdAt])
+  @@index([userId, createdAt])
+  @@index([verificationStatus])
+}
+
+model Brand {
+  id            String     @id @default(cuid())
+  name          String     @unique
+  logoUrl       String?
+  packageType   BrandPackage @default(basic)
+  monthlyFeeGel Int
+  contactName   String?
+  contactPhone  String?
+  notes         String?
+  active        Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  campaigns     Campaign[]
+  banners       Banner[]
+  rewards       Reward[]
+}
+
+model Campaign {
+  id        String         @id @default(cuid())
+  title     String
+  status    CampaignStatus @default(draft)
+  startsAt  DateTime
+  endsAt    DateTime
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  brandId   String
+  brand     Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  banners   Banner[]
+
+  @@index([status, startsAt, endsAt])
+}
+
+model Banner {
+  id          String          @id @default(cuid())
+  title       String
+  placement   BannerPlacement
+  imageUrl    String
+  clickUrl    String?
+  active      Boolean         @default(true)
+  startsAt    DateTime
+  endsAt      DateTime
+  impressions Int             @default(0)
+  clicks      Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  brandId     String
+  campaignId  String?
+  brand       Brand           @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign    Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([placement, active, startsAt, endsAt])
+}
+
+model Reward {
+  id             String        @id @default(cuid())
+  slug           String        @unique
+  title          String
+  description    String?
+  imageUrl       String?
+  category       String
+  requiredPoints Int
+  quantity       Int
+  claimedCount   Int           @default(0)
+  active         Boolean       @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  brandId        String
+  brand          Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  claims         RewardClaim[]
+
+  @@index([active, requiredPoints])
+  @@index([brandId])
+}
+
+model RewardClaim {
+  id          String            @id @default(cuid())
+  status      RewardClaimStatus @default(pending)
+  pointsSpent Int
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  deliveredAt DateTime?
+  userId      String
+  rewardId    String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reward      Reward            @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, rewardId])
+  @@index([status, createdAt])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  name      String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  userId    String?
+  brandId   String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([name, createdAt])
+  @@index([userId, createdAt])
+  @@index([brandId, createdAt])
+}

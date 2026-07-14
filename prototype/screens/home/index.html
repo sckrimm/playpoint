@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+
+<html class="light" lang="ka"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PlayPoint - Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-fixed": "#6bff8f",
+                    "inverse-primary": "#c0c1ff",
+                    "error-container": "#ffdad6",
+                    "on-error-container": "#93000a",
+                    "on-surface": "#1a1c1c",
+                    "surface": "#f9f9f9",
+                    "on-secondary-container": "#007432",
+                    "surface-dim": "#dadada",
+                    "surface-container": "#eeeeee",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-fixed": "#002109",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "secondary-container": "#6bff8f",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed": "#07006c",
+                    "surface-bright": "#f9f9f9",
+                    "inverse-surface": "#2f3131",
+                    "primary": "#4648d4",
+                    "on-primary": "#ffffff",
+                    "primary-container": "#6063ee",
+                    "tertiary": "#825100",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "surface-container-highest": "#e2e2e2",
+                    "surface-container-high": "#e8e8e8",
+                    "on-tertiary-container": "#fffbff",
+                    "secondary-fixed-dim": "#4ae176",
+                    "surface-container-low": "#f3f3f3",
+                    "tertiary-container": "#a36700",
+                    "on-secondary-fixed-variant": "#005321",
+                    "primary-fixed": "#e1e0ff",
+                    "on-surface-variant": "#464554",
+                    "outline-variant": "#c7c4d7",
+                    "inverse-on-surface": "#f1f1f1",
+                    "secondary": "#006e2f",
+                    "background": "#f9f9f9",
+                    "outline": "#767586",
+                    "on-primary-container": "#fffbff",
+                    "on-tertiary-fixed": "#2a1700",
+                    "error": "#ba1a1a",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-tint": "#494bd6",
+                    "on-error": "#ffffff",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "on-background": "#1a1c1c",
+                    "surface-variant": "#e2e2e2"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.16px",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "md": "16px",
+                    "xl": "32px",
+                    "xs": "8px",
+                    "base": "4px",
+                    "container-margin": "20px",
+                    "lg": "24px",
+                    "gutter": "16px",
+                    "sm": "12px"
+            },
+            "fontFamily": {
+                    "display-lg": ["Montserrat"],
+                    "headline-lg": ["Montserrat"],
+                    "label-sm": ["Inter"],
+                    "body-md": ["Inter"],
+                    "headline-lg-mobile": ["Montserrat"],
+                    "score-md": ["Montserrat"]
+            },
+            "fontSize": {
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "700"}],
+                    "score-md": ["18px", {"lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #f9f9f9;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .bento-card {
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .bento-card:active {
+            transform: scale(0.96);
+        }
+        .glass-tag {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .primary-gradient {
+            background: linear-gradient(180deg, #6063ee 0%, #4648d4 100%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md text-on-surface select-none">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 bg-surface shadow-[0_2px_8px_0_rgba(0,0,0,0.05)] px-container-margin py-md flex justify-between items-center h-[72px]">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden border-2 border-primary-fixed">
+<img class="w-full h-full object-cover" data-alt="A professional studio portrait of a young gamer with a friendly smile, clean lighting, and a soft-focus gaming setup in the background. The aesthetic is modern and vibrant, using the primary purple and secondary green colors of the PlayPoint app. High-end digital photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjiQTRCf7QmH84m6ACClzufkAwFCjwSMlDvU-yLhDUbv031UuSQIKzg54KqgKoFiFn44cjzBRmpxH-pQ_RoK-pk-DZym0fc537SINkfoHpluXeWHA8vKRwmWFrVKodrFJihfLjUSM7K00YQsjOkLFYGz2G9DKFU2qiJBtV1YDfyvDc9JcKmdRrAQ_EfPjz_nlmVg6dYBaFEs7j2Cqq53_3RzJvPDYx-_7MJKD2TPAbLhzj6Cq2M8cP"/>
+</div>
+<h1 class="font-display-lg text-headline-lg-mobile md:text-display-lg text-primary tracking-tight">PlayPoint</h1>
+</div>
+<div class="bg-primary-fixed text-on-primary-fixed px-sm py-1.5 rounded-full font-score-md text-score-md flex items-center gap-1 active:scale-95 transition-transform duration-150 cursor-pointer">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">stars</span>
+            2,450 pts
+        </div>
+</header>
+<main class="pt-[88px] pb-[88px] px-container-margin">
+<!-- Featured Sponsor Banner -->
+<section class="mb-lg">
+<div class="relative w-full aspect-[430/160] rounded-xl overflow-hidden shadow-md active:scale-[0.98] transition-transform duration-200 cursor-pointer">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="A high-energy, vibrant promotional banner for a modern mobile gaming event. The artwork features abstract 2D flat shapes, dynamic lightning bolts, and floating game controllers in a deep purple and bright green color scheme. The lighting is dramatic and saturated, evoking a sense of competition and reward. Professional digital illustration." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBg_R1pJl5ZZaGGcTDTlSewrEOP9SUcsCUuJo7eyB43OwHolslOOqTDXRC6ua0pTTvrYzU5QzWVALZ-TEgbhoydpePNp3JSM34XPTTQe3Z7OmAB1gbEnxxyzCevY3wQxHg5JZCuxXIpERbX0PKkL-DUg79EpZQlrvAODDoPto6xh5-gBavaQEVrAH2Thxia6YQcZEzYhL0s5xVP7b1fMdwhDqo1QpywLZvFu8TyTfd5xa3Z5Igm5Kiw')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+<div class="absolute top-3 left-3 glass-tag text-white text-[10px] px-2 py-0.5 rounded-full font-bold tracking-wider">SPONSORED</div>
+<div class="absolute bottom-3 left-4 text-white">
+<p class="font-headline-lg-mobile text-headline-lg-mobile">Daily Challenge</p>
+<p class="text-[12px] opacity-90">Win up to 500 bonus points!</p>
+</div>
+</div>
+</section>
+<!-- Games Grid -->
+<section class="mb-lg">
+<div class="flex justify-between items-center mb-md">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">თამაშები</h2>
+<button class="text-primary font-label-sm text-label-sm hover:opacity-80">ნახე ყველა</button>
+</div>
+<div class="grid grid-cols-3 gap-md">
+<!-- Game 1: Snake -->
+<div class="flex flex-col items-center gap-xs">
+<div class="bento-card w-full aspect-square bg-secondary-container rounded-xl flex items-center justify-center shadow-sm relative group overflow-hidden">
+<span class="material-symbols-outlined text-[40px] text-on-secondary-container" data-icon="pest_control">pest_control</span>
+<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Snake</span>
+<button class="primary-gradient text-white py-1 px-3 rounded-full text-[10px] font-bold shadow-sm active:scale-90 transition-transform">PLAY</button>
+</div>
+<!-- Game 2: Memory -->
+<div class="flex flex-col items-center gap-xs">
+<div class="bento-card w-full aspect-square bg-primary-fixed rounded-xl flex items-center justify-center shadow-sm relative group overflow-hidden">
+<span class="material-symbols-outlined text-[40px] text-on-primary-fixed-variant" data-icon="grid_view">grid_view</span>
+<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Memory</span>
+<button class="primary-gradient text-white py-1 px-3 rounded-full text-[10px] font-bold shadow-sm active:scale-90 transition-transform">PLAY</button>
+</div>
+<!-- Game 3: Aim Hit -->
+<div class="flex flex-col items-center gap-xs">
+<div class="bento-card w-full aspect-square bg-tertiary-fixed rounded-xl flex items-center justify-center shadow-sm relative group overflow-hidden">
+<span class="material-symbols-outlined text-[40px] text-tertiary" data-icon="target">target</span>
+<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Aim Hit</span>
+<button class="primary-gradient text-white py-1 px-3 rounded-full text-[10px] font-bold shadow-sm active:scale-90 transition-transform">PLAY</button>
+</div>
+</div>
+</section>
+<!-- Daily Leaderboard Preview -->
+<section class="mb-lg">
+<div class="bg-surface-container-low rounded-xl p-md shadow-sm border border-outline-variant/30">
+<div class="flex justify-between items-center mb-md">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-primary" data-icon="leaderboard">leaderboard</span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Leaderboard</h2>
+</div>
+<span class="text-[10px] bg-secondary-fixed text-on-secondary-fixed px-2 py-0.5 rounded font-bold uppercase">LIVE</span>
+</div>
+<div class="space-y-sm">
+<!-- Top 1 -->
+<div class="flex items-center gap-md py-xs">
+<span class="font-score-md text-tertiary w-6">1</span>
+<div class="w-8 h-8 rounded-full bg-surface-variant">
+<img class="w-full h-full rounded-full object-cover" data-alt="Minimalist avatar of a person in high-key lighting with a yellow background, matching a 2D flat design style for mobile applications." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC4PRih5-F4aVaFQdGGMWjglVZB97fzbTd4GC-_LhO8Y_lpHJMqQCuhF5sA6NkUlk790MDlcTltlK4E2Q3LDXcfdjVY9XU12fbMv6Cu6wApq1ldlP7NzWOPqBEl2ODwYFh0hCuJD6fRMDPadmVn5iXb2HHH31Z2LMrPRu-h8aN48MzIXGcyLNn-xJIjKFTvy3I4UZgVocWFJY5LXDjnfUxiC-tUiRV60LHli2u6aiIVBRmvgYeGF6PH"/>
+</div>
+<span class="flex-1 font-label-sm text-label-sm">alex_winner</span>
+<span class="font-score-md text-primary">12,840</span>
+</div>
+<div class="h-[1px] bg-outline-variant/30"></div>
+<!-- Top 2 -->
+<div class="flex items-center gap-md py-xs">
+<span class="font-score-md text-outline w-6">2</span>
+<div class="w-8 h-8 rounded-full bg-surface-variant">
+<img class="w-full h-full rounded-full object-cover" data-alt="Minimalist avatar of a girl with bright hair in professional studio lighting, 2D flat digital art style, vibrant background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPpHcv2zQeuT-RNYNr4x_xUC5CQi2IxIQw5M9ddnJa_t_At9u7V16_0YMyooBDMI3KDXhr5AmVwFDQ3DtGjr_unuzHGLB8d3SwWrzAHNet2c9gAkIBw0Q6eopKPwgKbLn8GQl7FpdlCOryE65Hvqmikyjr-S23TQUD02MglzR82_8stoBwRnleO8J8WSGsu3Vqg9Ud3AC3CgmChlrmoCBwKilGp9sYyY2XPXU9jWJ4lPqASY3n3iQk"/>
+</div>
+<span class="flex-1 font-label-sm text-label-sm">mari_gio</span>
+<span class="font-score-md text-on-surface-variant">11,200</span>
+</div>
+</div>
+<button class="w-full mt-md py-sm bg-surface-container-high rounded-lg font-label-sm text-label-sm text-primary active:bg-surface-container-highest transition-colors">ნახე სრული სია</button>
+</div>
+</section>
+<!-- Rewards Shortcut -->
+<section>
+<div class="bg-primary-container text-white rounded-xl p-lg flex items-center justify-between shadow-[0_4px_12px_0_rgba(70,72,212,0.15)] active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden">
+<div class="z-10">
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile mb-base">Explore Rewards</h3>
+<p class="text-[14px] opacity-90">Exchange your points for prizes</p>
+</div>
+<span class="material-symbols-outlined text-[56px] opacity-40 z-10" data-icon="redeem">redeem</span>
+<!-- Abstract Background Shape -->
+<div class="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center bg-surface-container-lowest h-[64px] pb-safe z-50 shadow-[0_-2px_10px_0_rgba(0,0,0,0.03)] border-t border-outline-variant/30">
+<!-- Home (Active) -->
+<a class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-xl px-4 py-1 active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[24px]" data-icon="home" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<!-- Ranks -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant/50 active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[24px]" data-icon="leaderboard">leaderboard</span>
+<span class="font-label-sm text-label-sm">Ranks</span>
+</a>
+<!-- Rewards -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant/50 active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[24px]" data-icon="redeem">redeem</span>
+<span class="font-label-sm text-label-sm">Rewards</span>
+</a>
+<!-- Me -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant/50 active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-[24px]" data-icon="person">person</span>
+<span class="font-label-sm text-label-sm">Me</span>
+</a>
+</nav>
+<script>
+        // Micro-interaction for point counter
+        const pointBtn = document.querySelector('.bg-primary-fixed');
+        pointBtn.addEventListener('click', () => {
+            pointBtn.classList.add('scale-110');
+            setTimeout(() => pointBtn.classList.remove('scale-110'), 200);
+        });
+
+        // Add subtle parallax to sponsor banner on tilt
+        const banner = document.querySelector('.aspect-\\[430\\/160\\]');
+        if (banner) {
+            banner.addEventListener('mousemove', (e) => {
+                const rect = banner.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = (y - centerY) / 20;
+                const rotateY = (centerX - x) / 40;
+                banner.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(0.99)`;
+            });
+            banner.addEventListener('mouseleave', () => {
+                banner.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1)`;
+            });
+        }
+    </script>
+<script src="../../shared/prototype-links.js"></script>
+</body></html>
