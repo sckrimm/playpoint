@@ -47,6 +47,7 @@ import {
   userSummary
 } from "@playpoint/shared";
 import { AimHitGame } from "./games/aim-hit/AimHitGame";
+import { ApiError, type GameAttemptStart, playpointApi, toReward } from "./api";
 import { ColorRushGame } from "./games/color-rush/ColorRushGame";
 import { getText, type Language, type TextGetter } from "./i18n";
 import { MemoryGame } from "./games/memory/MemoryGame";
@@ -66,7 +67,9 @@ type Route =
   | "profile"
   | "edit-profile";
 
-const defaultRoute: Route = "home";
+const tokenStorageKey = "playpoint.authToken";
+const defaultRoute: Route = window.localStorage.getItem(tokenStorageKey) ? "home" : "splash";
+const showDevOtpCode = import.meta.env.DEV;
 const formatter = new Intl.NumberFormat("en-US");
 
 function AnimatedPoints({
@@ -130,6 +133,8 @@ type RankedLeaderboardEntry = {
   isCurrentUser?: boolean;
 };
 
+type AttemptsLeftByGame = Record<GameId, number>;
+
 const screenMap: Record<Route, string> = {
   splash: "prototype/screens/splash",
   phone: "prototype/screens/phone-login",
@@ -168,16 +173,48 @@ function buildLeaderboard(userName: string, userPoints: number): RankedLeaderboa
     }));
 }
 
+function getApiErrorMessage(error: unknown) {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return "Network request failed";
+}
+
+function toRankedLeaderboard(
+  entries: Awaited<ReturnType<typeof playpointApi.getLeaderboard>>,
+  currentUserName: string
+): RankedLeaderboardEntry[] {
+  return entries.map((entry) => ({
+    rank: entry.rank,
+    name: entry.userName,
+    points: entry.playPoints,
+    isCurrentUser: entry.userName === currentUserName
+  }));
+}
+
 export function App() {
   const [route, setRoute] = useState<Route>(readRoute);
+  const [authToken, setAuthToken] = useState<string>(() => window.localStorage.getItem(tokenStorageKey) ?? "");
+  const [phoneValue, setPhoneValue] = useState("");
+  const [verifiedPhone, setVerifiedPhone] = useState("");
+  const [devOtpCode, setDevOtpCode] = useState("");
   const [profileName, setProfileName] = useState<string>(userSummary.displayName);
   const [userPoints, setUserPoints] = useState<number>(userSummary.points);
   const [userCoins, setUserCoins] = useState<number>(14);
+  const [gamesPlayed, setGamesPlayed] = useState<number>(0);
+  const [attemptsLeftByGame, setAttemptsLeftByGame] = useState<AttemptsLeftByGame>({
+    "aim-hit": pointRules.dailyAttemptsPerGame,
+    "color-rush": pointRules.dailyAttemptsPerGame,
+    memory: pointRules.dailyAttemptsPerGame
+  });
+  const [dailyRank, setDailyRank] = useState<number | null>(null);
+  const [weeklyRank, setWeeklyRank] = useState<number | null>(null);
   const [language, setLanguage] = useState<Language>("ka");
   const [darkMode, setDarkMode] = useState(false);
   const [purchasedRewards, setPurchasedRewards] = useState<Reward[]>([]);
+  const [rewardCatalog, setRewardCatalog] = useState<Reward[]>(rewards);
   const [otpValue, setOtpValue] = useState("");
   const [selectedGameId, setSelectedGameId] = useState<GameId>("aim-hit");
+  const [currentAttempt, setCurrentAttempt] = useState<GameAttemptStart | null>(null);
   const [lastGameResult, setLastGameResult] = useState<GameResult>({
     gameId: "aim-hit",
     score: 0,
@@ -188,12 +225,50 @@ export function App() {
     accuracy: 0,
     maxCombo: 0
   });
-  const rankedLeaderboard = useMemo(
-    () => buildLeaderboard(profileName, userPoints),
-    [profileName, userPoints]
+  const [dailyLeaderboard, setDailyLeaderboard] = useState<RankedLeaderboardEntry[]>(() =>
+    buildLeaderboard(userSummary.displayName, userSummary.points)
   );
-  const userRank = rankedLeaderboard.find((player) => player.isCurrentUser)?.rank ?? rankedLeaderboard.length;
+  const [weeklyLeaderboard, setWeeklyLeaderboard] = useState<RankedLeaderboardEntry[]>(() =>
+    buildLeaderboard(userSummary.displayName, userSummary.points)
+  );
+  const [apiBusy, setApiBusy] = useState(false);
+  const rankedLeaderboard = route === "leaderboard-weekly" ? weeklyLeaderboard : dailyLeaderboard;
+  const userRank =
+    (route === "leaderboard-weekly" ? weeklyRank : dailyRank) ??
+    rankedLeaderboard.find((player) => player.isCurrentUser)?.rank ??
+    rankedLeaderboard.length;
   const text = useMemo<TextGetter>(() => (key) => getText(language, key), [language]);
+
+  const applyMePayload = (payload: Awaited<ReturnType<typeof playpointApi.getMe>>) => {
+    setProfileName(payload.user.displayName);
+    setUserPoints(payload.user.totalPoints);
+    setUserCoins(payload.user.coins);
+    setGamesPlayed(payload.stats.gamesPlayed);
+    setDailyRank(payload.stats.dailyRank);
+    setWeeklyRank(payload.stats.weeklyRank);
+    setAttemptsLeftByGame((currentAttempts) => {
+      const nextAttempts = { ...currentAttempts };
+      payload.stats.gameAttempts.forEach((attempt) => {
+        nextAttempts[attempt.gameSlug] = attempt.attemptsLeft;
+      });
+      return nextAttempts;
+    });
+    setPurchasedRewards(payload.rewardClaims.map((claim) => toReward(claim.reward)));
+  };
+
+  const refreshAccount = async (token = authToken) => {
+    if (!token) return;
+    const [me, rewardsPayload, dailyPayload, weeklyPayload] = await Promise.all([
+      playpointApi.getMe(token),
+      playpointApi.getRewards(),
+      playpointApi.getLeaderboard("daily"),
+      playpointApi.getLeaderboard("weekly")
+    ]);
+    applyMePayload(me);
+    setRewardCatalog(rewardsPayload.map(toReward));
+    setDailyLeaderboard(toRankedLeaderboard(dailyPayload, me.user.displayName));
+    setWeeklyLeaderboard(toRankedLeaderboard(weeklyPayload, me.user.displayName));
+  };
 
   useEffect(() => {
     const onHashChange = () => setRoute(readRoute());
@@ -205,28 +280,185 @@ export function App() {
     document.documentElement.lang = language;
   }, [language]);
 
+  useEffect(() => {
+    if (!authToken) return;
+
+    let ignore = false;
+    setApiBusy(true);
+    refreshAccount(authToken)
+      .catch((error: unknown) => {
+        if (ignore) return;
+        window.localStorage.removeItem(tokenStorageKey);
+        setAuthToken("");
+        window.alert(getApiErrorMessage(error));
+        navigate("splash");
+      })
+      .finally(() => {
+        if (!ignore) setApiBusy(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [authToken]);
+
   const navigate = (nextRoute: Route) => {
     window.location.hash = `/${nextRoute}`;
     setRoute(nextRoute);
   };
 
-  const claimReward = (reward: Reward) => {
-    if (userPoints < reward.points) return false;
-    setUserPoints((currentPoints) => currentPoints - reward.points);
-    setPurchasedRewards((currentRewards) => {
-      if (currentRewards.some((currentReward) => currentReward.id === reward.id)) return currentRewards;
-      return [reward, ...currentRewards];
-    });
-    return true;
+  const requestOtp = async () => {
+    try {
+      setApiBusy(true);
+      const payload = await playpointApi.requestOtp(phoneValue);
+      setVerifiedPhone(payload.phone);
+      setDevOtpCode(payload.devCode ?? "");
+      setOtpValue("");
+      navigate("otp");
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    try {
+      setApiBusy(true);
+      const payload = await playpointApi.verifyOtp(verifiedPhone || phoneValue, otpValue);
+      window.localStorage.setItem(tokenStorageKey, payload.token);
+      setAuthToken(payload.token);
+      setProfileName(payload.user.displayName);
+      setUserPoints(payload.user.totalPoints);
+      setUserCoins(payload.user.coins);
+      navigate("profile-setup");
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
+  const finishProfileSetup = async () => {
+    if (!authToken) {
+      navigate("phone");
+      return;
+    }
+
+    try {
+      setApiBusy(true);
+      const payload = await playpointApi.updateMe(authToken, profileName);
+      applyMePayload(payload);
+      await refreshAccount(authToken);
+      navigate("home");
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
+  const selectGame = async (gameId: GameId) => {
+    if (!authToken) {
+      navigate("phone");
+      return;
+    }
+
+    try {
+      setApiBusy(true);
+      const attempt = await playpointApi.startGame(authToken, gameId);
+      setSelectedGameId(gameId);
+      setCurrentAttempt(attempt);
+      setAttemptsLeftByGame((currentAttempts) => ({
+        ...currentAttempts,
+        [gameId]: attempt.attemptsLeft
+      }));
+      navigate("game-loading");
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
+  const finishGame = async (result: GameResult) => {
+    if (!authToken || !currentAttempt) {
+      window.alert("Game attempt was not started");
+      navigate("home");
+      return;
+    }
+
+    try {
+      setApiBusy(true);
+      const payload = await playpointApi.finishGame(authToken, result.gameId, currentAttempt, result);
+      const syncedResult = {
+        ...result,
+        playPoints: payload.score.playPoints
+      };
+      setLastGameResult(syncedResult);
+      setUserPoints(payload.user.totalPoints);
+      setUserCoins(payload.user.coins);
+      setDailyRank(payload.rank.daily);
+      setWeeklyRank(payload.rank.weekly);
+      setCurrentAttempt(null);
+      await refreshAccount(authToken);
+      navigate("score-popup");
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+      navigate("home");
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
+  const claimReward = async (reward: Reward) => {
+    if (!authToken) {
+      navigate("phone");
+      return false;
+    }
+
+    try {
+      setApiBusy(true);
+      const payload = await playpointApi.claimReward(authToken, reward.id);
+      setUserPoints(payload.user.totalPoints);
+      setUserCoins(payload.user.coins);
+      await refreshAccount(authToken);
+      return true;
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+      return false;
+    } finally {
+      setApiBusy(false);
+    }
   };
 
   const restartRegistration = () => {
+    if (authToken) {
+      playpointApi.logout(authToken).catch(() => undefined);
+    }
+    window.localStorage.removeItem(tokenStorageKey);
+    setAuthToken("");
+    setPhoneValue("");
+    setVerifiedPhone("");
+    setDevOtpCode("");
     setProfileName(userSummary.displayName);
     setUserPoints(userSummary.points);
     setUserCoins(14);
+    setGamesPlayed(0);
+    setAttemptsLeftByGame({
+      "aim-hit": pointRules.dailyAttemptsPerGame,
+      "color-rush": pointRules.dailyAttemptsPerGame,
+      memory: pointRules.dailyAttemptsPerGame
+    });
+    setDailyRank(null);
+    setWeeklyRank(null);
     setPurchasedRewards([]);
+    setRewardCatalog(rewards);
+    setDailyLeaderboard(buildLeaderboard(userSummary.displayName, userSummary.points));
+    setWeeklyLeaderboard(buildLeaderboard(userSummary.displayName, userSummary.points));
     setOtpValue("");
     setSelectedGameId("aim-hit");
+    setCurrentAttempt(null);
     setLastGameResult({
       gameId: "aim-hit",
       score: 0,
@@ -257,29 +489,46 @@ export function App() {
 
         <div className={showChrome ? "screen-content" : "screen-content auth-content"}>
           {route === "splash" ? <SplashPage text={text} onNavigate={navigate} /> : null}
-          {route === "phone" ? <PhonePage text={text} onNavigate={navigate} /> : null}
+          {route === "phone" ? (
+            <PhonePage
+              disabled={apiBusy}
+              phoneValue={phoneValue}
+              setPhoneValue={setPhoneValue}
+              text={text}
+              onRequestOtp={requestOtp}
+            />
+          ) : null}
           {route === "otp" ? (
-            <OtpPage text={text} otpValue={otpValue} setOtpValue={setOtpValue} onNavigate={navigate} />
+            <OtpPage
+              devOtpCode={devOtpCode}
+              disabled={apiBusy}
+              phone={verifiedPhone || phoneValue}
+              text={text}
+              otpValue={otpValue}
+              setOtpValue={setOtpValue}
+              onNavigate={navigate}
+              onVerifyOtp={verifyOtp}
+            />
           ) : null}
           {route === "profile-setup" ? (
             <ProfileSetupPage
+              disabled={apiBusy}
               profileName={profileName}
               setProfileName={setProfileName}
               text={text}
-              onNavigate={navigate}
+              onFinish={finishProfileSetup}
             />
           ) : null}
           {route === "home" ? (
             <HomePage
               leaderboardEntries={rankedLeaderboard}
+              attemptsLeftByGame={attemptsLeftByGame}
+              rewardCatalog={rewardCatalog}
               text={text}
               userCoins={userCoins}
               onBuyCoins={(coins) => setUserCoins((currentCoins) => currentCoins + coins)}
               onNavigate={navigate}
-              onSelectGame={(gameId) => {
-                setSelectedGameId(gameId);
-                navigate("game-loading");
-              }}
+              onSelectGame={selectGame}
             />
           ) : null}
           {route === "game-loading" ? (
@@ -291,11 +540,7 @@ export function App() {
               text={text}
               selectedGameId={selectedGameId}
               onNavigate={navigate}
-              onFinish={(result) => {
-                setLastGameResult(result);
-                setUserPoints((currentPoints) => currentPoints + result.playPoints);
-                navigate("score-popup");
-              }}
+              onFinish={finishGame}
             />
           ) : null}
           {route === "score-popup" ? (
@@ -305,6 +550,7 @@ export function App() {
               userPoints={userPoints}
               userRank={userRank}
               onNavigate={navigate}
+              onPlayAgain={selectGame}
             />
           ) : null}
           {route === "leaderboard-daily" ? (
@@ -328,6 +574,7 @@ export function App() {
           {route === "rewards" ? (
             <RewardsPage
               purchasedRewards={purchasedRewards}
+              rewards={rewardCatalog}
               text={text}
               userPoints={userPoints}
               onClaimReward={claimReward}
@@ -345,6 +592,7 @@ export function App() {
               userCoins={userCoins}
               userPoints={userPoints}
               userRank={userRank}
+              gamesPlayed={gamesPlayed}
               lastGameResult={lastGameResult}
               onNavigate={navigate}
               onLogout={restartRegistration}
@@ -356,6 +604,12 @@ export function App() {
               text={text}
               userPoints={userPoints}
               setProfileName={setProfileName}
+              onSaveProfile={async (nextName) => {
+                if (!authToken) return;
+                const payload = await playpointApi.updateMe(authToken, nextName);
+                applyMePayload(payload);
+                await refreshAccount(authToken);
+              }}
               onNavigate={navigate}
             />
           ) : null}
@@ -468,7 +722,19 @@ function SplashPage({ text, onNavigate }: { text: TextGetter; onNavigate: (route
   );
 }
 
-function PhonePage({ text, onNavigate }: { text: TextGetter; onNavigate: (route: Route) => void }) {
+function PhonePage({
+  disabled,
+  phoneValue,
+  setPhoneValue,
+  text,
+  onRequestOtp
+}: {
+  disabled: boolean;
+  phoneValue: string;
+  setPhoneValue: (value: string) => void;
+  text: TextGetter;
+  onRequestOtp: () => void;
+}) {
   return (
     <section className="onboarding-page phone-page">
       <header className="onboarding-logo">PlayPoint</header>
@@ -490,9 +756,16 @@ function PhonePage({ text, onNavigate }: { text: TextGetter; onNavigate: (route:
               +995
               <ChevronDown size={20} />
             </button>
-            <input className="phone-number-input" inputMode="tel" maxLength={12} placeholder="5XX XX XX XX" />
+            <input
+              className="phone-number-input"
+              inputMode="tel"
+              maxLength={12}
+              placeholder="5XX XX XX XX"
+              value={phoneValue}
+              onChange={(event) => setPhoneValue(event.target.value)}
+            />
           </div>
-          <button className="primary-action" type="button" onClick={() => onNavigate("otp")}>
+          <button className="primary-action" type="button" disabled={disabled || phoneValue.trim().length < 6} onClick={onRequestOtp}>
             {text("phone.continue")}
           </button>
         </div>
@@ -518,17 +791,26 @@ function PhonePage({ text, onNavigate }: { text: TextGetter; onNavigate: (route:
 }
 
 function OtpPage({
+  devOtpCode,
+  disabled,
+  phone,
   text,
   otpValue,
   setOtpValue,
-  onNavigate
+  onNavigate,
+  onVerifyOtp
 }: {
+  devOtpCode: string;
+  disabled: boolean;
+  phone: string;
   text: TextGetter;
   otpValue: string;
   setOtpValue: (value: string) => void;
   onNavigate: (route: Route) => void;
+  onVerifyOtp: () => void;
 }) {
-  const digits = otpValue.padEnd(4, " ").slice(0, 4).split("");
+  const otpLength = 6;
+  const digits = otpValue.padEnd(otpLength, " ").slice(0, otpLength).split("");
 
   return (
     <section className="onboarding-page otp-page">
@@ -551,8 +833,9 @@ function OtpPage({
         <div className="otp-copy">
           <h1>{text("otp.title")}</h1>
           <p>
-            {text("otp.subtitle")} <strong>+995 5** *** 21</strong>
+            {text("otp.subtitle")} <strong>{phone || "+995 5** *** 21"}</strong>
           </p>
+          {showDevOtpCode && devOtpCode ? <p className="otp-help">Test OTP: {devOtpCode}</p> : null}
         </div>
 
         <div className="otp-cluster" aria-label="OTP code">
@@ -565,7 +848,7 @@ function OtpPage({
               onChange={(event) => {
                 const next = [...digits];
                 next[index] = event.target.value.replace(/\D/g, "").slice(0, 1) || " ";
-                setOtpValue(next.join("").replace(/\s/g, "").slice(0, 4));
+                setOtpValue(next.join("").replace(/\s/g, "").slice(0, otpLength));
               }}
             />
           ))}
@@ -581,7 +864,7 @@ function OtpPage({
           </button>
         </div>
 
-        <button className="primary-action" type="button" onClick={() => onNavigate("profile-setup")}>
+        <button className="primary-action" type="button" disabled={disabled || otpValue.length < otpLength} onClick={onVerifyOtp}>
           {text("otp.confirm")}
         </button>
         <p className="otp-help">{text("otp.help")}</p>
@@ -591,21 +874,25 @@ function OtpPage({
 }
 
 function ProfileSetupPage({
+  disabled,
   profileName,
   setProfileName,
   text,
-  onNavigate
+  onFinish
 }: {
+  disabled: boolean;
   profileName: string;
   setProfileName: (value: string) => void;
   text: TextGetter;
-  onNavigate: (route: Route) => void;
+  onFinish: () => Promise<void>;
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
 
   const finishSetup = () => {
     setShowSuccess(true);
-    window.setTimeout(() => onNavigate("home"), 1200);
+    window.setTimeout(() => {
+      onFinish().finally(() => setShowSuccess(false));
+    }, 900);
   };
 
   return (
@@ -655,7 +942,7 @@ function ProfileSetupPage({
         </section>
 
         <div className="setup-actions">
-          <button className="primary-action" type="button" onClick={finishSetup}>
+          <button className="primary-action" type="button" disabled={disabled || !profileName.trim()} onClick={finishSetup}>
             {text("setup.finish")}
             <ArrowLeft className="arrow-forward" size={18} />
           </button>
@@ -679,6 +966,8 @@ function ProfileSetupPage({
 
 function HomePage({
   leaderboardEntries,
+  attemptsLeftByGame,
+  rewardCatalog,
   text,
   userCoins,
   onBuyCoins,
@@ -686,6 +975,8 @@ function HomePage({
   onSelectGame
 }: {
   leaderboardEntries: RankedLeaderboardEntry[];
+  attemptsLeftByGame: AttemptsLeftByGame;
+  rewardCatalog: Reward[];
   text: TextGetter;
   userCoins: number;
   onBuyCoins: (coins: number) => void;
@@ -721,14 +1012,16 @@ function HomePage({
         <div className="game-grid">
           {games.map((game) => {
             const Icon = gameIcons[game.id];
+            const attemptsLeft = attemptsLeftByGame[game.id] ?? pointRules.dailyAttemptsPerGame;
             return (
             <article className="game-card" key={game.id}>
+              <span className="game-attempt-badge">{attemptsLeft} ცდა</span>
               <div className="game-icon">
                 <Icon size={24} />
               </div>
               <h3>{game.name}</h3>
               <p>{game.pointRateLabel}</p>
-              <button type="button" onClick={() => onSelectGame(game.id)}>
+              <button type="button" disabled={attemptsLeft <= 0} onClick={() => onSelectGame(game.id)}>
                 {text("common.play")}
               </button>
             </article>
@@ -751,7 +1044,7 @@ function HomePage({
             <Gift size={20} />
             <h2>{text("home.rewards")}</h2>
           </div>
-          <RewardList limit={2} />
+          <RewardList rewards={rewardCatalog} limit={2} />
         </article>
       </section>
 
@@ -879,7 +1172,7 @@ function GameFramePage({
   text: TextGetter;
   selectedGameId: GameId;
   onNavigate: (route: Route) => void;
-  onFinish: (result: GameResult) => void;
+  onFinish: (result: GameResult) => void | Promise<void>;
 }) {
   const selectedGame = games.find((game) => game.id === selectedGameId) || games[2];
 
@@ -918,13 +1211,15 @@ function ScorePopupPage({
   text,
   userPoints,
   userRank,
-  onNavigate
+  onNavigate,
+  onPlayAgain
 }: {
   result: GameResult;
   text: TextGetter;
   userPoints: number;
   userRank: number;
   onNavigate: (route: Route) => void;
+  onPlayAgain: (gameId: GameId) => void | Promise<void>;
 }) {
   const selectedGame = games.find((game) => game.id === result.gameId) || games[2];
 
@@ -953,7 +1248,7 @@ function ScorePopupPage({
       <div className="score-total-points">
         <AnimatedPoints value={userPoints} suffix=" pts" /> {text("score.totalBalance")}
       </div>
-      <button className="primary-action" type="button" onClick={() => onNavigate("game-loading")}>
+      <button className="primary-action" type="button" onClick={() => onPlayAgain(result.gameId)}>
         <RotateCcw size={18} />
         {text("score.playAgain")}
       </button>
@@ -1049,20 +1344,24 @@ function LeaderboardPage({
 
 function RewardsPage({
   purchasedRewards,
+  rewards,
   text,
   userPoints,
   onClaimReward
 }: {
   purchasedRewards: Reward[];
+  rewards: Reward[];
   text: TextGetter;
   userPoints: number;
-  onClaimReward: (reward: Reward) => boolean;
+  onClaimReward: (reward: Reward) => Promise<boolean>;
 }) {
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
+  const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
   const alreadyPurchased = selectedReward
     ? purchasedRewards.some((reward) => reward.id === selectedReward.id)
     : false;
-  const canClaimSelected = selectedReward ? userPoints >= selectedReward.points && !alreadyPurchased : false;
+  const selectedOutOfStock = selectedReward?.remainingQuantity === 0;
+  const canClaimSelected = selectedReward ? userPoints >= selectedReward.points && !alreadyPurchased && !selectedOutOfStock : false;
 
   return (
     <section className="section">
@@ -1081,16 +1380,26 @@ function RewardsPage({
           <article className={`reward-card reward-${reward.id}`} key={reward.id}>
             <div className="reward-visual">
               {reward.image ? <img src={reward.image} alt="" /> : <Gift size={34} />}
+              {typeof reward.remainingQuantity === "number" ? (
+                <span className="reward-stock-badge">{reward.remainingQuantity} left</span>
+              ) : null}
             </div>
             <h3>{reward.title}</h3>
             <p>{reward.brand}</p>
             <strong>{reward.points} pts</strong>
             <button
               type="button"
-              disabled={purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id)}
+              disabled={
+                purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id) ||
+                reward.remainingQuantity === 0
+              }
               onClick={() => setSelectedReward(reward)}
             >
-              {purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id) ? text("common.owned") : text("common.claim")}
+              {purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id)
+                ? text("common.owned")
+                : reward.remainingQuantity === 0
+                  ? "Sold out"
+                  : text("common.claim")}
             </button>
           </article>
         ))}
@@ -1112,17 +1421,20 @@ function RewardsPage({
             {!alreadyPurchased && userPoints < selectedReward.points ? (
               <span className="claim-warning">{text("rewards.notEnough")}</span>
             ) : null}
+            {selectedOutOfStock ? <span className="claim-warning">This reward is out of stock</span> : null}
             <div className="claim-actions">
               <button type="button" onClick={() => setSelectedReward(null)}>
                 {text("common.no")}
               </button>
               <button
                 type="button"
-                disabled={!canClaimSelected}
-                onClick={() => {
-                  if (onClaimReward(selectedReward)) {
+                disabled={!canClaimSelected || claimingRewardId === selectedReward.id}
+                onClick={async () => {
+                  setClaimingRewardId(selectedReward.id);
+                  if (await onClaimReward(selectedReward)) {
                     setSelectedReward(null);
                   }
+                  setClaimingRewardId(null);
                 }}
               >
                 {text("common.yes")}
@@ -1146,6 +1458,7 @@ function ProfilePage({
   userCoins,
   userPoints,
   userRank,
+  gamesPlayed,
   lastGameResult,
   onNavigate,
   onLogout
@@ -1160,6 +1473,7 @@ function ProfilePage({
   userCoins: number;
   userPoints: number;
   userRank: number;
+  gamesPlayed: number;
   lastGameResult: GameResult;
   onNavigate: (route: Route) => void;
   onLogout: () => void;
@@ -1242,7 +1556,7 @@ function ProfilePage({
         <article className="mini-stat-card">
           <Gamepad2 size={26} />
           <p>{text("profile.games")}</p>
-          <h4>158</h4>
+          <h4>{formatter.format(gamesPlayed)}</h4>
         </article>
       </section>
 
@@ -1298,18 +1612,21 @@ function EditProfilePage({
   text,
   userPoints,
   setProfileName,
+  onSaveProfile,
   onNavigate
 }: {
   profileName: string;
   text: TextGetter;
   userPoints: number;
   setProfileName: (value: string) => void;
+  onSaveProfile: (name: string) => Promise<void>;
   onNavigate: (route: Route) => void;
 }) {
   const [email, setEmail] = useState("giorgi.m@example.ge");
   const [saved, setSaved] = useState(false);
 
-  const saveProfile = () => {
+  const saveProfile = async () => {
+    await onSaveProfile(profileName);
     setSaved(true);
     window.setTimeout(() => setSaved(false), 1800);
   };
@@ -1511,7 +1828,7 @@ function LeaderboardList({
   );
 }
 
-function RewardList({ limit = rewards.length }: { limit?: number }) {
+function RewardList({ rewards, limit = rewards.length }: { rewards: Reward[]; limit?: number }) {
   return (
     <div className="reward-list">
       {rewards.slice(0, limit).map((reward) => (

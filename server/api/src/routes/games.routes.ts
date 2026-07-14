@@ -42,14 +42,33 @@ async function getUserRank(userId: string, since: Date) {
         not: "suspicious"
       }
     },
-    orderBy: [{ playPoints: "desc" }, { createdAt: "asc" }],
+    orderBy: [{ createdAt: "asc" }],
     select: {
+      createdAt: true,
+      playPoints: true,
       userId: true
     },
-    take: 500
+    take: 1000
   });
 
-  const index = scores.findIndex((score) => score.userId === userId);
+  const players = new Map<string, { createdAt: Date; playPoints: number }>();
+  scores.forEach((score) => {
+    const existingPlayer = players.get(score.userId);
+    if (!existingPlayer) {
+      players.set(score.userId, {
+        createdAt: score.createdAt,
+        playPoints: score.playPoints
+      });
+      return;
+    }
+
+    existingPlayer.playPoints += score.playPoints;
+  });
+
+  const rankedPlayers = Array.from(players.entries()).sort(
+    ([, first], [, second]) => second.playPoints - first.playPoints || first.createdAt.getTime() - second.createdAt.getTime()
+  );
+  const index = rankedPlayers.findIndex(([rankedUserId]) => rankedUserId === userId);
   return index >= 0 ? index + 1 : null;
 }
 

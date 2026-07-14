@@ -13,6 +13,16 @@ export function buildApp() {
     logger: env.NODE_ENV !== "test"
   });
 
+  app.addHook("onRequest", async (request, reply) => {
+    reply.header("Access-Control-Allow-Origin", request.headers.origin ?? "*");
+    reply.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    reply.header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
+
+    if (request.method === "OPTIONS") {
+      return reply.code(204).send();
+    }
+  });
+
   registerHealthRoutes(app);
   registerAuthRoutes(app);
   registerMeRoutes(app);

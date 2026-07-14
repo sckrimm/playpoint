@@ -31,6 +31,8 @@ export type Reward = {
   points: number;
   category: "food" | "leisure" | "tech" | "gaming";
   image?: string;
+  quantity?: number;
+  remainingQuantity?: number;
 };
 
 export const pointRules = {

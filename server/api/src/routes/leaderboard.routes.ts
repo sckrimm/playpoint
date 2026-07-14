@@ -24,7 +24,7 @@ async function getLeaderboard(since: Date) {
         not: "suspicious"
       }
     },
-    orderBy: [{ playPoints: "desc" }, { createdAt: "asc" }],
+    orderBy: [{ createdAt: "asc" }],
     include: {
       game: {
         select: {
@@ -39,10 +39,24 @@ async function getLeaderboard(since: Date) {
         }
       }
     },
-    take: 100
+    take: 1000
   });
 
-  return scores.map((score: {
+  const players = new Map<
+    string,
+    {
+      avatarUrl: string | null;
+      createdAt: Date;
+      gameSlug: string;
+      gameTitle: string;
+      playPoints: number;
+      rawScore: number;
+      topScore: number;
+      userName: string;
+    }
+  >();
+
+  scores.forEach((score: {
     createdAt: Date;
     game: {
       title: string;
@@ -54,16 +68,39 @@ async function getLeaderboard(since: Date) {
       displayName: string;
       avatarUrl: string | null;
     };
-  }, index: number) => ({
-    rank: index + 1,
-    userName: score.user.displayName,
-    avatarUrl: score.user.avatarUrl,
-    gameTitle: score.game.title,
-    gameSlug: score.game.slug,
-    rawScore: score.rawScore,
-    playPoints: score.playPoints,
-    createdAt: score.createdAt
-  }));
+    userId: string;
+  }) => {
+    const existingPlayer = players.get(score.userId);
+    if (!existingPlayer) {
+      players.set(score.userId, {
+        avatarUrl: score.user.avatarUrl,
+        createdAt: score.createdAt,
+        gameSlug: score.game.slug,
+        gameTitle: score.game.title,
+        playPoints: score.playPoints,
+        rawScore: score.rawScore,
+        topScore: score.playPoints,
+        userName: score.user.displayName
+      });
+      return;
+    }
+
+    if (score.playPoints > existingPlayer.topScore) {
+      existingPlayer.gameSlug = score.game.slug;
+      existingPlayer.gameTitle = score.game.title;
+      existingPlayer.topScore = score.playPoints;
+    }
+    existingPlayer.playPoints += score.playPoints;
+    existingPlayer.rawScore += score.rawScore;
+  });
+
+  return Array.from(players.values())
+    .sort((first, second) => second.playPoints - first.playPoints || first.createdAt.getTime() - second.createdAt.getTime())
+    .slice(0, 100)
+    .map(({ topScore, ...player }, index) => ({
+      rank: index + 1,
+      ...player
+    }));
 }
 
 export function registerLeaderboardRoutes(app: FastifyInstance) {

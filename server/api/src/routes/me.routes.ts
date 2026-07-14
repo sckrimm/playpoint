@@ -31,19 +31,39 @@ async function getRank(userId: string, since: Date) {
         not: "suspicious"
       }
     },
-    orderBy: [{ playPoints: "desc" }, { createdAt: "asc" }],
+    orderBy: [{ createdAt: "asc" }],
     select: {
+      createdAt: true,
+      playPoints: true,
       userId: true
     },
-    take: 500
+    take: 1000
   });
 
-  const index = scores.findIndex((score) => score.userId === userId);
+  const players = new Map<string, { createdAt: Date; playPoints: number }>();
+  scores.forEach((score) => {
+    const existingPlayer = players.get(score.userId);
+    if (!existingPlayer) {
+      players.set(score.userId, {
+        createdAt: score.createdAt,
+        playPoints: score.playPoints
+      });
+      return;
+    }
+
+    existingPlayer.playPoints += score.playPoints;
+  });
+
+  const rankedPlayers = Array.from(players.entries()).sort(
+    ([, first], [, second]) => second.playPoints - first.playPoints || first.createdAt.getTime() - second.createdAt.getTime()
+  );
+  const index = rankedPlayers.findIndex(([rankedUserId]) => rankedUserId === userId);
   return index >= 0 ? index + 1 : null;
 }
 
 async function getMePayload(userId: string) {
-  const [user, rewardClaims, gamesPlayed, dailyRank, weeklyRank] = await Promise.all([
+  const today = startOfToday();
+  const [user, rewardClaims, gamesPlayed, dailyRank, weeklyRank, games, attemptsToday] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
@@ -76,14 +96,45 @@ async function getMePayload(userId: string) {
       orderBy: { createdAt: "desc" }
     }),
     prisma.score.count({ where: { userId } }),
-    getRank(userId, startOfToday()),
-    getRank(userId, startOfWeek())
+    getRank(userId, today),
+    getRank(userId, startOfWeek()),
+    prisma.game.findMany({
+      where: { active: true },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        dailyAttemptLimit: true,
+        id: true,
+        slug: true
+      }
+    }),
+    prisma.gameAttempt.groupBy({
+      by: ["gameId"],
+      where: {
+        startedAt: {
+          gte: today
+        },
+        userId
+      },
+      _count: {
+        gameId: true
+      }
+    })
   ]);
+  const attemptsByGameId = new Map(attemptsToday.map((attempt) => [attempt.gameId, attempt._count.gameId]));
 
   return {
     user,
     stats: {
       dailyRank,
+      gameAttempts: games.map((game) => {
+        const usedAttempts = attemptsByGameId.get(game.id) ?? 0;
+        return {
+          attemptsLeft: Math.max(0, game.dailyAttemptLimit - usedAttempts),
+          dailyAttemptLimit: game.dailyAttemptLimit,
+          gameSlug: game.slug,
+          usedAttempts
+        };
+      }),
       gamesPlayed,
       weeklyRank
     },

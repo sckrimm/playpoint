@@ -15,6 +15,7 @@
     "typecheck": "npm run typecheck -w @playpoint/web",
     "lint": "npm run lint -w @playpoint/web",
     "api:dev": "npm run dev -w @playpoint/api",
+    "api:start": "npm run start -w @playpoint/api",
     "api:typecheck": "npm run typecheck -w @playpoint/api"
   },
   "engines": {

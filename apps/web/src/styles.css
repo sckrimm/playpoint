@@ -1025,8 +1025,23 @@ h3 {
 }
 
 .game-card {
+  position: relative;
   min-width: 0;
   padding: 12px;
+}
+
+.game-attempt-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #10b947, #49e86d);
+  box-shadow: 0 8px 18px rgba(16, 185, 71, 0.24);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .game-icon {
@@ -1063,6 +1078,12 @@ h3 {
   color: #ffffff;
   background: linear-gradient(135deg, #6417d8, #8b2cff);
   font-size: 12px;
+}
+
+.game-card button:disabled {
+  cursor: not-allowed;
+  color: #83748f;
+  background: #eeeeee;
 }
 
 .split {
@@ -2083,6 +2104,7 @@ h3 {
 }
 
 .reward-visual {
+  position: relative;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -2091,6 +2113,21 @@ h3 {
   border-radius: 8px;
   color: #825100;
   background: #ffddb8;
+}
+
+.reward-stock-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #10b947, #49e86d);
+  box-shadow: 0 8px 18px rgba(16, 185, 71, 0.26);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .reward-visual img {
