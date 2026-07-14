@@ -12,6 +12,7 @@
     "dev": "npm run dev -w @playpoint/web",
     "build": "npm run build -w @playpoint/web",
     "preview": "npm run preview -w @playpoint/web",
+    "web:start": "npm run start -w @playpoint/web",
     "typecheck": "npm run typecheck -w @playpoint/web",
     "lint": "npm run lint -w @playpoint/web",
 
