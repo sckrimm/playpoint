@@ -1151,7 +1151,15 @@ function HomePage({
     "rocket-tap": Target
   };
   const comingSoonGameIds: GameId[] = ["lucky-spin", "rocket-tap"];
-  const playableGames = games.filter((game) => !comingSoonGameIds.includes(game.id));
+  const playableGames = games
+    .filter((game) => !comingSoonGameIds.includes(game.id))
+    .map((game, index) => ({ game, index }))
+    .sort((left, right) => {
+      const leftAttempts = attemptsLeftByGame[left.game.id] ?? pointRules.dailyAttemptsPerGame;
+      const rightAttempts = attemptsLeftByGame[right.game.id] ?? pointRules.dailyAttemptsPerGame;
+      return rightAttempts - leftAttempts || left.index - right.index;
+    })
+    .map(({ game }) => game);
   const homeLeaderboardEntries = homeLeaderboardScope === "daily" ? dailyLeaderboard : weeklyLeaderboard;
 
   return (
