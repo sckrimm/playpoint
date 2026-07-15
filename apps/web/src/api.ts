@@ -114,6 +114,10 @@ async function apiFetch<T>(path: string, options: RequestInit & { token?: string
   return payload as T;
 }
 
+function normalizeRewardImageUrl(imageUrl: string | null) {
+  return imageUrl?.replace(/\/assets\/(reward-[^/]+-photo)\.png$/, "/assets/$1.webp") ?? undefined;
+}
+
 export function toReward(apiReward: ApiReward): Reward {
   return {
     id: apiReward.slug,
@@ -121,7 +125,7 @@ export function toReward(apiReward: ApiReward): Reward {
     brand: apiReward.brand.name,
     points: apiReward.requiredPoints,
     category: apiReward.category,
-    image: apiReward.imageUrl ?? undefined,
+    image: normalizeRewardImageUrl(apiReward.imageUrl),
     quantity: apiReward.quantity,
     remainingQuantity: Math.max(0, apiReward.quantity - apiReward.claimedCount)
   };

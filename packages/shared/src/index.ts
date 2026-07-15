@@ -142,7 +142,7 @@ export const rewards: Reward[] = [
     brand: "Burger Palace",
     points: 500,
     category: "food",
-    image: "/assets/reward-burger-photo.png"
+    image: "/assets/reward-burger-photo.webp"
   },
   {
     id: "cinema-ticket",
@@ -150,7 +150,7 @@ export const rewards: Reward[] = [
     brand: "CineClub",
     points: 900,
     category: "leisure",
-    image: "/assets/reward-cinema-photo.png"
+    image: "/assets/reward-cinema-photo.webp"
   },
   {
     id: "headphones-discount",
@@ -158,7 +158,7 @@ export const rewards: Reward[] = [
     brand: "TechStore",
     points: 1800,
     category: "tech",
-    image: "/assets/reward-headphones-photo.png"
+    image: "/assets/reward-headphones-photo.webp"
   },
   {
     id: "coffee-voucher",
@@ -166,7 +166,7 @@ export const rewards: Reward[] = [
     brand: "Coffee Lab",
     points: 650,
     category: "food",
-    image: "/assets/reward-coffee-photo.png"
+    image: "/assets/reward-coffee-photo.webp"
   },
   {
     id: "gaming-gear",
@@ -174,7 +174,7 @@ export const rewards: Reward[] = [
     brand: "GameZone",
     points: 2400,
     category: "gaming",
-    image: "/assets/reward-gaming-photo.png"
+    image: "/assets/reward-gaming-photo.webp"
   },
   {
     id: "fitness-pass",
@@ -182,6 +182,6 @@ export const rewards: Reward[] = [
     brand: "FitHub",
     points: 1200,
     category: "leisure",
-    image: "/assets/reward-fitness-photo.png"
+    image: "/assets/reward-fitness-photo.webp"
   }
 ];
