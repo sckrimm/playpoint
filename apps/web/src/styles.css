@@ -979,7 +979,7 @@ h3 {
   background:
     linear-gradient(90deg, rgb(28 4 58 / 72%), rgb(28 4 58 / 26%)),
     linear-gradient(180deg, rgb(28 4 58 / 8%), rgb(28 4 58 / 64%)),
-    url("/assets/hero-arena.png");
+    url("/assets/hero-arena.webp");
   background-position: center;
   background-size: cover;
   box-shadow: 0 10px 26px rgb(100 23 216 / 24%);
