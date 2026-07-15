@@ -115,7 +115,10 @@ async function apiFetch<T>(path: string, options: RequestInit & { token?: string
 }
 
 function normalizeRewardImageUrl(imageUrl: string | null) {
-  return imageUrl?.replace(/\/assets\/(reward-[^/]+-photo)\.png$/, "/assets/$1.webp") ?? undefined;
+  if (!imageUrl) return undefined;
+  return imageUrl
+    .replace(/\/assets\/reward-burger-photo(?:2)?\.(?:png|webp)$/, "/assets/reward-burger-photo2.webp")
+    .replace(/\/assets\/(reward-[^/]+-photo)\.png$/, "/assets/$1.webp");
 }
 
 export function toReward(apiReward: ApiReward): Reward {

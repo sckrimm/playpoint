@@ -142,7 +142,7 @@ export const rewards: Reward[] = [
     brand: "Burger Palace",
     points: 500,
     category: "food",
-    image: "/assets/reward-burger-photo.webp"
+    image: "/assets/reward-burger-photo2.webp"
   },
   {
     id: "cinema-ticket",

@@ -3,14 +3,14 @@
     <linearGradient id="bg" x1="42" x2="276" y1="34" y2="286" gradientUnits="userSpaceOnUse">
       <stop stop-color="#23004c"/>
       <stop offset=".55" stop-color="#6417d8"/>
-      <stop offset="1" stop-color="#38d928"/>
+      <stop offset="1" stop-color="#30a525"/>
     </linearGradient>
   </defs>
   <rect width="320" height="320" rx="36" fill="url(#bg)"/>
   <path d="M76 174c9-47 29-75 84-75s75 28 84 75l9 49c4 22-13 40-34 31l-38-17h-42l-38 17c-21 9-38-9-34-31l9-49Z" fill="#efe5ff"/>
   <path d="M97 184h44M119 162v44" stroke="#6417d8" stroke-width="14" stroke-linecap="round"/>
-  <circle cx="203" cy="176" r="13" fill="#38d928"/>
+  <circle cx="203" cy="176" r="13" fill="#30a525"/>
   <circle cx="232" cy="205" r="13" fill="#8b2cff"/>
-  <path d="M118 96c9-26 28-40 42-40s33 14 42 40" fill="none" stroke="#38d928" stroke-width="13" stroke-linecap="round"/>
+  <path d="M118 96c9-26 28-40 42-40s33 14 42 40" fill="none" stroke="#30a525" stroke-width="13" stroke-linecap="round"/>
   <path d="M62 82l21 10M242 92l20-14M64 251l24-9M237 248l25 8" stroke="#fff" stroke-width="9" stroke-linecap="round" opacity=".65"/>
 </svg>

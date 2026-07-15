@@ -3,7 +3,7 @@
     <linearGradient id="bg" x1="36" x2="284" y1="32" y2="292" gradientUnits="userSpaceOnUse">
       <stop stop-color="#6417d8"/>
       <stop offset=".58" stop-color="#8b2cff"/>
-      <stop offset="1" stop-color="#38d928"/>
+      <stop offset="1" stop-color="#30a525"/>
     </linearGradient>
     <linearGradient id="cup" x1="96" x2="225" y1="96" y2="244" gradientUnits="userSpaceOnUse">
       <stop stop-color="#fff"/>
@@ -11,7 +11,7 @@
     </linearGradient>
   </defs>
   <rect width="320" height="320" rx="36" fill="url(#bg)"/>
-  <circle cx="250" cy="68" r="28" fill="#38d928" opacity=".85"/>
+  <circle cx="250" cy="68" r="28" fill="#30a525" opacity=".85"/>
   <path d="M91 132h135l-13 92c-3 21-19 36-40 36h-29c-21 0-38-15-41-36l-12-92Z" fill="url(#cup)"/>
   <path d="M219 153h22c23 0 38 19 34 41-4 22-22 36-44 36h-20l6-36h19c9 0 16-6 18-15 1-8-4-14-13-14h-24l2-12Z" fill="#fff" opacity=".9"/>
   <rect x="82" y="114" width="151" height="30" rx="15" fill="#1c0b2e"/>

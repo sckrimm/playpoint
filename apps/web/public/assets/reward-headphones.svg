@@ -3,7 +3,7 @@
     <linearGradient id="bg" x1="38" x2="282" y1="34" y2="286" gradientUnits="userSpaceOnUse">
       <stop stop-color="#8b2cff"/>
       <stop offset=".6" stop-color="#6417d8"/>
-      <stop offset="1" stop-color="#38d928"/>
+      <stop offset="1" stop-color="#30a525"/>
     </linearGradient>
     <linearGradient id="pad" x1="84" x2="236" y1="130" y2="264" gradientUnits="userSpaceOnUse">
       <stop stop-color="#fff"/>
@@ -15,6 +15,6 @@
   <path d="M66 160h38c14 0 26 12 26 26v54c0 14-12 26-26 26H92c-20 0-36-16-36-36v-60c0-6 4-10 10-10Z" fill="url(#pad)"/>
   <path d="M254 160h-38c-14 0-26 12-26 26v54c0 14 12 26 26 26h12c20 0 36-16 36-36v-60c0-6-4-10-10-10Z" fill="url(#pad)"/>
   <path d="M104 184v58M216 184v58" stroke="#6417d8" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="160" cy="176" r="30" fill="#38d928"/>
+  <circle cx="160" cy="176" r="30" fill="#30a525"/>
   <path d="M145 176h30M160 161v30" stroke="#26005f" stroke-width="10" stroke-linecap="round"/>
 </svg>
