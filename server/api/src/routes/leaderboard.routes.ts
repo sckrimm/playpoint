@@ -34,6 +34,7 @@ async function getLeaderboard(since: Date) {
       },
       user: {
         select: {
+          id: true,
           displayName: true,
           avatarUrl: true
         }
@@ -52,6 +53,7 @@ async function getLeaderboard(since: Date) {
       playPoints: number;
       rawScore: number;
       topScore: number;
+      userId: string;
       userName: string;
     }
   >();
@@ -65,6 +67,7 @@ async function getLeaderboard(since: Date) {
     playPoints: number;
     rawScore: number;
     user: {
+      id: string;
       displayName: string;
       avatarUrl: string | null;
     };
@@ -80,6 +83,7 @@ async function getLeaderboard(since: Date) {
         playPoints: score.playPoints,
         rawScore: score.rawScore,
         topScore: score.playPoints,
+        userId: score.userId,
         userName: score.user.displayName
       });
       return;

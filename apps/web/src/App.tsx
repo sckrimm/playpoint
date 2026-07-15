@@ -71,6 +71,9 @@ const tokenStorageKey = "playpoint.authToken";
 const defaultRoute: Route = window.localStorage.getItem(tokenStorageKey) ? "home" : "splash";
 const showDevOtpCode = import.meta.env.DEV;
 const formatter = new Intl.NumberFormat("en-US");
+const displayNamePattern = /^[\p{L}\p{N}_ ]+$/u;
+const displayNameMinLength = 3;
+const displayNameMaxLength = 24;
 
 function AnimatedPoints({
   value,
@@ -128,6 +131,8 @@ const coinPackages = [
 
 type RankedLeaderboardEntry = {
   rank: number;
+  id?: string;
+  avatarUrl?: string | null;
   name: string;
   points: number;
   isCurrentUser?: boolean;
@@ -181,13 +186,15 @@ function getApiErrorMessage(error: unknown) {
 
 function toRankedLeaderboard(
   entries: Awaited<ReturnType<typeof playpointApi.getLeaderboard>>,
-  currentUserName: string
+  currentUserId: string
 ): RankedLeaderboardEntry[] {
   return entries.map((entry) => ({
+    id: entry.userId,
+    avatarUrl: entry.avatarUrl,
     rank: entry.rank,
     name: entry.userName,
     points: entry.playPoints,
-    isCurrentUser: entry.userName === currentUserName
+    isCurrentUser: entry.userId === currentUserId
   }));
 }
 
@@ -197,8 +204,10 @@ export function App() {
   const [phoneValue, setPhoneValue] = useState("");
   const [verifiedPhone, setVerifiedPhone] = useState("");
   const [devOtpCode, setDevOtpCode] = useState("");
+  const [otpExpiresInSeconds, setOtpExpiresInSeconds] = useState(0);
+  const [userId, setUserId] = useState("");
   const [profileName, setProfileName] = useState<string>(userSummary.displayName);
-  const [userPoints, setUserPoints] = useState<number>(userSummary.points);
+  const [userPoints, setUserPoints] = useState<number>(0);
   const [userCoins, setUserCoins] = useState<number>(14);
   const [gamesPlayed, setGamesPlayed] = useState<number>(0);
   const [attemptsLeftByGame, setAttemptsLeftByGame] = useState<AttemptsLeftByGame>({
@@ -240,6 +249,7 @@ export function App() {
   const text = useMemo<TextGetter>(() => (key) => getText(language, key), [language]);
 
   const applyMePayload = (payload: Awaited<ReturnType<typeof playpointApi.getMe>>) => {
+    setUserId(payload.user.id);
     setProfileName(payload.user.displayName);
     setUserPoints(payload.user.totalPoints);
     setUserCoins(payload.user.coins);
@@ -266,8 +276,8 @@ export function App() {
     ]);
     applyMePayload(me);
     setRewardCatalog(rewardsPayload.map(toReward));
-    setDailyLeaderboard(toRankedLeaderboard(dailyPayload, me.user.displayName));
-    setWeeklyLeaderboard(toRankedLeaderboard(weeklyPayload, me.user.displayName));
+    setDailyLeaderboard(toRankedLeaderboard(dailyPayload, me.user.id));
+    setWeeklyLeaderboard(toRankedLeaderboard(weeklyPayload, me.user.id));
   };
 
   useEffect(() => {
@@ -313,6 +323,7 @@ export function App() {
       const payload = await playpointApi.requestOtp(phoneValue);
       setVerifiedPhone(payload.phone);
       setDevOtpCode(payload.devCode ?? "");
+      setOtpExpiresInSeconds(payload.expiresInSeconds);
       setOtpValue("");
       navigate("otp");
     } catch (error: unknown) {
@@ -328,10 +339,16 @@ export function App() {
       const payload = await playpointApi.verifyOtp(verifiedPhone || phoneValue, otpValue);
       window.localStorage.setItem(tokenStorageKey, payload.token);
       setAuthToken(payload.token);
+      setUserId(payload.user.id);
       setProfileName(payload.user.displayName);
       setUserPoints(payload.user.totalPoints);
       setUserCoins(payload.user.coins);
-      navigate("profile-setup");
+      if (payload.isNewUser) {
+        navigate("profile-setup");
+      } else {
+        await refreshAccount(payload.token);
+        navigate("home");
+      }
     } catch (error: unknown) {
       window.alert(getApiErrorMessage(error));
     } finally {
@@ -441,8 +458,10 @@ export function App() {
     setPhoneValue("");
     setVerifiedPhone("");
     setDevOtpCode("");
+    setOtpExpiresInSeconds(0);
+    setUserId("");
     setProfileName(userSummary.displayName);
-    setUserPoints(userSummary.points);
+    setUserPoints(0);
     setUserCoins(14);
     setGamesPlayed(0);
     setAttemptsLeftByGame({
@@ -505,8 +524,10 @@ export function App() {
               phone={verifiedPhone || phoneValue}
               text={text}
               otpValue={otpValue}
+              expiresInSeconds={otpExpiresInSeconds}
               setOtpValue={setOtpValue}
               onNavigate={navigate}
+              onResendOtp={requestOtp}
               onVerifyOtp={verifyOtp}
             />
           ) : null}
@@ -523,10 +544,13 @@ export function App() {
             <HomePage
               leaderboardEntries={rankedLeaderboard}
               attemptsLeftByGame={attemptsLeftByGame}
+              purchasedRewards={purchasedRewards}
               rewardCatalog={rewardCatalog}
               text={text}
               userCoins={userCoins}
+              userPoints={userPoints}
               onBuyCoins={(coins) => setUserCoins((currentCoins) => currentCoins + coins)}
+              onClaimReward={claimReward}
               onNavigate={navigate}
               onSelectGame={selectGame}
             />
@@ -557,6 +581,9 @@ export function App() {
             <LeaderboardPage
               scope="daily"
               leaderboardEntries={rankedLeaderboard}
+              currentUserId={userId}
+              currentUserName={profileName}
+              currentUserPoints={userPoints}
               text={text}
               userRank={userRank}
               onNavigate={navigate}
@@ -566,6 +593,9 @@ export function App() {
             <LeaderboardPage
               scope="weekly"
               leaderboardEntries={rankedLeaderboard}
+              currentUserId={userId}
+              currentUserName={profileName}
+              currentUserPoints={userPoints}
               text={text}
               userRank={userRank}
               onNavigate={navigate}
@@ -609,6 +639,7 @@ export function App() {
                 const payload = await playpointApi.updateMe(authToken, nextName);
                 applyMePayload(payload);
                 await refreshAccount(authToken);
+                navigate("profile");
               }}
               onNavigate={navigate}
             />
@@ -793,24 +824,62 @@ function PhonePage({
 function OtpPage({
   devOtpCode,
   disabled,
+  expiresInSeconds,
   phone,
   text,
   otpValue,
   setOtpValue,
   onNavigate,
+  onResendOtp,
   onVerifyOtp
 }: {
   devOtpCode: string;
   disabled: boolean;
+  expiresInSeconds: number;
   phone: string;
   text: TextGetter;
   otpValue: string;
   setOtpValue: (value: string) => void;
   onNavigate: (route: Route) => void;
+  onResendOtp: () => Promise<void>;
   onVerifyOtp: () => void;
 }) {
-  const otpLength = 6;
+  const otpLength = 4;
   const digits = otpValue.padEnd(otpLength, " ").slice(0, otpLength).split("");
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const [secondsLeft, setSecondsLeft] = useState(expiresInSeconds);
+  const minutes = Math.floor(secondsLeft / 60).toString().padStart(2, "0");
+  const seconds = (secondsLeft % 60).toString().padStart(2, "0");
+
+  useEffect(() => {
+    setSecondsLeft(expiresInSeconds);
+  }, [expiresInSeconds, devOtpCode]);
+
+  useEffect(() => {
+    if (secondsLeft <= 0) return;
+    const timerId = window.setInterval(() => {
+      setSecondsLeft((currentSeconds) => Math.max(0, currentSeconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, [secondsLeft]);
+
+  const updateDigit = (index: number, value: string) => {
+    const cleanValue = value.replace(/\D/g, "");
+
+    if (cleanValue.length > 1) {
+      setOtpValue(cleanValue.slice(0, otpLength));
+      inputRefs.current[Math.min(cleanValue.length, otpLength) - 1]?.focus();
+      return;
+    }
+
+    const next = [...digits];
+    next[index] = cleanValue || " ";
+    setOtpValue(next.join("").replace(/\s/g, "").slice(0, otpLength));
+
+    if (cleanValue && index < otpLength - 1) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
 
   return (
     <section className="onboarding-page otp-page">
@@ -842,13 +911,21 @@ function OtpPage({
           {digits.map((digit, index) => (
             <input
               key={`otp-slot-${index}`}
+              ref={(node) => {
+                inputRefs.current[index] = node;
+              }}
               inputMode="numeric"
               maxLength={1}
               value={digit.trim()}
-              onChange={(event) => {
-                const next = [...digits];
-                next[index] = event.target.value.replace(/\D/g, "").slice(0, 1) || " ";
-                setOtpValue(next.join("").replace(/\s/g, "").slice(0, otpLength));
+              onChange={(event) => updateDigit(index, event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Backspace" && !digits[index].trim() && index > 0) {
+                  inputRefs.current[index - 1]?.focus();
+                }
+              }}
+              onPaste={(event) => {
+                event.preventDefault();
+                updateDigit(index, event.clipboardData.getData("text"));
               }}
             />
           ))}
@@ -857,9 +934,9 @@ function OtpPage({
         <div className="otp-timer">
           <span>
             <Timer size={18} />
-            01:59
+            {minutes}:{seconds}
           </span>
-          <button type="button" disabled>
+          <button type="button" disabled={disabled || secondsLeft > 0} onClick={onResendOtp}>
             {text("otp.resend")}
           </button>
         </div>
@@ -887,6 +964,11 @@ function ProfileSetupPage({
   onFinish: () => Promise<void>;
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
+  const normalizedName = profileName.trim();
+  const nameIsValid =
+    normalizedName.length >= displayNameMinLength &&
+    normalizedName.length <= displayNameMaxLength &&
+    displayNamePattern.test(normalizedName);
 
   const finishSetup = () => {
     setShowSuccess(true);
@@ -931,9 +1013,11 @@ function ProfileSetupPage({
               placeholder={text("setup.namePlaceholder")}
               value={profileName}
               onChange={(event) => setProfileName(event.target.value)}
+              maxLength={displayNameMaxLength}
             />
             <Pencil size={18} />
           </div>
+          {!nameIsValid && normalizedName ? <p className="field-error">{text("edit.nameHint")}</p> : null}
 
           <div className="bonus-strip">
             <Sparkles size={18} />
@@ -942,7 +1026,7 @@ function ProfileSetupPage({
         </section>
 
         <div className="setup-actions">
-          <button className="primary-action" type="button" disabled={disabled || !profileName.trim()} onClick={finishSetup}>
+          <button className="primary-action" type="button" disabled={disabled || !nameIsValid} onClick={finishSetup}>
             {text("setup.finish")}
             <ArrowLeft className="arrow-forward" size={18} />
           </button>
@@ -967,19 +1051,25 @@ function ProfileSetupPage({
 function HomePage({
   leaderboardEntries,
   attemptsLeftByGame,
+  purchasedRewards,
   rewardCatalog,
   text,
   userCoins,
+  userPoints,
   onBuyCoins,
+  onClaimReward,
   onNavigate,
   onSelectGame
 }: {
   leaderboardEntries: RankedLeaderboardEntry[];
   attemptsLeftByGame: AttemptsLeftByGame;
+  purchasedRewards: Reward[];
   rewardCatalog: Reward[];
   text: TextGetter;
   userCoins: number;
+  userPoints: number;
   onBuyCoins: (coins: number) => void;
+  onClaimReward: (reward: Reward) => Promise<boolean>;
   onNavigate: (route: Route) => void;
   onSelectGame: (gameId: GameId) => void;
 }) {
@@ -1044,7 +1134,14 @@ function HomePage({
             <Gift size={20} />
             <h2>{text("home.rewards")}</h2>
           </div>
-          <RewardList rewards={rewardCatalog} limit={2} />
+          <RewardList
+            limit={3}
+            purchasedRewards={purchasedRewards}
+            rewards={rewardCatalog}
+            text={text}
+            userPoints={userPoints}
+            onClaimReward={onClaimReward}
+          />
         </article>
       </section>
 
@@ -1267,23 +1364,53 @@ function ScorePopupPage({
 function LeaderboardPage({
   scope,
   leaderboardEntries,
+  currentUserId,
+  currentUserName,
+  currentUserPoints,
   text,
   userRank,
   onNavigate
 }: {
   scope: "daily" | "weekly";
   leaderboardEntries: RankedLeaderboardEntry[];
+  currentUserId: string;
+  currentUserName: string;
+  currentUserPoints: number;
   text: TextGetter;
   userRank: number;
   onNavigate: (route: Route) => void;
 }) {
-  const [showAllRanks, setShowAllRanks] = useState(false);
+  const [showMyPosition, setShowMyPosition] = useState(false);
   const podiumEntries = leaderboardEntries.slice(0, 3);
-  const listEntries = leaderboardEntries.slice(3);
-  const visibleEntries = listEntries.length > 0 ? listEntries : leaderboardEntries;
-  const collapsedListLimit = listEntries.length > 0 ? 7 : 10;
-  const visibleLimit = showAllRanks ? visibleEntries.length : collapsedListLimit;
   const podiumOrder = [podiumEntries[1], podiumEntries[0], podiumEntries[2]].filter(Boolean);
+  const currentUserEntry =
+    leaderboardEntries.find((player) => player.isCurrentUser) ??
+    (userRank
+      ? {
+          id: currentUserId,
+          avatarUrl: null,
+          rank: userRank,
+          name: currentUserName.trim() || userSummary.displayName,
+          points: currentUserPoints,
+          isCurrentUser: true
+        }
+      : null);
+  const defaultEntries = leaderboardEntries
+    .filter((player) => player.rank > 3 && !player.isCurrentUser)
+    .slice(0, 7);
+  const currentUserIndex = currentUserEntry
+    ? leaderboardEntries.findIndex((player) => player.rank === currentUserEntry.rank && player.name === currentUserEntry.name)
+    : -1;
+  const myPositionEntries = (() => {
+    if (!currentUserEntry) return defaultEntries;
+    if (currentUserIndex < 0) return [currentUserEntry];
+
+    const startIndex = Math.max(0, Math.min(currentUserIndex - 2, leaderboardEntries.length - 5));
+    return leaderboardEntries.slice(startIndex, startIndex + 5);
+  })();
+  const visibleEntries = showMyPosition ? myPositionEntries : defaultEntries;
+  const showCurrentUserFooter = Boolean(currentUserEntry) && !showMyPosition;
+  const canShowMyPosition = Boolean(currentUserEntry);
 
   return (
     <section className="section leaderboard-screen">
@@ -1323,10 +1450,15 @@ function LeaderboardPage({
           </div>
           <span>#{userRank}</span>
         </div>
-        <LeaderboardList entries={visibleEntries} limit={visibleLimit} />
-        {visibleEntries.length > collapsedListLimit ? (
-          <button className="leaderboard-more-button" type="button" onClick={() => setShowAllRanks((value) => !value)}>
-            {showAllRanks ? text("leaderboard.less") : `${text("leaderboard.more")} (${visibleEntries.length - collapsedListLimit})`}
+        <LeaderboardList entries={visibleEntries} />
+        {showCurrentUserFooter && currentUserEntry ? (
+          <div className="leaderboard-current-footer">
+            <LeaderboardList entries={[currentUserEntry]} />
+          </div>
+        ) : null}
+        {canShowMyPosition ? (
+          <button className="leaderboard-more-button" type="button" onClick={() => setShowMyPosition((value) => !value)}>
+            {showMyPosition ? text("leaderboard.topTen") : text("leaderboard.myPosition")}
           </button>
         ) : null}
       </article>
@@ -1357,6 +1489,9 @@ function RewardsPage({
 }) {
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Reward["category"] | "all">("all");
+  const filteredRewards =
+    selectedCategory === "all" ? rewards : rewards.filter((reward) => reward.category === selectedCategory);
   const alreadyPurchased = selectedReward
     ? purchasedRewards.some((reward) => reward.id === selectedReward.id)
     : false;
@@ -1370,13 +1505,18 @@ function RewardsPage({
         <span><AnimatedPoints value={userPoints} suffix=" pts" /></span>
       </div>
       <div className="tabs">
-        <button className="active" type="button">{text("common.all")}</button>
-        <button type="button">{text("common.food")}</button>
-        <button type="button">{text("common.tech")}</button>
-        <button type="button">{text("common.gaming")}</button>
+        <button className={selectedCategory === "all" ? "active" : ""} type="button" onClick={() => setSelectedCategory("all")}>{text("common.all")}</button>
+        <button className={selectedCategory === "food" ? "active" : ""} type="button" onClick={() => setSelectedCategory("food")}>{text("common.food")}</button>
+        <button className={selectedCategory === "tech" ? "active" : ""} type="button" onClick={() => setSelectedCategory("tech")}>{text("common.tech")}</button>
+        <button className={selectedCategory === "gaming" ? "active" : ""} type="button" onClick={() => setSelectedCategory("gaming")}>{text("common.gaming")}</button>
       </div>
       <div className="rewards-grid">
-        {rewards.map((reward) => (
+        {filteredRewards.map((reward) => {
+          const rewardOwned = purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id);
+          const rewardOutOfStock = reward.remainingQuantity === 0;
+          const rewardAffordable = userPoints >= reward.points;
+
+          return (
           <article className={`reward-card reward-${reward.id}`} key={reward.id}>
             <div className="reward-visual">
               {reward.image ? <img src={reward.image} alt="" /> : <Gift size={34} />}
@@ -1389,20 +1529,20 @@ function RewardsPage({
             <strong>{reward.points} pts</strong>
             <button
               type="button"
-              disabled={
-                purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id) ||
-                reward.remainingQuantity === 0
-              }
+              disabled={rewardOwned || rewardOutOfStock || !rewardAffordable}
               onClick={() => setSelectedReward(reward)}
             >
-              {purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id)
+              {rewardOwned
                 ? text("common.owned")
-                : reward.remainingQuantity === 0
+                : rewardOutOfStock
                   ? "Sold out"
+                  : !rewardAffordable
+                    ? text("rewards.notEnough")
                   : text("common.claim")}
             </button>
           </article>
-        ))}
+          );
+        })}
       </div>
       {selectedReward ? (
         <div className="claim-modal-backdrop" role="presentation">
@@ -1478,6 +1618,18 @@ function ProfilePage({
   onNavigate: (route: Route) => void;
   onLogout: () => void;
 }) {
+  const [showAllPrizes, setShowAllPrizes] = useState(false);
+  const [showFullHistory, setShowFullHistory] = useState(false);
+  const visibleRewards = showAllPrizes ? purchasedRewards : purchasedRewards.slice(0, 2);
+  const historyItems = [
+    { icon: <BadgeCheck size={20} />, title: "Daily Trivia", time: text("profile.today"), points: "+50 pts", result: text("profile.won"), tone: "positive" as const },
+    { icon: <Gamepad2 size={20} />, title: "Speed Clicker", time: text("profile.yesterday"), points: "+120 pts", result: text("profile.newRecord"), tone: "positive" as const },
+    { icon: <Brain size={20} />, title: "Memory Match", time: "15 May, 12:00", points: "-10 pts", result: text("profile.entryFee"), tone: "negative" as const },
+    { icon: <Target size={20} />, title: "Aim Hit", time: "14 May, 21:30", points: "+80 pts", result: text("profile.won"), tone: "positive" as const },
+    { icon: <Sparkles size={20} />, title: "Color Rush", time: "13 May, 17:15", points: "+65 pts", result: text("profile.won"), tone: "positive" as const }
+  ];
+  const visibleHistoryItems = showFullHistory ? historyItems : historyItems.slice(0, 3);
+
   return (
     <section className="profile-screen">
       <section className="profile-hero">
@@ -1563,11 +1715,13 @@ function ProfilePage({
       <section className="profile-section-block">
         <div className="profile-section-title">
           <h3>{text("profile.myPrizes")}</h3>
-          <button type="button" onClick={() => onNavigate("rewards")}>{text("common.all")}</button>
+          <button type="button" disabled={purchasedRewards.length <= 2} onClick={() => setShowAllPrizes((value) => !value)}>
+            {showAllPrizes ? text("leaderboard.less") : text("common.all")}
+          </button>
         </div>
         <div className="profile-list">
           {purchasedRewards.length > 0 ? (
-            purchasedRewards.map((reward) => (
+            visibleRewards.map((reward) => (
               <ProfileRewardItem
                 active
                 icon={reward.image ? <img src={reward.image} alt="" /> : <Gift size={22} />}
@@ -1590,11 +1744,21 @@ function ProfilePage({
       <section className="profile-section-block">
         <h3>{text("profile.gameHistory")}</h3>
         <div className="history-card">
-          <HistoryItem icon={<BadgeCheck size={20} />} title="Daily Trivia" time={text("profile.today")} points="+50 pts" result={text("profile.won")} tone="positive" />
-          <HistoryItem icon={<Gamepad2 size={20} />} title="Speed Clicker" time={text("profile.yesterday")} points="+120 pts" result={text("profile.newRecord")} tone="positive" />
-          <HistoryItem icon={<Brain size={20} />} title="Memory Match" time="15 May, 12:00" points="-10 pts" result={text("profile.entryFee")} tone="negative" />
+          {visibleHistoryItems.map((historyItem) => (
+            <HistoryItem
+              icon={historyItem.icon}
+              key={`${historyItem.title}-${historyItem.time}`}
+              title={historyItem.title}
+              time={historyItem.time}
+              points={historyItem.points}
+              result={historyItem.result}
+              tone={historyItem.tone}
+            />
+          ))}
         </div>
-        <button className="more-button" type="button">{text("leaderboard.more")}</button>
+        <button className="more-button" type="button" onClick={() => setShowFullHistory((value) => !value)}>
+          {showFullHistory ? text("leaderboard.less") : text("leaderboard.more")}
+        </button>
       </section>
 
       <section className="profile-logout-section">
@@ -1624,9 +1788,15 @@ function EditProfilePage({
 }) {
   const [email, setEmail] = useState("giorgi.m@example.ge");
   const [saved, setSaved] = useState(false);
+  const normalizedName = profileName.trim();
+  const nameIsValid =
+    normalizedName.length >= displayNameMinLength &&
+    normalizedName.length <= displayNameMaxLength &&
+    displayNamePattern.test(normalizedName);
 
   const saveProfile = async () => {
-    await onSaveProfile(profileName);
+    if (!nameIsValid) return;
+    await onSaveProfile(normalizedName);
     setSaved(true);
     window.setTimeout(() => setSaved(false), 1800);
   };
@@ -1662,6 +1832,8 @@ function EditProfilePage({
             value={profileName}
             onChange={setProfileName}
             placeholder={text("edit.namePlaceholder")}
+            maxLength={displayNameMaxLength}
+            hint={text("edit.nameHint")}
           />
           <EditField
             disabled
@@ -1696,7 +1868,7 @@ function EditProfilePage({
       </main>
 
       <footer className="edit-save-footer">
-        <button type="button" className={saved ? "saved" : ""} onClick={saveProfile}>
+        <button type="button" className={saved ? "saved" : ""} disabled={!nameIsValid} onClick={saveProfile}>
           <span>{saved ? text("edit.saved") : text("edit.save")}</span>
           <CheckCircle2 size={18} />
         </button>
@@ -1771,6 +1943,7 @@ function EditField({
   value,
   onChange,
   placeholder,
+  maxLength,
   type = "text",
   disabled = false,
   trailing,
@@ -1782,6 +1955,7 @@ function EditField({
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  maxLength?: number;
   type?: string;
   disabled?: boolean;
   trailing?: ReactNode;
@@ -1797,6 +1971,7 @@ function EditField({
           type={type}
           value={value}
           disabled={disabled}
+          maxLength={maxLength}
           readOnly={disabled}
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
@@ -1819,8 +1994,13 @@ function LeaderboardList({
     <div className="leaderboard-list">
       {entries.slice(0, limit).map((player) => (
         <div className={player.isCurrentUser ? "rank-row current-user" : "rank-row"} key={`${player.rank}-${player.name}`}>
-          <strong>{player.rank}</strong>
-          <span>{player.name}</span>
+          <strong className="rank-number">{player.rank}</strong>
+          <span className="rank-avatar">
+            {player.avatarUrl ? <img src={player.avatarUrl} alt="" /> : <User size={18} />}
+          </span>
+          <span className="rank-copy">
+            <b>{player.name}</b>
+          </span>
           <em>{formatter.format(player.points)}</em>
         </div>
       ))}
@@ -1828,15 +2008,63 @@ function LeaderboardList({
   );
 }
 
-function RewardList({ rewards, limit = rewards.length }: { rewards: Reward[]; limit?: number }) {
+function RewardList({
+  purchasedRewards,
+  rewards,
+  text,
+  userPoints,
+  onClaimReward,
+  limit = rewards.length
+}: {
+  purchasedRewards: Reward[];
+  rewards: Reward[];
+  text: TextGetter;
+  userPoints: number;
+  onClaimReward: (reward: Reward) => Promise<boolean>;
+  limit?: number;
+}) {
+  const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+
   return (
     <div className="reward-list">
-      {rewards.slice(0, limit).map((reward) => (
+      {rewards.slice(0, limit).map((reward) => {
+        const rewardOwned = purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id);
+        const rewardOutOfStock = reward.remainingQuantity === 0;
+        const rewardAffordable = userPoints >= reward.points;
+        const disabled = rewardOwned || rewardOutOfStock || !rewardAffordable || claimingRewardId === reward.id;
+
+        return (
         <div className="reward-row" key={reward.id}>
-          <span>{reward.brand}</span>
-          <strong>{reward.points} pts</strong>
+          <span className={`reward-row-thumb reward-${reward.id}`}>
+            {reward.image ? <img src={reward.image} alt="" /> : <Gift size={18} />}
+          </span>
+          <span className="reward-row-copy">
+            <b>{reward.title}</b>
+            <small>
+              {reward.brand}
+              <em>{reward.points} pts</em>
+            </small>
+          </span>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={(event) => {
+              event.stopPropagation();
+              setClaimingRewardId(reward.id);
+              onClaimReward(reward).finally(() => setClaimingRewardId(null));
+            }}
+          >
+            {rewardOwned
+              ? text("common.owned")
+              : rewardOutOfStock
+                ? "Sold out"
+                : !rewardAffordable
+                  ? text("rewards.notEnough")
+                  : text("common.claim")}
+          </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

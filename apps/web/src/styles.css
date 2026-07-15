@@ -1430,31 +1430,41 @@ h3 {
   min-height: 34px;
 }
 
-.leaderboard-card .rank-row {
-  min-height: 62px;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e1d3f5;
+.rank-row {
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px solid #e6e0ec;
+  border-radius: 8px;
+  background: #f7f4fa;
+  box-shadow: 0 2px 8px rgb(28 4 58 / 4%);
+  font-size: 12px;
 }
 
-.leaderboard-card .rank-row:last-child {
-  border-bottom: 0;
+.reward-row {
+  position: relative;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px solid #e6e0ec;
+  border-radius: 8px;
+  background: #f7f4fa;
+  box-shadow: 0 2px 8px rgb(28 4 58 / 4%);
+}
+
+.leaderboard-current-footer {
+  margin-top: 10px;
 }
 
 .rank-row.current-user {
-  margin: 0 -6px;
-  padding: 6px;
   background: #efe5ff;
-  box-shadow: inset 0 0 0 1px rgb(100 23 216 / 14%);
-}
-
-.leaderboard-card .rank-row.current-user {
-  margin: 0;
-  padding: 12px 16px;
+  box-shadow: inset 0 0 0 1px rgb(100 23 216 / 16%);
   border-left: 3px solid #6417d8;
 }
 
-.rank-row strong {
+.rank-number {
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
   width: 26px;
   height: 26px;
@@ -1463,8 +1473,27 @@ h3 {
   background: #efe5ff;
 }
 
-.rank-row span,
-.reward-row span {
+.rank-avatar {
+  overflow: hidden;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #6417d8;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgb(100 23 216 / 12%);
+}
+
+.rank-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rank-copy,
+.reward-row-copy {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1473,11 +1502,101 @@ h3 {
   font-weight: 700;
 }
 
-.rank-row em,
-.reward-row strong {
+.rank-copy b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1c0b2e;
+  font-size: 12px;
+}
+
+.reward-row-thumb {
+  overflow: hidden;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   color: #6417d8;
+  background: #efe5ff;
+}
+
+.reward-row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reward-row-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.reward-row-copy b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1c0b2e;
+  font-size: 12px;
+}
+
+.reward-row-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6e607a;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.rank-row em {
+  color: #6417d8;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
+}
+
+.reward-row-copy small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reward-row-copy em {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 8px;
+  color: #6417d8;
+  background: #efe5ff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.reward-row button {
+  flex: 0 0 auto;
+  min-width: 72px;
+  max-width: 92px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #6417d8, #8b2cff);
+  font-size: 11px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 6px 14px rgb(100 23 216 / 16%);
+}
+
+.reward-row button:disabled {
+  cursor: not-allowed;
+  color: #83748f;
+  background: #eeeeee;
+  box-shadow: none;
 }
 
 .leaderboard-more-button {
@@ -2784,10 +2903,11 @@ h3 {
 }
 
 .edit-profile-screen {
-  min-height: 844px;
+  height: 844px;
   display: flex;
   flex-direction: column;
   margin: -20px -20px -88px;
+  overflow-y: auto;
   background: #fbf8ff;
 }
 
@@ -2946,6 +3066,14 @@ h3 {
   font-style: italic;
 }
 
+.field-error {
+  margin: 8px 0 0;
+  color: #ba1a1a;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .security-card {
   display: flex;
   align-items: flex-start;
@@ -2983,6 +3111,7 @@ h3 {
 .edit-save-footer {
   position: sticky;
   bottom: 0;
+  flex: 0 0 auto;
   padding: 20px;
   background: rgb(255 255 255 / 82%);
   backdrop-filter: blur(12px);
@@ -3005,6 +3134,12 @@ h3 {
 
 .edit-save-footer button.saved {
   background: #0fa83f;
+}
+
+.edit-save-footer button:disabled,
+.profile-section-title button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .bottom-nav {

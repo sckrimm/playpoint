@@ -13,7 +13,7 @@ export function normalizePhone(phone: string) {
 
 export function createOtpCode() {
   if (env.OTP_PROVIDER === "mock") return env.OTP_MOCK_CODE;
-  return String(crypto.randomInt(100000, 999999));
+  return String(crypto.randomInt(1000, 9999));
 }
 
 export function hashOtp(phone: string, code: string) {

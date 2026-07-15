@@ -37,6 +37,7 @@ export type ApiRewardClaim = {
 
 export type ApiLeaderboardEntry = {
   rank: number;
+  userId: string;
   userName: string;
   avatarUrl: string | null;
   gameTitle: string;
@@ -129,7 +130,7 @@ export const playpointApi = {
     );
   },
   verifyOtp(phone: string, code: string) {
-    return apiFetch<{ token: string; user: ApiUser }>("/auth/verify-otp", {
+    return apiFetch<{ isNewUser: boolean; token: string; user: ApiUser }>("/auth/verify-otp", {
       method: "POST",
       body: JSON.stringify({ phone, code })
     });

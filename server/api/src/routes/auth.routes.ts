@@ -19,7 +19,7 @@ const requestOtpSchema = z.object({
 
 const verifyOtpSchema = z.object({
   code: z.string().regex(/^\d{4,6}$/),
-  displayName: z.string().trim().min(1).max(60).optional(),
+  displayName: z.string().trim().min(3).max(24).regex(/^[\p{L}\p{N}_ ]+$/u).optional(),
   phone: z.string().min(6).max(24)
 });
 
@@ -84,6 +84,20 @@ export function registerAuthRoutes(app: FastifyInstance) {
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
     const result = await prisma.$transaction(async (tx) => {
       const existingUser = await tx.user.findUnique({ where: { phone } });
+      const isNewUser = !existingUser;
+
+      if (parsed.data.displayName) {
+        const userWithName = await tx.user.findFirst({
+          where: {
+            displayName: parsed.data.displayName,
+            ...(existingUser ? { id: { not: existingUser.id } } : {})
+          },
+          select: { id: true }
+        });
+
+        if (userWithName) return "DISPLAY_NAME_TAKEN" as const;
+      }
+
       const user = existingUser
         ? await tx.user.update({
             where: { id: existingUser.id },
@@ -114,8 +128,22 @@ export function registerAuthRoutes(app: FastifyInstance) {
         }
       });
 
-      return { session, user };
+      return { isNewUser, session, user };
+    }).catch((error: unknown) => {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "P2002"
+      ) {
+        return "DISPLAY_NAME_TAKEN" as const;
+      }
+      throw error;
     });
+
+    if (result === "DISPLAY_NAME_TAKEN") {
+      return reply.code(409).send({ message: "Display name is already taken" });
+    }
 
     return {
       token,
@@ -123,6 +151,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
         expiresAt: result.session.expiresAt,
         id: result.session.id
       },
+      isNewUser: result.isNewUser,
       user: result.user
     };
   });

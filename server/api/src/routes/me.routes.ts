@@ -5,7 +5,7 @@ import { requireSession } from "../modules/auth/auth.helpers";
 
 const updateMeSchema = z.object({
   avatarUrl: z.string().url().nullable().optional(),
-  displayName: z.string().trim().min(1).max(60).optional()
+  displayName: z.string().trim().min(3).max(24).regex(/^[\p{L}\p{N}_ ]+$/u).optional()
 });
 
 function startOfToday() {
@@ -156,10 +156,36 @@ export function registerMeRoutes(app: FastifyInstance) {
     const parsed = updateMeSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ message: "Invalid profile payload", issues: parsed.error.issues });
 
-    await prisma.user.update({
-      where: { id: auth.session.userId },
-      data: parsed.data
-    });
+    if (parsed.data.displayName) {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          displayName: parsed.data.displayName,
+          id: {
+            not: auth.session.userId
+          }
+        },
+        select: { id: true }
+      });
+
+      if (existingUser) return reply.code(409).send({ message: "Display name is already taken" });
+    }
+
+    try {
+      await prisma.user.update({
+        where: { id: auth.session.userId },
+        data: parsed.data
+      });
+    } catch (error: unknown) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "P2002"
+      ) {
+        return reply.code(409).send({ message: "Display name is already taken" });
+      }
+      throw error;
+    }
 
     return getMePayload(auth.session.userId);
   });

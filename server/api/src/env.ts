@@ -1,4 +1,29 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { z } from "zod";
+
+function loadLocalEnv() {
+  const envPath = resolve(process.cwd(), ".env");
+  if (!existsSync(envPath)) return;
+
+  readFileSync(envPath, "utf8")
+    .split(/\r?\n/)
+    .forEach((line) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine || trimmedLine.startsWith("#")) return;
+
+      const separatorIndex = trimmedLine.indexOf("=");
+      if (separatorIndex < 0) return;
+
+      const key = trimmedLine.slice(0, separatorIndex).trim();
+      const rawValue = trimmedLine.slice(separatorIndex + 1).trim();
+      if (!key || process.env[key] !== undefined) return;
+
+      process.env[key] = rawValue.replace(/^["']|["']$/g, "");
+    });
+}
+
+loadLocalEnv();
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1).default("postgresql://playpoint:playpoint@localhost:5432/playpoint"),
