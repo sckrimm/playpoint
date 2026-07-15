@@ -1556,7 +1556,7 @@ h3 {
 }
 
 .leaderboard-card > .leaderboard-list {
-  padding: 12px 16px 0;
+  padding: 12px 16px 16px;
 }
 
 .rank-row,
