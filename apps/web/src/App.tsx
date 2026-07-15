@@ -1534,8 +1534,9 @@ function LeaderboardPage({
         }
       : null);
   const defaultEntries = leaderboardEntries
-    .filter((player) => player.rank > 3 && !player.isCurrentUser)
+    .filter((player) => player.rank > 3)
     .slice(0, 7);
+  const currentUserInTopTen = Boolean(currentUserEntry && currentUserEntry.rank <= 10);
   const currentUserIndex = currentUserEntry
     ? leaderboardEntries.findIndex((player) => player.rank === currentUserEntry.rank && player.name === currentUserEntry.name)
     : -1;
@@ -1547,8 +1548,8 @@ function LeaderboardPage({
     return leaderboardEntries.slice(startIndex, startIndex + 5);
   })();
   const visibleEntries = showMyPosition ? myPositionEntries : defaultEntries;
-  const showCurrentUserFooter = Boolean(currentUserEntry) && !showMyPosition;
-  const canShowMyPosition = Boolean(currentUserEntry);
+  const showCurrentUserFooter = Boolean(currentUserEntry) && !showMyPosition && !currentUserInTopTen;
+  const canShowMyPosition = Boolean(currentUserEntry) && !currentUserInTopTen;
 
   return (
     <section className="section leaderboard-screen">
