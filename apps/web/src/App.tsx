@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FreeMode, Scrollbar } from "swiper/modules";
+import { Swiper, SwiperSlide } from "swiper/react";
+import "swiper/css";
+import "swiper/css/free-mode";
+import "swiper/css/scrollbar";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -1137,10 +1142,6 @@ function HomePage({
 }) {
   const [coinModalOpen, setCoinModalOpen] = useState(false);
   const [homeLeaderboardScope, setHomeLeaderboardScope] = useState<"daily" | "weekly">("daily");
-  const gameGridRef = useRef<HTMLDivElement | null>(null);
-  const dragState = useRef({ lastTime: 0, lastX: 0, left: 0, startX: 0, velocity: 0 });
-  const momentumFrame = useRef(0);
-  const [isDraggingGames, setIsDraggingGames] = useState(false);
   const gameIcons: Record<GameId, typeof Gamepad2> = {
     "color-rush": Sparkles,
     memory: Brain,
@@ -1152,50 +1153,6 @@ function HomePage({
   const comingSoonGameIds: GameId[] = ["lucky-spin", "rocket-tap"];
   const playableGames = games.filter((game) => !comingSoonGameIds.includes(game.id));
   const homeLeaderboardEntries = homeLeaderboardScope === "daily" ? dailyLeaderboard : weeklyLeaderboard;
-
-  const startGameDrag = (clientX: number) => {
-    const grid = gameGridRef.current;
-    if (!grid) return;
-    window.cancelAnimationFrame(momentumFrame.current);
-    dragState.current = {
-      lastTime: window.performance.now(),
-      lastX: clientX,
-      left: grid.scrollLeft,
-      startX: clientX,
-      velocity: 0
-    };
-    setIsDraggingGames(true);
-  };
-
-  const moveGameDrag = (clientX: number) => {
-    const grid = gameGridRef.current;
-    if (!grid || !isDraggingGames) return;
-    const now = window.performance.now();
-    const deltaX = clientX - dragState.current.lastX;
-    const deltaTime = Math.max(16, now - dragState.current.lastTime);
-
-    dragState.current.velocity = deltaX / deltaTime;
-    dragState.current.lastX = clientX;
-    dragState.current.lastTime = now;
-    grid.scrollLeft = dragState.current.left - (clientX - dragState.current.startX);
-  };
-
-  const stopGameDrag = () => {
-    if (!isDraggingGames) return;
-    setIsDraggingGames(false);
-
-    const grid = gameGridRef.current;
-    if (!grid || Math.abs(dragState.current.velocity) < 0.02) return;
-
-    let velocity = dragState.current.velocity * -18;
-    const glide = () => {
-      if (!gameGridRef.current || Math.abs(velocity) < 0.08) return;
-      gameGridRef.current.scrollLeft += velocity;
-      velocity *= 0.92;
-      momentumFrame.current = window.requestAnimationFrame(glide);
-    };
-    momentumFrame.current = window.requestAnimationFrame(glide);
-  };
 
   return (
     <>
@@ -1216,32 +1173,39 @@ function HomePage({
           <h2>{text("home.games")}</h2>
           <span>{pointRules.dailyAttemptsPerGame} {text("home.attemptsPerDay")}</span>
         </div>
-        <div
-          className={isDraggingGames ? "game-grid dragging" : "game-grid"}
-          ref={gameGridRef}
-          onMouseDown={(event) => startGameDrag(event.clientX)}
-          onMouseLeave={stopGameDrag}
-          onMouseMove={(event) => moveGameDrag(event.clientX)}
-          onMouseUp={stopGameDrag}
-          onTouchStart={(event) => startGameDrag(event.touches[0]?.clientX ?? 0)}
-          onTouchMove={(event) => moveGameDrag(event.touches[0]?.clientX ?? 0)}
-          onTouchEnd={stopGameDrag}
+        <Swiper
+          className="game-grid"
+          freeMode={{
+            enabled: true,
+            momentum: true,
+            momentumBounce: false,
+            momentumRatio: 0.62,
+            momentumVelocityRatio: 0.72
+          }}
+          modules={[FreeMode, Scrollbar]}
+          resistanceRatio={0.5}
+          scrollbar={{ draggable: true, hide: false }}
+          slidesPerView="auto"
+          spaceBetween={12}
+          watchOverflow
         >
           {playableGames.map((game) => {
             const Icon = gameIcons[game.id];
             const attemptsLeft = attemptsLeftByGame[game.id] ?? pointRules.dailyAttemptsPerGame;
             return (
-              <article className="game-card" key={game.id}>
-                <span className="game-attempt-badge">{attemptsLeft} {text("home.attemptsLeft")}</span>
-                <div className="game-icon">
-                  <Icon size={24} />
-                </div>
-                <h3>{game.name}</h3>
-                <p>{text(`gameDesc.${game.id}`)}</p>
-                <button type="button" disabled={attemptsLeft <= 0} onClick={() => onSelectGame(game.id)}>
-                  {text("common.play")}
-                </button>
-              </article>
+              <SwiperSlide className="game-slide" key={game.id}>
+                <article className="game-card">
+                  <span className="game-attempt-badge">{attemptsLeft} {text("home.attemptsLeft")}</span>
+                  <div className="game-icon">
+                    <Icon size={24} />
+                  </div>
+                  <h3>{game.name}</h3>
+                  <p>{text(`gameDesc.${game.id}`)}</p>
+                  <button type="button" disabled={attemptsLeft <= 0} onClick={() => onSelectGame(game.id)}>
+                    {text("common.play")}
+                  </button>
+                </article>
+              </SwiperSlide>
             );
           })}
           {comingSoonGameIds.map((gameId) => {
@@ -1249,20 +1213,22 @@ function HomePage({
             if (!game) return null;
             const Icon = gameIcons[game.id];
             return (
-              <article className="game-card coming-soon-card" key={game.id}>
-                <span className="game-attempt-badge muted">{text("common.soon")}</span>
-                <div className="game-icon">
-                  <Icon size={24} />
-                </div>
-                <h3>{game.name}</h3>
-                <p>{text("home.comingSoon")}</p>
-                <button type="button" disabled>
-                  {text("common.soon")}
-                </button>
-              </article>
+              <SwiperSlide className="game-slide" key={game.id}>
+                <article className="game-card coming-soon-card">
+                  <span className="game-attempt-badge muted">{text("common.soon")}</span>
+                  <div className="game-icon">
+                    <Icon size={24} />
+                  </div>
+                  <h3>{game.name}</h3>
+                  <p>{text("home.comingSoon")}</p>
+                  <button type="button" disabled>
+                    {text("common.soon")}
+                  </button>
+                </article>
+              </SwiperSlide>
             );
           })}
-        </div>
+        </Swiper>
       </section>
 
       <section className="section split">

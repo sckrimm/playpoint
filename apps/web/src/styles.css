@@ -1018,6 +1018,13 @@ h3 {
   border-radius: 8px;
   color: #fff;
   background: #30a525;
+  font-size: 14px;
+}
+
+.hero-banner button svg {
+  flex: 0 0 auto;
+  width: clamp(14px, 3vw, 12px);
+  height: clamp(14px, 3vw, 12px);
 }
 
 .section {
@@ -1046,35 +1053,33 @@ h3 {
 }
 
 .game-grid {
-  display: grid;
-  grid-auto-columns: minmax(132px, 42%);
-  grid-auto-flow: column;
-  gap: 12px;
-  overflow-x: auto;
-  padding: 2px 2px 10px;
+  overflow: hidden;
+  padding: 2px 2px 20px;
   margin: 0 -2px;
-  scroll-padding-left: 2px;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
-  cursor: grab;
-  user-select: none;
-  touch-action: pan-x;
 }
 
-.game-grid.dragging {
-  cursor: grabbing;
-  scroll-behavior: auto;
-  scroll-snap-type: none;
+.game-slide {
+  width: max(132px, 42%);
+  height: auto;
 }
 
-.game-grid::-webkit-scrollbar {
+.game-grid .swiper-wrapper {
+  align-items: stretch;
+}
+
+.game-grid .swiper-scrollbar {
+  bottom: 3px;
+  left: 50%;
+  width: min(42%, 160px);
   height: 4px;
+  background: rgb(100 23 216 / 12%);
+  transform: translateX(-50%);
 }
 
-.game-grid::-webkit-scrollbar-thumb {
+.game-grid .swiper-scrollbar-drag {
   border-radius: 999px;
-  background: rgb(100 23 216 / 24%);
+  background: rgb(100 23 216 / 34%);
 }
 
 .game-card,
@@ -1095,10 +1100,10 @@ h3 {
   position: relative;
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-width: 0;
   min-height: 180px;
   padding: 12px;
-  scroll-snap-align: start;
 }
 
 .game-attempt-badge {
@@ -2549,15 +2554,21 @@ h3 {
   gap: 8px;
   margin-bottom: 16px;
   overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tabs button {
-  min-height: 38px;
-  padding: 0 14px;
+  /* min-height: 28px; */
+  padding: 6px 14px;
   border-radius: 8px;
   color: #6e607a;
   background: #eeeeee;
   white-space: nowrap;
+  font-size: 12px;
 }
 
 .tabs button.active {
@@ -2593,6 +2604,8 @@ h3 {
 }
 
 .reward-card {
+  display: flex;
+  flex-direction: column;
   padding: 12px;
 }
 
@@ -2644,18 +2657,29 @@ h3 {
 }
 
 .reward-card h3 {
+  display: -webkit-box;
+  min-height: 32px;
   margin-bottom: 4px;
+  overflow: hidden;
   font-size: 13px;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .reward-card p {
+  min-height: 14px;
   margin-bottom: 8px;
   color: #6e607a;
   font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reward-card strong {
   display: block;
+  margin-top: auto;
   margin-bottom: 10px;
   color: #6417d8;
 }
@@ -3819,7 +3843,11 @@ h3 {
   }
 
   .game-grid {
-    grid-auto-columns: minmax(156px, 24%);
+    padding-bottom: 20px;
+  }
+
+  .game-slide {
+    width: max(156px, 24%);
   }
 
   .rewards-grid {
