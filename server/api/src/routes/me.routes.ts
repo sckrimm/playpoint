@@ -14,56 +14,19 @@ function startOfToday() {
   return date;
 }
 
-function startOfWeek() {
-  const date = startOfToday();
-  const day = date.getDay() || 7;
-  date.setDate(date.getDate() - day + 1);
-  return date;
-}
-
-async function getRank(userId: string, since: Date) {
-  const scores = await prisma.score.findMany({
-    where: {
-      createdAt: {
-        gte: since
-      },
-      verificationStatus: {
-        not: "suspicious"
-      }
-    },
-    orderBy: [{ createdAt: "asc" }],
-    select: {
-      createdAt: true,
-      playPoints: true,
-      userId: true
-    },
+async function getRank(userId: string) {
+  const rankedUsers = await prisma.user.findMany({
+    orderBy: [{ totalPoints: "desc" }, { createdAt: "asc" }],
+    select: { id: true },
     take: 1000
   });
-
-  const players = new Map<string, { createdAt: Date; playPoints: number }>();
-  scores.forEach((score) => {
-    const existingPlayer = players.get(score.userId);
-    if (!existingPlayer) {
-      players.set(score.userId, {
-        createdAt: score.createdAt,
-        playPoints: score.playPoints
-      });
-      return;
-    }
-
-    existingPlayer.playPoints += score.playPoints;
-  });
-
-  const rankedPlayers = Array.from(players.entries()).sort(
-    ([, first], [, second]) => second.playPoints - first.playPoints || first.createdAt.getTime() - second.createdAt.getTime()
-  );
-  const index = rankedPlayers.findIndex(([rankedUserId]) => rankedUserId === userId);
+  const index = rankedUsers.findIndex((user) => user.id === userId);
   return index >= 0 ? index + 1 : null;
 }
 
 async function getMePayload(userId: string) {
   const today = startOfToday();
-  const [user, rewardClaims, gamesPlayed, dailyRank, weeklyRank, games, attemptsToday] = await Promise.all([
+  const [user, rewardClaims, gameHistory, gamesPlayed, dailyRank, weeklyRank, games, attemptsToday] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
@@ -95,9 +58,22 @@ async function getMePayload(userId: string) {
       },
       orderBy: { createdAt: "desc" }
     }),
+    prisma.score.findMany({
+      where: { userId },
+      include: {
+        game: {
+          select: {
+            slug: true,
+            title: true
+          }
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20
+    }),
     prisma.score.count({ where: { userId } }),
-    getRank(userId, today),
-    getRank(userId, startOfWeek()),
+    getRank(userId),
+    getRank(userId),
     prisma.game.findMany({
       where: { active: true },
       orderBy: { sortOrder: "asc" },
@@ -124,6 +100,14 @@ async function getMePayload(userId: string) {
 
   return {
     user,
+    gameHistory: gameHistory.map((score) => ({
+      id: score.id,
+      createdAt: score.createdAt,
+      gameSlug: score.game.slug,
+      gameTitle: score.game.title,
+      playPoints: score.playPoints,
+      rawScore: score.rawScore
+    })),
     stats: {
       dailyRank,
       gameAttempts: games.map((game) => {

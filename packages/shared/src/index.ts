@@ -1,4 +1,4 @@
-export type GameId = "color-rush" | "memory" | "aim-hit";
+export type GameId = "color-rush" | "memory" | "aim-hit" | "lucky-spin" | "puzzle-run" | "rocket-tap";
 
 export type Game = {
   id: GameId;
@@ -97,6 +97,24 @@ export const games: Game[] = [
     name: "Aim Hit",
     icon: "/assets/aim-hit-icon.png",
     pointRateLabel: "Accuracy bonus"
+  },
+  {
+    id: "lucky-spin",
+    name: "Lucky Spin",
+    icon: "/assets/lucky-spin-icon.png",
+    pointRateLabel: "Timing bonus"
+  },
+  {
+    id: "puzzle-run",
+    name: "Puzzle Run",
+    icon: "/assets/puzzle-run-icon.png",
+    pointRateLabel: "Pattern bonus"
+  },
+  {
+    id: "rocket-tap",
+    name: "Rocket Tap",
+    icon: "/assets/rocket-tap-icon.png",
+    pointRateLabel: "Speed bonus"
   }
 ];
 

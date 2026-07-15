@@ -51,6 +51,7 @@ import { ApiError, type GameAttemptStart, playpointApi, toReward } from "./api";
 import { ColorRushGame } from "./games/color-rush/ColorRushGame";
 import { getText, type Language, type TextGetter } from "./i18n";
 import { MemoryGame } from "./games/memory/MemoryGame";
+import { PuzzleRunGame } from "./games/puzzle-run/PuzzleRunGame";
 
 type Route =
   | "splash"
@@ -120,6 +121,26 @@ function AnimatedPoints({
   );
 }
 
+function PointsLabel({
+  value,
+  prefix = "",
+  animated = false,
+  className = ""
+}: {
+  value: number;
+  prefix?: string;
+  animated?: boolean;
+  className?: string;
+}) {
+  return (
+    <span className={`points-label${className ? ` ${className}` : ""}`}>
+      <Sparkles size={14} />
+      {prefix}
+      {animated ? <AnimatedPoints value={value} /> : formatter.format(value)}
+    </span>
+  );
+}
+
 const coinPackages = [
   { id: "starter", coins: 14, price: "₾1.99", label: "Starter" },
   { id: "boost", coins: 30, price: "₾3.99", label: "Boost" },
@@ -139,6 +160,12 @@ type RankedLeaderboardEntry = {
 };
 
 type AttemptsLeftByGame = Record<GameId, number>;
+
+type GameHistoryItem = Awaited<ReturnType<typeof playpointApi.getMe>>["gameHistory"][number];
+
+function createDefaultAttempts(): AttemptsLeftByGame {
+  return Object.fromEntries(games.map((game) => [game.id, pointRules.dailyAttemptsPerGame])) as AttemptsLeftByGame;
+}
 
 const screenMap: Record<Route, string> = {
   splash: "prototype/screens/splash",
@@ -210,11 +237,8 @@ export function App() {
   const [userPoints, setUserPoints] = useState<number>(0);
   const [userCoins, setUserCoins] = useState<number>(14);
   const [gamesPlayed, setGamesPlayed] = useState<number>(0);
-  const [attemptsLeftByGame, setAttemptsLeftByGame] = useState<AttemptsLeftByGame>({
-    "aim-hit": pointRules.dailyAttemptsPerGame,
-    "color-rush": pointRules.dailyAttemptsPerGame,
-    memory: pointRules.dailyAttemptsPerGame
-  });
+  const [gameHistory, setGameHistory] = useState<GameHistoryItem[]>([]);
+  const [attemptsLeftByGame, setAttemptsLeftByGame] = useState<AttemptsLeftByGame>(() => createDefaultAttempts());
   const [dailyRank, setDailyRank] = useState<number | null>(null);
   const [weeklyRank, setWeeklyRank] = useState<number | null>(null);
   const [language, setLanguage] = useState<Language>("ka");
@@ -254,6 +278,7 @@ export function App() {
     setUserPoints(payload.user.totalPoints);
     setUserCoins(payload.user.coins);
     setGamesPlayed(payload.stats.gamesPlayed);
+    setGameHistory(payload.gameHistory);
     setDailyRank(payload.stats.dailyRank);
     setWeeklyRank(payload.stats.weeklyRank);
     setAttemptsLeftByGame((currentAttempts) => {
@@ -318,9 +343,12 @@ export function App() {
   };
 
   const requestOtp = async () => {
+    const normalizedPhoneValue = phoneValue.replace(/\D/g, "");
+    if (normalizedPhoneValue.length !== 9) return;
+
     try {
       setApiBusy(true);
-      const payload = await playpointApi.requestOtp(phoneValue);
+      const payload = await playpointApi.requestOtp(normalizedPhoneValue);
       setVerifiedPhone(payload.phone);
       setDevOtpCode(payload.devCode ?? "");
       setOtpExpiresInSeconds(payload.expiresInSeconds);
@@ -464,11 +492,8 @@ export function App() {
     setUserPoints(0);
     setUserCoins(14);
     setGamesPlayed(0);
-    setAttemptsLeftByGame({
-      "aim-hit": pointRules.dailyAttemptsPerGame,
-      "color-rush": pointRules.dailyAttemptsPerGame,
-      memory: pointRules.dailyAttemptsPerGame
-    });
+    setGameHistory([]);
+    setAttemptsLeftByGame(createDefaultAttempts());
     setDailyRank(null);
     setWeeklyRank(null);
     setPurchasedRewards([]);
@@ -512,7 +537,7 @@ export function App() {
             <PhonePage
               disabled={apiBusy}
               phoneValue={phoneValue}
-              setPhoneValue={setPhoneValue}
+              setPhoneValue={(value) => setPhoneValue(value.replace(/\D/g, "").slice(0, 9))}
               text={text}
               onRequestOtp={requestOtp}
             />
@@ -542,8 +567,9 @@ export function App() {
           ) : null}
           {route === "home" ? (
             <HomePage
-              leaderboardEntries={rankedLeaderboard}
               attemptsLeftByGame={attemptsLeftByGame}
+              dailyLeaderboard={dailyLeaderboard}
+              weeklyLeaderboard={weeklyLeaderboard}
               purchasedRewards={purchasedRewards}
               rewardCatalog={rewardCatalog}
               text={text}
@@ -623,6 +649,7 @@ export function App() {
               userPoints={userPoints}
               userRank={userRank}
               gamesPlayed={gamesPlayed}
+              gameHistory={gameHistory}
               lastGameResult={lastGameResult}
               onNavigate={navigate}
               onLogout={restartRegistration}
@@ -681,6 +708,7 @@ function TopBar({
         <p className="eyebrow">{screenMap[route]}</p>
         <h1>{title}</h1>
       </div>
+      <DesktopNav route={route} text={text} onNavigate={onNavigate} />
       <div className="topbar-wallet">
         <button className="coin-pill" type="button" onClick={() => onNavigate("profile")}>
           <Coins size={18} />
@@ -688,28 +716,55 @@ function TopBar({
         </button>
         <button className="points-pill" type="button" onClick={() => onNavigate("profile")}>
           <Sparkles size={18} />
-          <AnimatedPoints value={userPoints} suffix=" pts" />
+          <AnimatedPoints value={userPoints} />
         </button>
       </div>
     </header>
   );
 }
 
-function BottomNav({ route, text, onNavigate }: { route: Route; text: TextGetter; onNavigate: (route: Route) => void }) {
-  const items = [
+function getNavItems(text: TextGetter) {
+  return [
     { route: "home" as const, label: text("nav.home"), icon: Home },
     { route: "leaderboard-daily" as const, label: text("nav.ranks"), icon: Medal },
     { route: "rewards" as const, label: text("nav.rewards"), icon: Gift },
     { route: "profile" as const, label: text("nav.me"), icon: User }
   ];
+}
+
+function isNavItemActive(route: Route, itemRoute: ReturnType<typeof getNavItems>[number]["route"]) {
+  return route === itemRoute || (itemRoute === "leaderboard-daily" && route === "leaderboard-weekly");
+}
+
+function DesktopNav({ route, text, onNavigate }: { route: Route; text: TextGetter; onNavigate: (route: Route) => void }) {
+  return (
+    <nav className="desktop-nav" aria-label="Primary navigation">
+      {getNavItems(text).map((item) => {
+        const Icon = item.icon;
+        return (
+          <button
+            className={isNavItemActive(route, item.route) ? "active" : ""}
+            key={item.route}
+            type="button"
+            onClick={() => onNavigate(item.route)}
+          >
+            <Icon size={17} />
+            {item.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+function BottomNav({ route, text, onNavigate }: { route: Route; text: TextGetter; onNavigate: (route: Route) => void }) {
+  const items = getNavItems(text);
 
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
       {items.map((item) => {
         const Icon = item.icon;
-        const active =
-          route === item.route ||
-          (item.route === "leaderboard-daily" && route === "leaderboard-weekly");
+        const active = isNavItemActive(route, item.route);
         return (
           <button
             className={active ? "active" : ""}
@@ -790,13 +845,13 @@ function PhonePage({
             <input
               className="phone-number-input"
               inputMode="tel"
-              maxLength={12}
+              maxLength={9}
               placeholder="5XX XX XX XX"
               value={phoneValue}
               onChange={(event) => setPhoneValue(event.target.value)}
             />
           </div>
-          <button className="primary-action" type="button" disabled={disabled || phoneValue.trim().length < 6} onClick={onRequestOtp}>
+          <button className="primary-action" type="button" disabled={disabled || phoneValue.length !== 9} onClick={onRequestOtp}>
             {text("phone.continue")}
           </button>
         </div>
@@ -848,11 +903,13 @@ function OtpPage({
   const digits = otpValue.padEnd(otpLength, " ").slice(0, otpLength).split("");
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [secondsLeft, setSecondsLeft] = useState(expiresInSeconds);
+  const hasSubmittedOtp = useRef(false);
   const minutes = Math.floor(secondsLeft / 60).toString().padStart(2, "0");
   const seconds = (secondsLeft % 60).toString().padStart(2, "0");
 
   useEffect(() => {
     setSecondsLeft(expiresInSeconds);
+    hasSubmittedOtp.current = false;
   }, [expiresInSeconds, devOtpCode]);
 
   useEffect(() => {
@@ -880,6 +937,12 @@ function OtpPage({
       inputRefs.current[index + 1]?.focus();
     }
   };
+
+  useEffect(() => {
+    if (otpValue.length !== otpLength || disabled || hasSubmittedOtp.current) return;
+    hasSubmittedOtp.current = true;
+    onVerifyOtp();
+  }, [disabled, onVerifyOtp, otpValue]);
 
   return (
     <section className="onboarding-page otp-page">
@@ -941,9 +1004,6 @@ function OtpPage({
           </button>
         </div>
 
-        <button className="primary-action" type="button" disabled={disabled || otpValue.length < otpLength} onClick={onVerifyOtp}>
-          {text("otp.confirm")}
-        </button>
         <p className="otp-help">{text("otp.help")}</p>
       </main>
     </section>
@@ -1049,8 +1109,8 @@ function ProfileSetupPage({
 }
 
 function HomePage({
-  leaderboardEntries,
   attemptsLeftByGame,
+  dailyLeaderboard,
   purchasedRewards,
   rewardCatalog,
   text,
@@ -1059,10 +1119,11 @@ function HomePage({
   onBuyCoins,
   onClaimReward,
   onNavigate,
-  onSelectGame
+  onSelectGame,
+  weeklyLeaderboard
 }: {
-  leaderboardEntries: RankedLeaderboardEntry[];
   attemptsLeftByGame: AttemptsLeftByGame;
+  dailyLeaderboard: RankedLeaderboardEntry[];
   purchasedRewards: Reward[];
   rewardCatalog: Reward[];
   text: TextGetter;
@@ -1072,12 +1133,68 @@ function HomePage({
   onClaimReward: (reward: Reward) => Promise<boolean>;
   onNavigate: (route: Route) => void;
   onSelectGame: (gameId: GameId) => void;
+  weeklyLeaderboard: RankedLeaderboardEntry[];
 }) {
   const [coinModalOpen, setCoinModalOpen] = useState(false);
+  const [homeLeaderboardScope, setHomeLeaderboardScope] = useState<"daily" | "weekly">("daily");
+  const gameGridRef = useRef<HTMLDivElement | null>(null);
+  const dragState = useRef({ lastTime: 0, lastX: 0, left: 0, startX: 0, velocity: 0 });
+  const momentumFrame = useRef(0);
+  const [isDraggingGames, setIsDraggingGames] = useState(false);
   const gameIcons: Record<GameId, typeof Gamepad2> = {
     "color-rush": Sparkles,
     memory: Brain,
-    "aim-hit": Target
+    "aim-hit": Target,
+    "lucky-spin": RotateCcw,
+    "puzzle-run": Brain,
+    "rocket-tap": Target
+  };
+  const comingSoonGameIds: GameId[] = ["lucky-spin", "rocket-tap"];
+  const playableGames = games.filter((game) => !comingSoonGameIds.includes(game.id));
+  const homeLeaderboardEntries = homeLeaderboardScope === "daily" ? dailyLeaderboard : weeklyLeaderboard;
+
+  const startGameDrag = (clientX: number) => {
+    const grid = gameGridRef.current;
+    if (!grid) return;
+    window.cancelAnimationFrame(momentumFrame.current);
+    dragState.current = {
+      lastTime: window.performance.now(),
+      lastX: clientX,
+      left: grid.scrollLeft,
+      startX: clientX,
+      velocity: 0
+    };
+    setIsDraggingGames(true);
+  };
+
+  const moveGameDrag = (clientX: number) => {
+    const grid = gameGridRef.current;
+    if (!grid || !isDraggingGames) return;
+    const now = window.performance.now();
+    const deltaX = clientX - dragState.current.lastX;
+    const deltaTime = Math.max(16, now - dragState.current.lastTime);
+
+    dragState.current.velocity = deltaX / deltaTime;
+    dragState.current.lastX = clientX;
+    dragState.current.lastTime = now;
+    grid.scrollLeft = dragState.current.left - (clientX - dragState.current.startX);
+  };
+
+  const stopGameDrag = () => {
+    if (!isDraggingGames) return;
+    setIsDraggingGames(false);
+
+    const grid = gameGridRef.current;
+    if (!grid || Math.abs(dragState.current.velocity) < 0.02) return;
+
+    let velocity = dragState.current.velocity * -18;
+    const glide = () => {
+      if (!gameGridRef.current || Math.abs(velocity) < 0.08) return;
+      gameGridRef.current.scrollLeft += velocity;
+      velocity *= 0.92;
+      momentumFrame.current = window.requestAnimationFrame(glide);
+    };
+    momentumFrame.current = window.requestAnimationFrame(glide);
   };
 
   return (
@@ -1099,22 +1216,50 @@ function HomePage({
           <h2>{text("home.games")}</h2>
           <span>{pointRules.dailyAttemptsPerGame} {text("home.attemptsPerDay")}</span>
         </div>
-        <div className="game-grid">
-          {games.map((game) => {
+        <div
+          className={isDraggingGames ? "game-grid dragging" : "game-grid"}
+          ref={gameGridRef}
+          onMouseDown={(event) => startGameDrag(event.clientX)}
+          onMouseLeave={stopGameDrag}
+          onMouseMove={(event) => moveGameDrag(event.clientX)}
+          onMouseUp={stopGameDrag}
+          onTouchStart={(event) => startGameDrag(event.touches[0]?.clientX ?? 0)}
+          onTouchMove={(event) => moveGameDrag(event.touches[0]?.clientX ?? 0)}
+          onTouchEnd={stopGameDrag}
+        >
+          {playableGames.map((game) => {
             const Icon = gameIcons[game.id];
             const attemptsLeft = attemptsLeftByGame[game.id] ?? pointRules.dailyAttemptsPerGame;
             return (
-            <article className="game-card" key={game.id}>
-              <span className="game-attempt-badge">{attemptsLeft} ცდა</span>
-              <div className="game-icon">
-                <Icon size={24} />
-              </div>
-              <h3>{game.name}</h3>
-              <p>{game.pointRateLabel}</p>
-              <button type="button" disabled={attemptsLeft <= 0} onClick={() => onSelectGame(game.id)}>
-                {text("common.play")}
-              </button>
-            </article>
+              <article className="game-card" key={game.id}>
+                <span className="game-attempt-badge">{attemptsLeft} {text("home.attemptsLeft")}</span>
+                <div className="game-icon">
+                  <Icon size={24} />
+                </div>
+                <h3>{game.name}</h3>
+                <p>{text(`gameDesc.${game.id}`)}</p>
+                <button type="button" disabled={attemptsLeft <= 0} onClick={() => onSelectGame(game.id)}>
+                  {text("common.play")}
+                </button>
+              </article>
+            );
+          })}
+          {comingSoonGameIds.map((gameId) => {
+            const game = games.find((item) => item.id === gameId);
+            if (!game) return null;
+            const Icon = gameIcons[game.id];
+            return (
+              <article className="game-card coming-soon-card" key={game.id}>
+                <span className="game-attempt-badge muted">{text("common.soon")}</span>
+                <div className="game-icon">
+                  <Icon size={24} />
+                </div>
+                <h3>{game.name}</h3>
+                <p>{text("home.comingSoon")}</p>
+                <button type="button" disabled>
+                  {text("common.soon")}
+                </button>
+              </article>
             );
           })}
         </div>
@@ -1124,9 +1269,25 @@ function HomePage({
         <article className="panel panel-clickable" onClick={() => onNavigate("leaderboard-daily")}>
           <div className="panel-title">
             <Trophy size={20} />
-            <h2>{text("home.dailyRanks")}</h2>
+            <h2>{text("route.leaderboard")}</h2>
           </div>
-          <LeaderboardList entries={leaderboardEntries} limit={3} />
+          <div className="tabs panel-tabs" onClick={(event) => event.stopPropagation()}>
+            <button
+              className={homeLeaderboardScope === "daily" ? "active" : ""}
+              type="button"
+              onClick={() => setHomeLeaderboardScope("daily")}
+            >
+              {text("leaderboard.daily")}
+            </button>
+            <button
+              className={homeLeaderboardScope === "weekly" ? "active" : ""}
+              type="button"
+              onClick={() => setHomeLeaderboardScope("weekly")}
+            >
+              {text("leaderboard.weekly")}
+            </button>
+          </div>
+          <LeaderboardList entries={homeLeaderboardEntries} limit={3} />
         </article>
 
         <article className="panel panel-clickable" onClick={() => onNavigate("rewards")}>
@@ -1272,6 +1433,7 @@ function GameFramePage({
   onFinish: (result: GameResult) => void | Promise<void>;
 }) {
   const selectedGame = games.find((game) => game.id === selectedGameId) || games[2];
+  const selectedGameComingSoon = selectedGameId === "lucky-spin" || selectedGameId === "rocket-tap";
 
   return (
     <section className="game-frame">
@@ -1280,7 +1442,7 @@ function GameFramePage({
           <ArrowLeft size={20} />
         </button>
         <strong>{selectedGame.name}</strong>
-        <span>{selectedGameId === "aim-hit" || selectedGameId === "memory" || selectedGameId === "color-rush" ? "10s" : "Soon"}</span>
+        <span>{selectedGameComingSoon ? text("common.soon") : "10s"}</span>
       </div>
       {selectedGameId === "aim-hit" ? (
         <AimHitGame language={language} onFinish={onFinish} />
@@ -1288,6 +1450,8 @@ function GameFramePage({
         <MemoryGame language={language} onFinish={onFinish} />
       ) : selectedGameId === "color-rush" ? (
         <ColorRushGame language={language} onFinish={onFinish} />
+      ) : selectedGameId === "puzzle-run" ? (
+        <PuzzleRunGame language={language} onFinish={onFinish} />
       ) : (
         <>
           <div className="play-area">
@@ -1332,7 +1496,7 @@ function ScorePopupPage({
         </div>
         <div>
           <span>{text("score.pointsEarned")}</span>
-          <strong>+{result.playPoints}</strong>
+          <strong><PointsLabel className="score-earned-points" value={result.playPoints} prefix="+" /></strong>
         </div>
       </div>
       <div className="score-breakdown">
@@ -1343,7 +1507,7 @@ function ScorePopupPage({
       </div>
       <div className="rank-update">{text("score.globalRank")} #{userRank}</div>
       <div className="score-total-points">
-        <AnimatedPoints value={userPoints} suffix=" pts" /> {text("score.totalBalance")}
+        <PointsLabel animated value={userPoints} /> {text("score.totalBalance")}
       </div>
       <button className="primary-action" type="button" onClick={() => onPlayAgain(result.gameId)}>
         <RotateCcw size={18} />
@@ -1438,7 +1602,7 @@ function LeaderboardPage({
               <strong>{player.rank}</strong>
             </div>
             <h3>{player.name}</h3>
-            <p>{formatter.format(player.points)}</p>
+            <p><PointsLabel value={player.points} /></p>
           </article>
         ))}
       </section>
@@ -1500,10 +1664,6 @@ function RewardsPage({
 
   return (
     <section className="section">
-      <div className="section-heading">
-        <h2>{text("rewards.title")}</h2>
-        <span><AnimatedPoints value={userPoints} suffix=" pts" /></span>
-      </div>
       <div className="tabs">
         <button className={selectedCategory === "all" ? "active" : ""} type="button" onClick={() => setSelectedCategory("all")}>{text("common.all")}</button>
         <button className={selectedCategory === "food" ? "active" : ""} type="button" onClick={() => setSelectedCategory("food")}>{text("common.food")}</button>
@@ -1526,7 +1686,7 @@ function RewardsPage({
             </div>
             <h3>{reward.title}</h3>
             <p>{reward.brand}</p>
-            <strong>{reward.points} pts</strong>
+            <strong><PointsLabel value={reward.points} /></strong>
             <button
               type="button"
               disabled={rewardOwned || rewardOutOfStock || !rewardAffordable}
@@ -1555,7 +1715,7 @@ function RewardsPage({
             </div>
             <h2 id="claim-modal-title">{text("rewards.confirmTitle")}</h2>
             <p>
-              {selectedReward.title} {text("rewards.confirmCost")} <strong>{formatter.format(selectedReward.points)} pts</strong>.
+              {selectedReward.title} {text("rewards.confirmCost")} <strong><PointsLabel value={selectedReward.points} /></strong>.
             </p>
             {alreadyPurchased ? <span className="claim-warning">{text("rewards.alreadyPurchased")}</span> : null}
             {!alreadyPurchased && userPoints < selectedReward.points ? (
@@ -1599,6 +1759,7 @@ function ProfilePage({
   userPoints,
   userRank,
   gamesPlayed,
+  gameHistory,
   lastGameResult,
   onNavigate,
   onLogout
@@ -1614,6 +1775,7 @@ function ProfilePage({
   userPoints: number;
   userRank: number;
   gamesPlayed: number;
+  gameHistory: GameHistoryItem[];
   lastGameResult: GameResult;
   onNavigate: (route: Route) => void;
   onLogout: () => void;
@@ -1621,13 +1783,27 @@ function ProfilePage({
   const [showAllPrizes, setShowAllPrizes] = useState(false);
   const [showFullHistory, setShowFullHistory] = useState(false);
   const visibleRewards = showAllPrizes ? purchasedRewards : purchasedRewards.slice(0, 2);
-  const historyItems = [
-    { icon: <BadgeCheck size={20} />, title: "Daily Trivia", time: text("profile.today"), points: "+50 pts", result: text("profile.won"), tone: "positive" as const },
-    { icon: <Gamepad2 size={20} />, title: "Speed Clicker", time: text("profile.yesterday"), points: "+120 pts", result: text("profile.newRecord"), tone: "positive" as const },
-    { icon: <Brain size={20} />, title: "Memory Match", time: "15 May, 12:00", points: "-10 pts", result: text("profile.entryFee"), tone: "negative" as const },
-    { icon: <Target size={20} />, title: "Aim Hit", time: "14 May, 21:30", points: "+80 pts", result: text("profile.won"), tone: "positive" as const },
-    { icon: <Sparkles size={20} />, title: "Color Rush", time: "13 May, 17:15", points: "+65 pts", result: text("profile.won"), tone: "positive" as const }
-  ];
+  const gameHistoryIcons: Record<GameId, ReactNode> = {
+    "aim-hit": <Target size={20} />,
+    "color-rush": <Sparkles size={20} />,
+    memory: <Brain size={20} />,
+    "lucky-spin": <RotateCcw size={20} />,
+    "puzzle-run": <Brain size={20} />,
+    "rocket-tap": <Target size={20} />
+  };
+  const historyItems = gameHistory.map((historyItem) => ({
+    icon: gameHistoryIcons[historyItem.gameSlug] ?? <Gamepad2 size={20} />,
+    title: historyItem.gameTitle,
+    time: new Intl.DateTimeFormat(language === "ka" ? "ka-GE" : "en-US", {
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      month: "short"
+    }).format(new Date(historyItem.createdAt)),
+    points: historyItem.playPoints,
+    result: formatter.format(historyItem.rawScore),
+    tone: "positive" as const
+  }));
   const visibleHistoryItems = showFullHistory ? historyItems : historyItems.slice(0, 3);
 
   return (
@@ -1686,7 +1862,7 @@ function ProfilePage({
               <h3><AnimatedPoints value={userPoints} /></h3>
               <span>
                 <TrendingUp size={16} />
-                +{lastGameResult.playPoints} {text("profile.lastGame")}
+                <PointsLabel value={lastGameResult.playPoints} prefix="+" /> {text("profile.lastGame")}
               </span>
             </div>
             <div className="balance-coin-row">
@@ -1728,7 +1904,11 @@ function ProfilePage({
                 key={reward.id}
                 rewardId={reward.id}
                 title={reward.title}
-                meta={`${reward.brand} • ${formatter.format(reward.points)} pts`}
+                meta={
+                  <>
+                    {reward.brand} • <PointsLabel value={reward.points} />
+                  </>
+                }
                 status={text("common.active")}
               />
             ))
@@ -1744,7 +1924,7 @@ function ProfilePage({
       <section className="profile-section-block">
         <h3>{text("profile.gameHistory")}</h3>
         <div className="history-card">
-          {visibleHistoryItems.map((historyItem) => (
+          {visibleHistoryItems.length > 0 ? visibleHistoryItems.map((historyItem) => (
             <HistoryItem
               icon={historyItem.icon}
               key={`${historyItem.title}-${historyItem.time}`}
@@ -1754,11 +1934,18 @@ function ProfilePage({
               result={historyItem.result}
               tone={historyItem.tone}
             />
-          ))}
+          )) : (
+            <div className="profile-empty-state">
+              <Gamepad2 size={22} />
+              <span>{text("profile.emptyHistory")}</span>
+            </div>
+          )}
         </div>
-        <button className="more-button" type="button" onClick={() => setShowFullHistory((value) => !value)}>
-          {showFullHistory ? text("leaderboard.less") : text("leaderboard.more")}
-        </button>
+        {historyItems.length > 3 ? (
+          <button className="more-button" type="button" onClick={() => setShowFullHistory((value) => !value)}>
+            {showFullHistory ? text("leaderboard.less") : text("leaderboard.more")}
+          </button>
+        ) : null}
       </section>
 
       <section className="profile-logout-section">
@@ -1810,7 +1997,7 @@ function EditProfilePage({
           </button>
           <h1>{text("edit.title")}</h1>
         </div>
-        <span><AnimatedPoints value={userPoints} suffix=" pts" /></span>
+        <span><PointsLabel animated value={userPoints} /></span>
       </header>
 
       <main className="edit-profile-main">
@@ -1887,7 +2074,7 @@ function ProfileRewardItem({
 }: {
   icon: ReactNode;
   title: string;
-  meta: string;
+  meta: ReactNode;
   status: string;
   rewardId?: string;
   active?: boolean;
@@ -1917,7 +2104,7 @@ function HistoryItem({
   icon: ReactNode;
   title: string;
   time: string;
-  points: string;
+  points: number;
   result: string;
   tone: "positive" | "negative";
 }) {
@@ -1929,7 +2116,9 @@ function HistoryItem({
         <p>{time}</p>
       </div>
       <div className="history-score">
-        <strong className={tone}>{points}</strong>
+        <strong className={tone}>
+          <PointsLabel value={Math.abs(points)} prefix={points >= 0 ? "+" : "-"} />
+        </strong>
         <span>{result}</span>
       </div>
     </article>
@@ -2001,7 +2190,7 @@ function LeaderboardList({
           <span className="rank-copy">
             <b>{player.name}</b>
           </span>
-          <em>{formatter.format(player.points)}</em>
+          <em><PointsLabel value={player.points} /></em>
         </div>
       ))}
     </div>
@@ -2042,7 +2231,7 @@ function RewardList({
             <b>{reward.title}</b>
             <small>
               {reward.brand}
-              <em>{reward.points} pts</em>
+              <em><PointsLabel value={reward.points} /></em>
             </small>
           </span>
           <button

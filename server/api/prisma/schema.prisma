@@ -56,6 +56,11 @@ enum RewardClaimStatus {
   delivered
 }
 
+enum PointBonusReason {
+  registration
+  daily_login
+}
+
 model User {
   id             String          @id @default(cuid())
   phone          String          @unique
@@ -70,10 +75,25 @@ model User {
   sessions       UserSession[]
   attempts       GameAttempt[]
   scores         Score[]
+  pointBonuses   PointBonus[]
   rewardClaims   RewardClaim[]
   analyticsEvents AnalyticsEvent[]
 
   @@index([role])
+}
+
+model PointBonus {
+  id        String           @id @default(cuid())
+  awardKey  String
+  points    Int
+  reason    PointBonusReason
+  awardedAt DateTime         @default(now())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, awardKey])
+  @@index([awardedAt])
+  @@index([userId, awardedAt])
 }
 
 model OtpCode {

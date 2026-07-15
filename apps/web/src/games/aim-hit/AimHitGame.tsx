@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Target, Zap } from "lucide-react";
-import { aimHitRules, calculatePlayPoints, type GameResult } from "@playpoint/shared";
+import { aimHitRules, calculatePlayPoints, type GameId, type GameResult } from "@playpoint/shared";
 import { getText, type Language } from "../../i18n";
 
 type TargetPosition = {
@@ -10,6 +10,7 @@ type TargetPosition = {
 };
 
 type AimHitGameProps = {
+  gameId?: GameId;
   language: Language;
   onFinish: (result: GameResult) => void;
 };
@@ -22,7 +23,7 @@ function createTarget(): TargetPosition {
   };
 }
 
-export function AimHitGame({ language, onFinish }: AimHitGameProps) {
+export function AimHitGame({ gameId = "aim-hit", language, onFinish }: AimHitGameProps) {
   const text = (key: string) => getText(language, key);
   const [timeLeft, setTimeLeft] = useState<number>(aimHitRules.durationSeconds);
   const [target, setTarget] = useState<TargetPosition>(() => createTarget());
@@ -66,7 +67,7 @@ export function AimHitGame({ language, onFinish }: AimHitGameProps) {
         setFinished(true);
         const result = resultRef.current;
         onFinish({
-          gameId: "aim-hit",
+          gameId,
           score: result.score,
           playPoints: calculatePlayPoints(result.score),
           durationSeconds: aimHitRules.durationSeconds,
@@ -79,7 +80,7 @@ export function AimHitGame({ language, onFinish }: AimHitGameProps) {
     }, 100);
 
     return () => window.clearInterval(timer);
-  }, [finished, onFinish, playing]);
+  }, [finished, gameId, onFinish, playing]);
 
   const startGame = () => {
     setTimeLeft(aimHitRules.durationSeconds);

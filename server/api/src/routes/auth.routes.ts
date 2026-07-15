@@ -27,6 +27,10 @@ function defaultDisplayName(phone: string) {
   return `Player ${phone.slice(-4)}`;
 }
 
+function bonusDateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
 export function registerAuthRoutes(app: FastifyInstance) {
   app.post("/auth/request-otp", async (request, reply) => {
     const parsed = requestOtpSchema.safeParse(request.body);
@@ -98,7 +102,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
         if (userWithName) return "DISPLAY_NAME_TAKEN" as const;
       }
 
-      const user = existingUser
+      let user = existingUser
         ? await tx.user.update({
             where: { id: existingUser.id },
             data: parsed.data.displayName ? { displayName: parsed.data.displayName } : {}
@@ -111,6 +115,48 @@ export function registerAuthRoutes(app: FastifyInstance) {
               coins: 14
             }
           });
+
+      if (isNewUser) {
+        await tx.pointBonus.create({
+          data: {
+            awardKey: "registration",
+            points: pointRules.registrationBonus,
+            reason: "registration",
+            userId: user.id
+          }
+        });
+      } else {
+        const dailyAwardKey = `daily-login:${bonusDateKey()}`;
+        const dailyBonus = await tx.pointBonus.findUnique({
+          where: {
+            userId_awardKey: {
+              awardKey: dailyAwardKey,
+              userId: user.id
+            }
+          },
+          select: { id: true }
+        });
+
+        if (!dailyBonus) {
+          await tx.pointBonus.create({
+            data: {
+              awardKey: dailyAwardKey,
+              points: pointRules.dailyLoginBonus,
+              reason: "daily_login",
+              userId: user.id
+            }
+          });
+
+          user = await tx.user.update({
+            where: { id: user.id },
+            data: {
+              totalPoints: {
+                increment: pointRules.dailyLoginBonus
+              }
+            }
+          });
+        }
+      }
 
       await tx.otpCode.update({
         where: { id: otp.id },

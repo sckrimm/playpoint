@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brain, CheckCircle2, Play, Sparkles } from "lucide-react";
-import { calculatePlayPoints, memoryRules, type GameResult } from "@playpoint/shared";
+import { calculatePlayPoints, memoryRules, type GameId, type GameResult } from "@playpoint/shared";
 import { getText, type Language } from "../../i18n";
 
 type MemoryCard = {
@@ -9,6 +9,7 @@ type MemoryCard = {
 };
 
 type MemoryGameProps = {
+  gameId?: GameId;
   language: Language;
   onFinish: (result: GameResult) => void;
 };
@@ -20,7 +21,7 @@ function createDeck(): MemoryCard[] {
   })).sort(() => Math.random() - 0.5);
 }
 
-export function MemoryGame({ language, onFinish }: MemoryGameProps) {
+export function MemoryGame({ gameId = "memory", language, onFinish }: MemoryGameProps) {
   const text = (key: string) => getText(language, key);
   const [deck, setDeck] = useState<MemoryCard[]>(() => createDeck());
   const [timeLeft, setTimeLeft] = useState<number>(memoryRules.durationSeconds);
@@ -54,7 +55,7 @@ export function MemoryGame({ language, onFinish }: MemoryGameProps) {
     setFinished(true);
     const result = resultRef.current;
     onFinish({
-      gameId: "memory",
+      gameId,
       score: result.score,
       playPoints: calculatePlayPoints(result.score),
       durationSeconds: memoryRules.durationSeconds,
@@ -63,7 +64,7 @@ export function MemoryGame({ language, onFinish }: MemoryGameProps) {
       accuracy: result.accuracy,
       maxCombo: result.maxCombo
     });
-  }, [finished, onFinish]);
+  }, [finished, gameId, onFinish]);
 
   useEffect(() => {
     if (!playing || finished) return;

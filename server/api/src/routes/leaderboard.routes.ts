@@ -1,114 +1,34 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db/prisma";
 
-function startOfToday() {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function startOfWeek() {
-  const date = startOfToday();
-  const day = date.getDay() || 7;
-  date.setDate(date.getDate() - day + 1);
-  return date;
-}
-
-async function getLeaderboard(since: Date) {
-  const scores = await prisma.score.findMany({
-    where: {
-      createdAt: {
-        gte: since
-      },
-      verificationStatus: {
-        not: "suspicious"
-      }
+async function getLeaderboard() {
+  const users = await prisma.user.findMany({
+    orderBy: [{ totalPoints: "desc" }, { createdAt: "asc" }],
+    select: {
+      avatarUrl: true,
+      createdAt: true,
+      displayName: true,
+      id: true,
+      totalPoints: true
     },
-    orderBy: [{ createdAt: "asc" }],
-    include: {
-      game: {
-        select: {
-          title: true,
-          slug: true
-        }
-      },
-      user: {
-        select: {
-          id: true,
-          displayName: true,
-          avatarUrl: true
-        }
-      }
-    },
-    take: 1000
+    take: 100
   });
 
-  const players = new Map<
-    string,
-    {
-      avatarUrl: string | null;
-      createdAt: Date;
-      gameSlug: string;
-      gameTitle: string;
-      playPoints: number;
-      rawScore: number;
-      topScore: number;
-      userId: string;
-      userName: string;
-    }
-  >();
-
-  scores.forEach((score: {
-    createdAt: Date;
-    game: {
-      title: string;
-      slug: string;
-    };
-    playPoints: number;
-    rawScore: number;
-    user: {
-      id: string;
-      displayName: string;
-      avatarUrl: string | null;
-    };
-    userId: string;
-  }) => {
-    const existingPlayer = players.get(score.userId);
-    if (!existingPlayer) {
-      players.set(score.userId, {
-        avatarUrl: score.user.avatarUrl,
-        createdAt: score.createdAt,
-        gameSlug: score.game.slug,
-        gameTitle: score.game.title,
-        playPoints: score.playPoints,
-        rawScore: score.rawScore,
-        topScore: score.playPoints,
-        userId: score.userId,
-        userName: score.user.displayName
-      });
-      return;
-    }
-
-    if (score.playPoints > existingPlayer.topScore) {
-      existingPlayer.gameSlug = score.game.slug;
-      existingPlayer.gameTitle = score.game.title;
-      existingPlayer.topScore = score.playPoints;
-    }
-    existingPlayer.playPoints += score.playPoints;
-    existingPlayer.rawScore += score.rawScore;
-  });
-
-  return Array.from(players.values())
-    .sort((first, second) => second.playPoints - first.playPoints || first.createdAt.getTime() - second.createdAt.getTime())
-    .slice(0, 100)
-    .map(({ topScore, ...player }, index) => ({
+  return users.map((user, index) => ({
       rank: index + 1,
-      ...player
+      avatarUrl: user.avatarUrl,
+      createdAt: user.createdAt,
+      gameSlug: "bonus",
+      gameTitle: "Total points",
+      playPoints: user.totalPoints,
+      rawScore: user.totalPoints,
+      userId: user.id,
+      userName: user.displayName
     }));
 }
 
 export function registerLeaderboardRoutes(app: FastifyInstance) {
-  app.get("/leaderboard/daily", async () => getLeaderboard(startOfToday()));
+  app.get("/leaderboard/daily", async () => getLeaderboard());
 
-  app.get("/leaderboard/weekly", async () => getLeaderboard(startOfWeek()));
+  app.get("/leaderboard/weekly", async () => getLeaderboard());
 }

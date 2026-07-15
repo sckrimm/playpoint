@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Palette, Play, Zap } from "lucide-react";
-import { calculatePlayPoints, colorRushRules, type GameResult } from "@playpoint/shared";
+import { calculatePlayPoints, colorRushRules, type GameId, type GameResult } from "@playpoint/shared";
 import { getText, type Language } from "../../i18n";
 
 type RushColor = {
@@ -11,6 +11,7 @@ type RushColor = {
 };
 
 type ColorRushGameProps = {
+  gameId?: GameId;
   language: Language;
   onFinish: (result: GameResult) => void;
 };
@@ -32,7 +33,7 @@ function getRandomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
-export function ColorRushGame({ language, onFinish }: ColorRushGameProps) {
+export function ColorRushGame({ gameId = "color-rush", language, onFinish }: ColorRushGameProps) {
   const text = (key: string) => getText(language, key);
   const [timeLeft, setTimeLeft] = useState<number>(colorRushRules.durationSeconds);
   const [options, setOptions] = useState<RushColor[]>(() => shuffleColors());
@@ -66,7 +67,7 @@ export function ColorRushGame({ language, onFinish }: ColorRushGameProps) {
     setFinished(true);
     const result = resultRef.current;
     onFinish({
-      gameId: "color-rush",
+      gameId,
       score: result.score,
       playPoints: calculatePlayPoints(result.score),
       durationSeconds: colorRushRules.durationSeconds,
@@ -75,7 +76,7 @@ export function ColorRushGame({ language, onFinish }: ColorRushGameProps) {
       accuracy: result.accuracy,
       maxCombo: result.maxCombo
     });
-  }, [finished, onFinish]);
+  }, [finished, gameId, onFinish]);
 
   useEffect(() => {
     if (!playing || finished) return;

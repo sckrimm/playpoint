@@ -41,7 +41,7 @@ export type ApiLeaderboardEntry = {
   userName: string;
   avatarUrl: string | null;
   gameTitle: string;
-  gameSlug: GameId;
+  gameSlug: GameId | "bonus";
   rawScore: number;
   playPoints: number;
   createdAt: string;
@@ -49,6 +49,14 @@ export type ApiLeaderboardEntry = {
 
 export type ApiMe = {
   user: ApiUser;
+  gameHistory: Array<{
+    id: string;
+    createdAt: string;
+    gameSlug: GameId;
+    gameTitle: string;
+    playPoints: number;
+    rawScore: number;
+  }>;
   stats: {
     dailyRank: number | null;
     gameAttempts: Array<{
