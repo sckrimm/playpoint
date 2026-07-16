@@ -858,6 +858,9 @@ function PhonePage({
     <section className="onboarding-page phone-page">
       <header className="onboarding-logo">PlayPoint</header>
       <main className="onboarding-main">
+        <div className="onboarding-icon-card" aria-hidden="true">
+          <Phone size={40} />
+        </div>
         <div className="onboarding-copy">
           <h1>{text("phone.title")}</h1>
           <p>{text("phone.subtitle")}</p>
@@ -982,6 +985,9 @@ function OtpPage({
       </header>
 
       <main className="otp-main">
+        <div className="onboarding-icon-card otp-onboarding-icon" aria-hidden="true">
+          <Mail size={42} />
+        </div>
         <div className="otp-copy">
           <h1>{text("otp.title")}</h1>
           <p>
