@@ -21,7 +21,6 @@ import {
   Lock,
   LogOut,
   Loader2,
-  MailCheck,
   Mail,
   Medal,
   Moon,
@@ -38,7 +37,6 @@ import {
   TrendingUp,
   Trophy,
   User,
-  Smartphone,
   X
 } from "lucide-react";
 import {
@@ -64,6 +62,7 @@ type Route =
   | "otp"
   | "profile-setup"
   | "home"
+  | "all-games"
   | "game-loading"
   | "game-frame"
   | "score-popup"
@@ -178,6 +177,7 @@ const screenMap: Record<Route, string> = {
   otp: "prototype/screens/otp-verification",
   "profile-setup": "prototype/screens/profile-setup",
   home: "prototype/screens/home",
+  "all-games": "prototype/screens/all-games",
   "game-loading": "prototype/screens/game-loading",
   "game-frame": "prototype/screens/game-frame",
   "score-popup": "prototype/screens/score-popup",
@@ -187,6 +187,17 @@ const screenMap: Record<Route, string> = {
   profile: "prototype/screens/profile",
   "edit-profile": "prototype/screens/edit-profile"
 };
+
+const gameIcons = {
+  "color-rush": Sparkles,
+  memory: Brain,
+  "aim-hit": Target,
+  "lucky-spin": RotateCcw,
+  "puzzle-run": Brain,
+  "rocket-tap": Target
+};
+
+const comingSoonGameIds: GameId[] = ["lucky-spin", "rocket-tap"];
 
 function readRoute(): Route {
   const route = window.location.hash.replace("#/", "") as Route;
@@ -522,10 +533,13 @@ export function App() {
   };
 
   const showChrome = !["splash", "phone", "otp", "profile-setup", "game-loading"].includes(route);
+  const shellClassName = ["phone-shell", !showChrome ? "auth-shell" : "", route === "splash" ? "splash-shell" : ""]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={darkMode ? "app-shell dark-mode" : "app-shell"}>
-      <main className="phone-shell" aria-label="PlayPoint web MVP">
+      <main className={shellClassName} aria-label="PlayPoint web MVP">
         {showChrome ? (
           <TopBar
             route={route}
@@ -583,6 +597,13 @@ export function App() {
               onBuyCoins={(coins) => setUserCoins((currentCoins) => currentCoins + coins)}
               onClaimReward={claimReward}
               onNavigate={navigate}
+              onSelectGame={selectGame}
+            />
+          ) : null}
+          {route === "all-games" ? (
+            <AllGamesPage
+              attemptsLeftByGame={attemptsLeftByGame}
+              text={text}
               onSelectGame={selectGame}
             />
           ) : null}
@@ -697,21 +718,13 @@ function TopBar({
   userPoints: number;
   onNavigate: (route: Route) => void;
 }) {
-  const title = useMemo(() => {
-    if (route === "leaderboard-daily" || route === "leaderboard-weekly") return text("route.leaderboard");
-    if (route === "rewards") return text("route.rewards");
-    if (route === "profile") return text("route.profile");
-    if (route === "edit-profile") return text("route.editProfile");
-    if (route === "game-frame") return text("route.game");
-    if (route === "score-popup") return text("route.result");
-    return "PlayPoint";
-  }, [route, text]);
-
   return (
     <header className="topbar">
       <div>
-        <p className="eyebrow">{screenMap[route]}</p>
-        <h1>{title}</h1>
+        <button className="topbar-brand" type="button" onClick={() => onNavigate("home")} aria-label="Go to home">
+          <Sparkles className="topbar-brand-icon" aria-hidden="true" />
+          <span>PlayPoint</span>
+        </button>
       </div>
       <DesktopNav route={route} text={text} onNavigate={onNavigate} />
       <div className="topbar-wallet">
@@ -738,7 +751,11 @@ function getNavItems(text: TextGetter) {
 }
 
 function isNavItemActive(route: Route, itemRoute: ReturnType<typeof getNavItems>[number]["route"]) {
-  return route === itemRoute || (itemRoute === "leaderboard-daily" && route === "leaderboard-weekly");
+  return (
+    route === itemRoute ||
+    (itemRoute === "home" && route === "all-games") ||
+    (itemRoute === "leaderboard-daily" && route === "leaderboard-weekly")
+  );
 }
 
 function DesktopNav({ route, text, onNavigate }: { route: Route; text: TextGetter; onNavigate: (route: Route) => void }) {
@@ -787,8 +804,16 @@ function BottomNav({ route, text, onNavigate }: { route: Route; text: TextGetter
 }
 
 function SplashPage({ text, onNavigate }: { text: TextGetter; onNavigate: (route: Route) => void }) {
+  const [isLeaving, setIsLeaving] = useState(false);
+
+  const startSplashExit = () => {
+    if (isLeaving) return;
+    setIsLeaving(true);
+    window.setTimeout(() => onNavigate("phone"), 2000);
+  };
+
   return (
-    <section className="splash-screen" onClick={() => onNavigate("phone")}>
+    <section className={isLeaving ? "splash-screen splash-screen-exit" : "splash-screen"} onClick={startSplashExit}>
       <div className="ambient-glow glow-a" />
       <div className="ambient-glow glow-b" />
       <div className="decor-icons" aria-hidden="true">
@@ -799,11 +824,14 @@ function SplashPage({ text, onNavigate }: { text: TextGetter; onNavigate: (route
       </div>
       <div className="splash-main">
         <div className="app-mark">
-          <Gamepad2 size={74} fill="currentColor" />
+          <Sparkles className="app-mark-icon" aria-hidden="true" />
         </div>
         <h1>PlayPoint</h1>
       </div>
       <p>{text("app.tagline")}</p>
+      <button className="splash-hint" type="button">
+        {text("app.tapHint")}
+      </button>
       <div className="splash-dots" aria-label="Loading">
         <span />
         <span />
@@ -830,12 +858,6 @@ function PhonePage({
     <section className="onboarding-page phone-page">
       <header className="onboarding-logo">PlayPoint</header>
       <main className="onboarding-main">
-        <div className="phone-hero">
-          <div className="phone-hero-icon">
-            <Smartphone size={52} />
-          </div>
-        </div>
-
         <div className="onboarding-copy">
           <h1>{text("phone.title")}</h1>
           <p>{text("phone.subtitle")}</p>
@@ -960,13 +982,6 @@ function OtpPage({
       </header>
 
       <main className="otp-main">
-        <div className="otp-hero">
-          <div className="otp-glow" />
-          <div className="otp-icon-card">
-            <MailCheck size={82} />
-          </div>
-        </div>
-
         <div className="otp-copy">
           <h1>{text("otp.title")}</h1>
           <p>
@@ -1142,15 +1157,6 @@ function HomePage({
 }) {
   const [coinModalOpen, setCoinModalOpen] = useState(false);
   const [homeLeaderboardScope, setHomeLeaderboardScope] = useState<"daily" | "weekly">("daily");
-  const gameIcons: Record<GameId, typeof Gamepad2> = {
-    "color-rush": Sparkles,
-    memory: Brain,
-    "aim-hit": Target,
-    "lucky-spin": RotateCcw,
-    "puzzle-run": Brain,
-    "rocket-tap": Target
-  };
-  const comingSoonGameIds: GameId[] = ["lucky-spin", "rocket-tap"];
   const playableGames = games
     .filter((game) => !comingSoonGameIds.includes(game.id))
     .map((game, index) => ({ game, index }))
@@ -1177,9 +1183,14 @@ function HomePage({
       </section>
 
       <section className="section">
-        <div className="section-heading">
-          <h2>{text("home.games")}</h2>
-          <span>{pointRules.dailyAttemptsPerGame} {text("home.attemptsPerDay")}</span>
+        <div className="section-heading games-heading">
+          <h2>
+            <Gamepad2 size={20} />
+            {text("home.games")}
+          </h2>
+          <button className="section-link" type="button" onClick={() => onNavigate("all-games")}>
+            {text("home.allGames")}
+          </button>
         </div>
         <Swiper
           className="game-grid"
@@ -1198,41 +1209,29 @@ function HomePage({
           watchOverflow
         >
           {playableGames.map((game) => {
-            const Icon = gameIcons[game.id];
             const attemptsLeft = attemptsLeftByGame[game.id] ?? pointRules.dailyAttemptsPerGame;
             return (
               <SwiperSlide className="game-slide" key={game.id}>
-                <article className="game-card">
-                  <span className="game-attempt-badge">{attemptsLeft} {text("home.attemptsLeft")}</span>
-                  <div className="game-icon">
-                    <Icon size={24} />
-                  </div>
-                  <h3>{game.name}</h3>
-                  <p>{text(`gameDesc.${game.id}`)}</p>
-                  <button type="button" disabled={attemptsLeft <= 0} onClick={() => onSelectGame(game.id)}>
-                    {text("common.play")}
-                  </button>
-                </article>
+                <GameCard
+                  attemptsLeft={attemptsLeft}
+                  game={game}
+                  text={text}
+                  onSelectGame={onSelectGame}
+                />
               </SwiperSlide>
             );
           })}
           {comingSoonGameIds.map((gameId) => {
             const game = games.find((item) => item.id === gameId);
             if (!game) return null;
-            const Icon = gameIcons[game.id];
             return (
               <SwiperSlide className="game-slide" key={game.id}>
-                <article className="game-card coming-soon-card">
-                  <span className="game-attempt-badge muted">{text("common.soon")}</span>
-                  <div className="game-icon">
-                    <Icon size={24} />
-                  </div>
-                  <h3>{game.name}</h3>
-                  <p>{text("home.comingSoon")}</p>
-                  <button type="button" disabled>
-                    {text("common.soon")}
-                  </button>
-                </article>
+                <GameCard
+                  game={game}
+                  isComingSoon
+                  text={text}
+                  onSelectGame={onSelectGame}
+                />
               </SwiperSlide>
             );
           })}
@@ -1334,6 +1333,83 @@ function HomePage({
         <p>{text("home.info")}</p>
       </section>
     </>
+  );
+}
+
+function GameCard({
+  attemptsLeft,
+  game,
+  isComingSoon = false,
+  text,
+  onSelectGame
+}: {
+  attemptsLeft?: number;
+  game: (typeof games)[number];
+  isComingSoon?: boolean;
+  text: TextGetter;
+  onSelectGame: (gameId: GameId) => void;
+}) {
+  const Icon = gameIcons[game.id];
+  const remainingAttempts = attemptsLeft ?? pointRules.dailyAttemptsPerGame;
+
+  return (
+    <article className={isComingSoon ? "game-card coming-soon-card" : "game-card"}>
+      <span className={isComingSoon ? "game-attempt-badge muted" : "game-attempt-badge"}>
+        {isComingSoon ? text("common.soon") : `${remainingAttempts} ${text("home.attemptsLeft")}`}
+      </span>
+      <div className="game-icon">
+        <Icon size={24} />
+      </div>
+      <h3>{game.name}</h3>
+      <p>{isComingSoon ? text("home.comingSoon") : text(`gameDesc.${game.id}`)}</p>
+      <button type="button" disabled={isComingSoon || remainingAttempts <= 0} onClick={() => onSelectGame(game.id)}>
+        {isComingSoon ? text("common.soon") : text("common.play")}
+      </button>
+    </article>
+  );
+}
+
+function AllGamesPage({
+  attemptsLeftByGame,
+  text,
+  onSelectGame
+}: {
+  attemptsLeftByGame: AttemptsLeftByGame;
+  text: TextGetter;
+  onSelectGame: (gameId: GameId) => void;
+}) {
+  const playableGames = games.filter((game) => !comingSoonGameIds.includes(game.id));
+  const comingSoonGames = games.filter((game) => comingSoonGameIds.includes(game.id));
+
+  return (
+    <section className="all-games-page">
+      <div className="section-heading games-heading">
+        <h2>
+          <Gamepad2 size={20} />
+          {text("home.allGames")}
+        </h2>
+      </div>
+      <div className="all-games-grid">
+        {playableGames.map((game) => (
+          <GameCard
+            attemptsLeft={attemptsLeftByGame[game.id] ?? pointRules.dailyAttemptsPerGame}
+            game={game}
+            key={game.id}
+            text={text}
+            onSelectGame={onSelectGame}
+          />
+        ))}
+        {comingSoonGames.map((game) => (
+          <GameCard
+            game={game}
+            isComingSoon
+            key={game.id}
+            text={text}
+            onSelectGame={onSelectGame}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 

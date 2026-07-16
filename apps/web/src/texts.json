@@ -1,6 +1,7 @@
 {
   "ka": {
     "app.tagline": "ითამაშე, დააგროვე, მოიგე",
+    "app.tapHint": "დააჭირე დასაწყებად",
     "common.play": "თამაში",
     "common.buy": "ყიდვა",
     "common.close": "დახურვა",
@@ -22,6 +23,7 @@
     "route.editProfile": "რედაქტირება",
     "route.game": "თამაში",
     "route.result": "შედეგი",
+    "route.allGames": "ყველა თამაში",
     "nav.home": "მთავარი",
     "nav.ranks": "რანკები",
     "nav.rewards": "პრიზები",
@@ -54,6 +56,7 @@
     "home.dailyChallenge": "დღის გამოწვევა",
     "home.dailyChallengeText": "ითამაშე 3-ჯერ და მიიღე დამატებითი ბონუსები ლიდერბორდისთვის.",
     "home.games": "თამაშები",
+    "home.allGames": "ყველა თამაში",
     "home.attemptsPerDay": "ცდა / დღე",
     "home.attemptsLeft": "ცდა",
     "home.comingSoon": "მალე დაემატება",
@@ -175,6 +178,7 @@
   },
   "en": {
     "app.tagline": "Play, collect, win",
+    "app.tapHint": "Tap to start",
     "common.play": "Play",
     "common.buy": "Buy",
     "common.close": "Close",
@@ -196,6 +200,7 @@
     "route.editProfile": "Edit",
     "route.game": "Game",
     "route.result": "Result",
+    "route.allGames": "All games",
     "nav.home": "Home",
     "nav.ranks": "Ranks",
     "nav.rewards": "Rewards",
@@ -228,6 +233,7 @@
     "home.dailyChallenge": "Daily Challenge",
     "home.dailyChallengeText": "Play 3 times and earn extra leaderboard bonuses.",
     "home.games": "Games",
+    "home.allGames": "All games",
     "home.attemptsPerDay": "Try / day",
     "home.attemptsLeft": "Try",
     "home.comingSoon": "Coming soon",
