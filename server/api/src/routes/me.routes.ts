@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
 import { requireSession } from "../modules/auth/auth.helpers";
+import { getDailyLoginProgress } from "../modules/points/daily-login";
 
 const updateMeSchema = z.object({
   avatarUrl: z.string().url().nullable().optional(),
@@ -26,7 +27,7 @@ async function getRank(userId: string) {
 
 async function getMePayload(userId: string) {
   const today = startOfToday();
-  const [user, rewardClaims, gameHistory, gamesPlayed, dailyRank, weeklyRank, games, attemptsToday] = await Promise.all([
+  const [user, rewardClaims, gameHistory, gamesPlayed, dailyRank, weeklyRank, games, attemptsToday, dailyLogin] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
@@ -34,8 +35,11 @@ async function getMePayload(userId: string) {
         coins: true,
         createdAt: true,
         displayName: true,
+        email: true,
+        emailVerifiedAt: true,
         id: true,
         phone: true,
+        phoneVerifiedAt: true,
         role: true,
         totalPoints: true,
         updatedAt: true
@@ -94,7 +98,8 @@ async function getMePayload(userId: string) {
       _count: {
         gameId: true
       }
-    })
+    }),
+    getDailyLoginProgress(prisma, userId)
   ]);
   const attemptsByGameId = new Map(attemptsToday.map((attempt) => [attempt.gameId, attempt._count.gameId]));
 
@@ -119,6 +124,7 @@ async function getMePayload(userId: string) {
           usedAttempts
         };
       }),
+      dailyLogin,
       gamesPlayed,
       weeklyRank
     },

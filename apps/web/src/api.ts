@@ -7,7 +7,10 @@ export type ApiUser = {
   avatarUrl: string | null;
   coins: number;
   displayName: string;
-  phone: string;
+  email: string | null;
+  emailVerifiedAt: string | null;
+  phone: string | null;
+  phoneVerifiedAt: string | null;
   totalPoints: number;
 };
 
@@ -47,6 +50,28 @@ export type ApiLeaderboardEntry = {
   createdAt: string;
 };
 
+export type ApiDailyLoginProgress = {
+  cycleProgress: number;
+  pointsPerDay: number;
+  todayClaimed: boolean;
+  totalClaims: number;
+  weekDays: Array<{
+    claimed: boolean;
+    index: number;
+  }>;
+};
+
+export type ApiAuthPayload = {
+  dailyLogin?: {
+    awardedToday: boolean;
+    points: number;
+    progress: ApiDailyLoginProgress;
+  };
+  isNewUser: boolean;
+  token: string;
+  user: ApiUser;
+};
+
 export type ApiMe = {
   user: ApiUser;
   gameHistory: Array<{
@@ -58,6 +83,7 @@ export type ApiMe = {
     rawScore: number;
   }>;
   stats: {
+    dailyLogin: ApiDailyLoginProgress;
     dailyRank: number | null;
     gameAttempts: Array<{
       attemptsLeft: number;
@@ -145,9 +171,38 @@ export const playpointApi = {
     );
   },
   verifyOtp(phone: string, code: string) {
-    return apiFetch<{ isNewUser: boolean; token: string; user: ApiUser }>("/auth/verify-otp", {
+    return apiFetch<ApiAuthPayload>("/auth/verify-otp", {
       method: "POST",
       body: JSON.stringify({ phone, code })
+    });
+  },
+  loginWithGoogle(idToken: string) {
+    return apiFetch<ApiAuthPayload>("/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ idToken })
+    });
+  },
+  loginWithApple(idToken: string) {
+    return apiFetch<ApiAuthPayload>("/auth/apple", {
+      method: "POST",
+      body: JSON.stringify({ idToken })
+    });
+  },
+  requestEmailVerification(token: string, email: string) {
+    return apiFetch<{ devCode?: string; email: string; expiresAt: string; expiresInSeconds: number; ok: true }>(
+      "/auth/request-email-verification",
+      {
+        method: "POST",
+        token,
+        body: JSON.stringify({ email })
+      }
+    );
+  },
+  verifyEmail(token: string, email: string, code: string) {
+    return apiFetch<{ ok: true; user: ApiUser }>("/auth/verify-email", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ email, code })
     });
   },
   logout(token: string) {

@@ -15,6 +15,12 @@ enum UserRole {
 enum OtpPurpose {
   login
   phone_change
+  email_verify
+}
+
+enum AuthProvider {
+  google
+  apple
 }
 
 enum AttemptStatus {
@@ -59,11 +65,16 @@ enum RewardClaimStatus {
 enum PointBonusReason {
   registration
   daily_login
+  email_verification
+  phone_verification
 }
 
 model User {
   id             String          @id @default(cuid())
-  phone          String          @unique
+  phone          String?         @unique
+  phoneVerifiedAt DateTime?
+  email          String?         @unique
+  emailVerifiedAt DateTime?
   displayName    String          @unique
   avatarUrl      String?
   totalPoints    Int             @default(0)
@@ -73,6 +84,7 @@ model User {
   updatedAt      DateTime        @updatedAt
   otpCodes       OtpCode[]
   sessions       UserSession[]
+  authAccounts   AuthAccount[]
   attempts       GameAttempt[]
   scores         Score[]
   pointBonuses   PointBonus[]
@@ -80,6 +92,21 @@ model User {
   analyticsEvents AnalyticsEvent[]
 
   @@index([role])
+}
+
+model AuthAccount {
+  id             String       @id @default(cuid())
+  provider       AuthProvider
+  providerUserId String
+  email          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([email])
+  @@index([userId])
 }
 
 model PointBonus {
@@ -98,7 +125,8 @@ model PointBonus {
 
 model OtpCode {
   id        String     @id @default(cuid())
-  phone     String
+  phone     String?
+  email     String?
   codeHash  String
   purpose   OtpPurpose @default(login)
   expiresAt DateTime
@@ -108,6 +136,7 @@ model OtpCode {
   user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([phone, purpose, expiresAt])
+  @@index([email, purpose, expiresAt])
 }
 
 model UserSession {

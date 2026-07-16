@@ -2969,6 +2969,79 @@ h3 {
   color: #6417d8;
 }
 
+.daily-bonus-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(28 4 58 / 48%);
+  backdrop-filter: blur(8px);
+}
+
+.daily-bonus-modal {
+  position: relative;
+  width: min(100%, 328px);
+  padding: 22px 18px 18px;
+  border: 1px solid rgb(255 255 255 / 72%);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgb(28 4 58 / 30%);
+  text-align: center;
+}
+
+.modal-close-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  color: #6e607a;
+  background: #f2edf8;
+}
+
+.daily-bonus-icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 14px;
+  border-radius: 8px;
+}
+
+.daily-bonus-modal h2 {
+  margin: 0 0 6px;
+  color: #6417d8;
+  font-size: 22px;
+}
+
+.daily-bonus-modal p {
+  margin: 0 auto 14px;
+  max-width: 260px;
+  color: #6e607a;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.daily-bonus-modal > strong {
+  display: inline-flex;
+  margin-bottom: 16px;
+  color: #6417d8;
+  font-size: 26px;
+}
+
+.daily-bonus-modal > strong .points-label {
+  font-size: 26px;
+}
+
+.daily-bonus-days {
+  margin-bottom: 18px;
+}
+
 .claim-warning {
   display: block;
   margin-bottom: 12px;
@@ -3081,7 +3154,7 @@ h3 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin: -18px 0 24px;
+  margin: 0 0 24px;
 }
 
 .profile-language-card {
@@ -3274,6 +3347,153 @@ h3 {
 .mini-stat-card h4 {
   margin: 0;
   font-size: 20px;
+}
+
+.profile-verification-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 24px;
+  padding: 14px;
+  border: 1px solid rgb(100 23 216 / 16%);
+  border-radius: 8px;
+  background: rgb(100 23 216 / 7%);
+}
+
+.profile-verification-card.verified {
+  border-color: rgb(15 168 63 / 18%);
+  background: #e4ffd8;
+}
+
+.verification-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  color: #6417d8;
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgb(100 23 216 / 10%);
+}
+
+.profile-verification-card.verified .verification-icon {
+  color: #0fa83f;
+}
+
+.profile-verification-card h3 {
+  margin: 0 0 4px;
+  color: #6417d8;
+  font-size: 14px;
+}
+
+.profile-verification-card.verified h3 {
+  color: #0fa83f;
+}
+
+.profile-verification-card p {
+  margin: 0;
+  color: #5b4b68;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.profile-verification-card button {
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #6417d8 0%, #8b2cff 52%);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.profile-verification-card.verified button {
+  color: #0a6f2d;
+  background: #ffffff;
+}
+
+.daily-login-card {
+  margin: -18px 0 24px;
+  padding: 14px;
+  border: 1px solid rgb(216 198 242 / 48%);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 4%);
+}
+
+.daily-login-card-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.daily-login-card-header > span,
+.daily-bonus-icon {
+  display: grid;
+  place-items: center;
+  color: #6417d8;
+  background: rgb(100 23 216 / 10%);
+}
+
+.daily-login-card-header > span {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+}
+
+.daily-login-card h3 {
+  margin: 0 0 4px;
+  color: #6417d8;
+  font-size: 14px;
+}
+
+.daily-login-card p,
+.daily-login-card small {
+  margin: 0;
+  color: #6e607a;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.daily-login-card-header strong {
+  color: #30a525;
+  font-size: 18px;
+  font-weight: 1000;
+}
+
+.daily-login-days,
+.daily-bonus-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.daily-login-days {
+  margin-bottom: 10px;
+}
+
+.daily-login-days span,
+.daily-bonus-days span {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  color: #8d7b9c;
+  background: #f2edf8;
+  font-size: 11px;
+  font-weight: 1000;
+}
+
+.daily-login-days span.active,
+.daily-bonus-days span.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, #6417d8 0%, #8b2cff 52%);
+  box-shadow: 0 5px 14px rgb(100 23 216 / 16%);
 }
 
 .profile-section-block {
@@ -3611,6 +3831,69 @@ h3 {
   gap: 24px;
 }
 
+.email-verify-box {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgb(100 23 216 / 16%);
+  border-radius: 8px;
+  color: #5b4b68;
+  background: rgb(100 23 216 / 7%);
+}
+
+.email-verify-box strong {
+  display: block;
+  color: #6417d8;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.email-verify-box p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.email-verify-box > button,
+.email-code-row button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #6417d8 0%, #8b2cff 52%);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.email-verify-box button:disabled {
+  cursor: not-allowed;
+  color: #83748f;
+  background: #eeeeee;
+}
+
+.email-code-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.email-code-row input {
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d8c6f2;
+  border-radius: 8px;
+  color: #1a1c1c;
+  background: #ffffff;
+  outline: 0;
+}
+
+.email-dev-code {
+  color: #6417d8;
+  font-weight: 800;
+}
+
 .edit-field-block label {
   display: block;
   margin: 0 0 8px 8px;
@@ -3789,6 +4072,7 @@ h3 {
 .dark-mode .profile-hero h2,
 .dark-mode .profile-section-block h3,
 .dark-mode .profile-section-title h3,
+.dark-mode .daily-bonus-modal h2,
 .dark-mode .edit-profile-header h1 {
   color: #ffffff;
 }
@@ -3801,6 +4085,9 @@ h3 {
 .dark-mode .reward-card p,
 .dark-mode .profile-list-item p,
 .dark-mode .history-item p,
+.dark-mode .daily-login-card p,
+.dark-mode .daily-login-card small,
+.dark-mode .daily-bonus-modal p,
 .dark-mode .mini-stat-card p {
   color: rgb(248 242 255 / 68%);
 }
@@ -3813,6 +4100,8 @@ h3 {
 .dark-mode .profile-preference-card,
 .dark-mode .profile-language-card,
 .dark-mode .mini-stat-card,
+.dark-mode .profile-verification-card,
+.dark-mode .daily-login-card,
 .dark-mode .profile-list-item,
 .dark-mode .history-card,
 .dark-mode .edit-profile-header,
@@ -3821,7 +4110,8 @@ h3 {
 .dark-mode .security-card,
 .dark-mode .bottom-nav,
 .dark-mode .claim-modal,
-.dark-mode .coin-modal {
+.dark-mode .coin-modal,
+.dark-mode .daily-bonus-modal {
   border-color: rgb(255 255 255 / 10%);
   color: #f8f2ff;
   background: #1d102b;
@@ -3831,6 +4121,7 @@ h3 {
 .dark-mode .reward-card h3,
 .dark-mode .profile-list-item h4,
 .dark-mode .history-item h4,
+.dark-mode .daily-login-card h3,
 .dark-mode .mini-stat-card h4,
 .dark-mode .claim-modal h2,
 .dark-mode .coin-modal h2 {

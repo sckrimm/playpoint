@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { pointRules } from "@playpoint/shared";
 import { z } from "zod";
@@ -12,6 +14,8 @@ import {
   normalizePhone,
   requireSession
 } from "../modules/auth/auth.helpers";
+import { awardDailyLoginBonus, getDailyLoginProgress, type DailyLoginProgress } from "../modules/points/daily-login";
+import { verifyAppleIdToken, verifyGoogleIdToken, type VerifiedSocialIdentity } from "../modules/auth/social.helpers";
 
 const requestOtpSchema = z.object({
   phone: z.string().min(6).max(24)
@@ -23,12 +27,53 @@ const verifyOtpSchema = z.object({
   phone: z.string().min(6).max(24)
 });
 
+const socialAuthSchema = z.object({
+  idToken: z.string().min(20)
+});
+
+const emailVerificationSchema = z.object({
+  email: z.string().email().max(160)
+});
+
+const verifyEmailSchema = emailVerificationSchema.extend({
+  code: z.string().regex(/^\d{4,6}$/)
+});
+
 function defaultDisplayName(phone: string) {
   return `Player ${phone.slice(-4)}`;
 }
 
-function bonusDateKey(date = new Date()) {
-  return date.toISOString().slice(0, 10);
+function fallbackSocialDisplayName(identity: VerifiedSocialIdentity) {
+  const source = identity.name || identity.email?.split("@")[0] || `Player ${identity.providerUserId.slice(-4)}`;
+  const normalized = source.replace(/[^\p{L}\p{N}_ ]/gu, " ").replace(/\s+/g, " ").trim();
+  return normalized.slice(0, 24) || `Player ${identity.providerUserId.slice(-4)}`;
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+async function createUniqueDisplayName(tx: Prisma.TransactionClient, preferredName: string) {
+  const baseName = preferredName.trim().slice(0, 24) || "Player";
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const suffix = attempt === 0 ? "" : ` ${attempt + 1}`;
+    const candidate = `${baseName.slice(0, 24 - suffix.length)}${suffix}`;
+    const existingUser = await tx.user.findUnique({ where: { displayName: candidate }, select: { id: true } });
+    if (!existingUser) return candidate;
+  }
+
+  return `Player ${crypto.randomUUID().slice(0, 8)}`;
+}
+
+async function createSession(tx: Prisma.TransactionClient, userId: string, token: string, expiresAt: Date) {
+  return tx.userSession.create({
+    data: {
+      tokenHash: hashSessionToken(token),
+      expiresAt,
+      userId
+    }
+  });
 }
 
 export function registerAuthRoutes(app: FastifyInstance) {
@@ -105,11 +150,15 @@ export function registerAuthRoutes(app: FastifyInstance) {
       let user = existingUser
         ? await tx.user.update({
             where: { id: existingUser.id },
-            data: parsed.data.displayName ? { displayName: parsed.data.displayName } : {}
+            data: {
+              ...(parsed.data.displayName ? { displayName: parsed.data.displayName } : {}),
+              phoneVerifiedAt: existingUser.phoneVerifiedAt ?? new Date()
+            }
           })
         : await tx.user.create({
             data: {
               phone,
+              phoneVerifiedAt: new Date(),
               displayName: parsed.data.displayName ?? defaultDisplayName(phone),
               totalPoints: pointRules.registrationBonus,
               coins: 14
@@ -125,38 +174,14 @@ export function registerAuthRoutes(app: FastifyInstance) {
             userId: user.id
           }
         });
-      } else {
-        const dailyAwardKey = `daily-login:${bonusDateKey()}`;
-        const dailyBonus = await tx.pointBonus.findUnique({
-          where: {
-            userId_awardKey: {
-              awardKey: dailyAwardKey,
-              userId: user.id
-            }
-          },
-          select: { id: true }
-        });
-
-        if (!dailyBonus) {
-          await tx.pointBonus.create({
-            data: {
-              awardKey: dailyAwardKey,
-              points: pointRules.dailyLoginBonus,
-              reason: "daily_login",
-              userId: user.id
-            }
-          });
-
-          user = await tx.user.update({
-            where: { id: user.id },
-            data: {
-              totalPoints: {
-                increment: pointRules.dailyLoginBonus
-              }
-            }
-          });
-        }
       }
+
+      const dailyLoginResult = await awardDailyLoginBonus(tx, user.id);
+      const dailyLogin = {
+        awardedToday: dailyLoginResult.awardedToday,
+        progress: dailyLoginResult.progress
+      };
+      user = dailyLoginResult.user;
 
       await tx.otpCode.update({
         where: { id: otp.id },
@@ -166,15 +191,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
         }
       });
 
-      const session = await tx.userSession.create({
-        data: {
-          tokenHash: hashSessionToken(token),
-          expiresAt,
-          userId: user.id
-        }
-      });
+      const session = await createSession(tx, user.id, token, expiresAt);
 
-      return { isNewUser, session, user };
+      return { dailyLogin, isNewUser, session, user };
     }).catch((error: unknown) => {
       if (
         typeof error === "object" &&
@@ -198,6 +217,286 @@ export function registerAuthRoutes(app: FastifyInstance) {
         id: result.session.id
       },
       isNewUser: result.isNewUser,
+      dailyLogin: {
+        awardedToday: result.dailyLogin.awardedToday,
+        points: pointRules.dailyLoginBonus,
+        progress: result.dailyLogin.progress
+      },
+      user: result.user
+    };
+  });
+
+  async function handleSocialAuth(
+    provider: "google" | "apple",
+    verifyIdentity: (idToken: string) => Promise<VerifiedSocialIdentity>,
+    idToken: string
+  ) {
+    const token = createSessionToken();
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+    const identity = await verifyIdentity(idToken);
+
+    return prisma.$transaction(async (tx) => {
+      const existingAccount = await tx.authAccount.findUnique({
+        where: {
+          provider_providerUserId: {
+            provider,
+            providerUserId: identity.providerUserId
+          }
+        },
+        include: { user: true }
+      });
+
+      let isNewUser = false;
+      let user = existingAccount?.user ?? null;
+      let dailyLogin: { awardedToday: boolean; progress: DailyLoginProgress };
+
+      if (!user) {
+        user =
+          identity.email && identity.emailVerified
+            ? await tx.user.findUnique({ where: { email: identity.email } })
+            : null;
+
+        if (!user) {
+          isNewUser = true;
+          const displayName = await createUniqueDisplayName(tx, fallbackSocialDisplayName(identity));
+          user = await tx.user.create({
+            data: {
+              displayName,
+              email: identity.emailVerified ? identity.email : null,
+              emailVerifiedAt: identity.emailVerified ? new Date() : null,
+              totalPoints: pointRules.registrationBonus,
+              coins: 14
+            }
+          });
+
+          await tx.pointBonus.create({
+            data: {
+              awardKey: "registration",
+              points: pointRules.registrationBonus,
+              reason: "registration",
+              userId: user.id
+            }
+          });
+        } else if (identity.emailVerified && identity.email && !user.email) {
+          user = await tx.user.update({
+            where: { id: user.id },
+            data: {
+              email: identity.email,
+              emailVerifiedAt: new Date()
+            }
+          });
+        }
+
+        await tx.authAccount.create({
+          data: {
+            email: identity.email,
+            provider,
+            providerUserId: identity.providerUserId,
+            userId: user.id
+          }
+        });
+      }
+
+      const dailyLoginResult = await awardDailyLoginBonus(tx, user.id);
+      dailyLogin = {
+        awardedToday: dailyLoginResult.awardedToday,
+        progress: dailyLoginResult.progress
+      };
+      user = dailyLoginResult.user;
+
+      const session = await createSession(tx, user.id, token, expiresAt);
+      return { dailyLogin, isNewUser, session, token, user };
+    });
+  }
+
+  app.post("/auth/google", async (request, reply) => {
+    if (!env.GOOGLE_CLIENT_ID) return reply.code(400).send({ message: "Google login is not configured" });
+    const parsed = socialAuthSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ message: "Invalid Google auth payload", issues: parsed.error.issues });
+
+    try {
+      const result = await handleSocialAuth("google", verifyGoogleIdToken, parsed.data.idToken);
+      return {
+        token: result.token,
+        session: {
+          expiresAt: result.session.expiresAt,
+          id: result.session.id
+        },
+        isNewUser: result.isNewUser,
+        dailyLogin: {
+          awardedToday: result.dailyLogin.awardedToday,
+          points: pointRules.dailyLoginBonus,
+          progress: result.dailyLogin.progress
+        },
+        user: result.user
+      };
+    } catch (error) {
+      request.log.warn({ err: error }, "Google auth failed");
+      return reply.code(401).send({ message: "Google login failed" });
+    }
+  });
+
+  app.post("/auth/apple", async (request, reply) => {
+    if (!env.APPLE_CLIENT_ID) return reply.code(400).send({ message: "Apple login is not configured" });
+    const parsed = socialAuthSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ message: "Invalid Apple auth payload", issues: parsed.error.issues });
+
+    try {
+      const result = await handleSocialAuth("apple", verifyAppleIdToken, parsed.data.idToken);
+      return {
+        token: result.token,
+        session: {
+          expiresAt: result.session.expiresAt,
+          id: result.session.id
+        },
+        isNewUser: result.isNewUser,
+        dailyLogin: {
+          awardedToday: result.dailyLogin.awardedToday,
+          points: pointRules.dailyLoginBonus,
+          progress: result.dailyLogin.progress
+        },
+        user: result.user
+      };
+    } catch (error) {
+      request.log.warn({ err: error }, "Apple auth failed");
+      return reply.code(401).send({ message: "Apple login failed" });
+    }
+  });
+
+  app.post("/auth/request-email-verification", async (request, reply) => {
+    const auth = await requireSession(request, reply);
+    if (!auth) return;
+
+    const parsed = emailVerificationSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ message: "Invalid email", issues: parsed.error.issues });
+
+    const email = normalizeEmail(parsed.data.email);
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email,
+        id: {
+          not: auth.session.userId
+        }
+      },
+      select: { id: true }
+    });
+
+    if (existingUser) return reply.code(409).send({ message: "Email is already used" });
+
+    const code = createOtpCode();
+    const expiresAt = new Date(Date.now() + env.OTP_TTL_SECONDS * 1000);
+    await prisma.otpCode.create({
+      data: {
+        codeHash: hashOtp(email, code),
+        email,
+        expiresAt,
+        purpose: "email_verify",
+        userId: auth.session.userId
+      }
+    });
+
+    return {
+      email,
+      expiresAt,
+      expiresInSeconds: env.OTP_TTL_SECONDS,
+      ok: true,
+      ...(env.OTP_EXPOSE_DEV_CODE && env.OTP_PROVIDER === "mock" ? { devCode: code } : {})
+    };
+  });
+
+  app.post("/auth/verify-email", async (request, reply) => {
+    const auth = await requireSession(request, reply);
+    if (!auth) return;
+
+    const parsed = verifyEmailSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ message: "Invalid email verification payload", issues: parsed.error.issues });
+
+    const email = normalizeEmail(parsed.data.email);
+    const codeHash = hashOtp(email, parsed.data.code);
+    const otp = await prisma.otpCode.findFirst({
+      where: {
+        email,
+        purpose: "email_verify",
+        usedAt: null,
+        userId: auth.session.userId,
+        expiresAt: {
+          gt: new Date()
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    if (!otp || !isHashMatch(otp.codeHash, codeHash)) {
+      return reply.code(401).send({ message: "Email verification code is invalid or expired" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const userWithEmail = await tx.user.findFirst({
+        where: {
+          email,
+          id: {
+            not: auth.session.userId
+          }
+        },
+        select: { id: true }
+      });
+      if (userWithEmail) return "EMAIL_TAKEN" as const;
+
+      let user = await tx.user.update({
+        where: { id: auth.session.userId },
+        data: {
+          email,
+          emailVerifiedAt: new Date()
+        }
+      });
+
+      const awardKey = "email-verification";
+      const existingBonus = await tx.pointBonus.findUnique({
+        where: {
+          userId_awardKey: {
+            awardKey,
+            userId: user.id
+          }
+        },
+        select: { id: true }
+      });
+
+      if (!existingBonus) {
+        await tx.pointBonus.create({
+          data: {
+            awardKey,
+            points: pointRules.emailVerificationBonus,
+            reason: "email_verification",
+            userId: user.id
+          }
+        });
+
+        user = await tx.user.update({
+          where: { id: user.id },
+          data: {
+            totalPoints: {
+              increment: pointRules.emailVerificationBonus
+            }
+          }
+        });
+      }
+
+      await tx.otpCode.update({
+        where: { id: otp.id },
+        data: {
+          usedAt: new Date()
+        }
+      });
+
+      return { user };
+    });
+
+    if (result === "EMAIL_TAKEN") return reply.code(409).send({ message: "Email is already used" });
+
+    return {
+      ok: true,
       user: result.user
     };
   });

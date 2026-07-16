@@ -37,7 +37,9 @@ export type Reward = {
 
 export const pointRules = {
   registrationBonus: 50,
-  dailyLoginBonus: 20,
+  dailyLoginBonus: 50,
+  emailVerificationBonus: 50,
+  phoneVerificationBonus: 50,
   dailyAttemptsPerGame: 3,
   scoreToPointRatio: 0.01
 } as const;

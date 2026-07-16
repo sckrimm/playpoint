@@ -50,11 +50,39 @@ import {
   userSummary
 } from "@playpoint/shared";
 import { AimHitGame } from "./games/aim-hit/AimHitGame";
-import { ApiError, type GameAttemptStart, playpointApi, toReward } from "./api";
+import { ApiError, type ApiDailyLoginProgress, type GameAttemptStart, playpointApi, toReward } from "./api";
 import { ColorRushGame } from "./games/color-rush/ColorRushGame";
 import { getText, type Language, type TextGetter } from "./i18n";
 import { MemoryGame } from "./games/memory/MemoryGame";
 import { PuzzleRunGame } from "./games/puzzle-run/PuzzleRunGame";
+
+declare global {
+  interface Window {
+    AppleID?: {
+      auth: {
+        init: (config: {
+          clientId: string;
+          redirectURI: string;
+          scope: string;
+          usePopup: boolean;
+        }) => void;
+        signIn: () => Promise<{ authorization?: { id_token?: string } }>;
+      };
+    };
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: { callback: (response: { credential?: string }) => void; client_id: string }) => void;
+          prompt: (callback?: (notification: {
+            isDismissedMoment: () => boolean;
+            isNotDisplayed: () => boolean;
+            isSkippedMoment: () => boolean;
+          }) => void) => void;
+        };
+      };
+    };
+  }
+}
 
 type Route =
   | "splash"
@@ -73,7 +101,10 @@ type Route =
   | "edit-profile";
 
 const tokenStorageKey = "playpoint.authToken";
+const appleClientId = import.meta.env.VITE_APPLE_CLIENT_ID ?? "";
+const appleRedirectUri = import.meta.env.VITE_APPLE_REDIRECT_URI ?? window.location.origin;
 const defaultRoute: Route = window.localStorage.getItem(tokenStorageKey) ? "home" : "splash";
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
 const showDevOtpCode = import.meta.env.DEV;
 const formatter = new Intl.NumberFormat("en-US");
 const displayNamePattern = /^[\p{L}\p{N}_ ]+$/u;
@@ -227,6 +258,70 @@ function getApiErrorMessage(error: unknown) {
   return "Network request failed";
 }
 
+function loadScript(src: string, id: string) {
+  return new Promise<void>((resolve, reject) => {
+    const existingScript = document.getElementById(id) as HTMLScriptElement | null;
+    if (existingScript) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = id;
+    script.src = src;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Could not load sign-in provider"));
+    document.head.appendChild(script);
+  });
+}
+
+async function getGoogleIdToken() {
+  if (!googleClientId) throw new Error("Google login is not configured");
+  await loadScript("https://accounts.google.com/gsi/client", "google-identity-services");
+
+  return new Promise<string>((resolve, reject) => {
+    let settled = false;
+    window.google?.accounts.id.initialize({
+      client_id: googleClientId,
+      callback: (response) => {
+        settled = true;
+        if (response.credential) {
+          resolve(response.credential);
+          return;
+        }
+        reject(new Error("Google login failed"));
+      }
+    });
+    window.google?.accounts.id.prompt((notification) => {
+      if (settled) return;
+      if (notification.isNotDisplayed() || notification.isSkippedMoment() || notification.isDismissedMoment()) {
+        settled = true;
+        reject(new Error("Google login was cancelled"));
+      }
+    });
+  });
+}
+
+async function getAppleIdToken() {
+  if (!appleClientId) throw new Error("Apple login is not configured");
+  await loadScript("https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js", "apple-id-services");
+  if (!window.AppleID) throw new Error("Apple login is not available");
+
+  window.AppleID.auth.init({
+    clientId: appleClientId,
+    redirectURI: appleRedirectUri,
+    scope: "name email",
+    usePopup: true
+  });
+
+  const response = await window.AppleID.auth.signIn();
+  const idToken = response.authorization?.id_token;
+  if (!idToken) throw new Error("Apple login failed");
+  return idToken;
+}
+
 function toRankedLeaderboard(
   entries: Awaited<ReturnType<typeof playpointApi.getLeaderboard>>,
   currentUserId: string
@@ -249,6 +344,9 @@ export function App() {
   const [devOtpCode, setDevOtpCode] = useState("");
   const [otpExpiresInSeconds, setOtpExpiresInSeconds] = useState(0);
   const [userId, setUserId] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [userEmailVerifiedAt, setUserEmailVerifiedAt] = useState<string | null>(null);
+  const [userPhone, setUserPhone] = useState("");
   const [profileName, setProfileName] = useState<string>(userSummary.displayName);
   const [userPoints, setUserPoints] = useState<number>(0);
   const [userCoins, setUserCoins] = useState<number>(14);
@@ -281,6 +379,9 @@ export function App() {
     buildLeaderboard(userSummary.displayName, userSummary.points)
   );
   const [apiBusy, setApiBusy] = useState(false);
+  const [dailyLogin, setDailyLogin] = useState<ApiDailyLoginProgress | null>(null);
+  const [dailyBonusModal, setDailyBonusModal] = useState<{ points: number; progress: ApiDailyLoginProgress } | null>(null);
+  const [pendingDailyBonus, setPendingDailyBonus] = useState<{ points: number; progress: ApiDailyLoginProgress } | null>(null);
   const rankedLeaderboard = route === "leaderboard-weekly" ? weeklyLeaderboard : dailyLeaderboard;
   const userRank =
     (route === "leaderboard-weekly" ? weeklyRank : dailyRank) ??
@@ -290,6 +391,9 @@ export function App() {
 
   const applyMePayload = (payload: Awaited<ReturnType<typeof playpointApi.getMe>>) => {
     setUserId(payload.user.id);
+    setUserEmail(payload.user.email ?? "");
+    setUserEmailVerifiedAt(payload.user.emailVerifiedAt);
+    setUserPhone(payload.user.phone ?? "");
     setProfileName(payload.user.displayName);
     setUserPoints(payload.user.totalPoints);
     setUserCoins(payload.user.coins);
@@ -297,6 +401,7 @@ export function App() {
     setGameHistory(payload.gameHistory);
     setDailyRank(payload.stats.dailyRank);
     setWeeklyRank(payload.stats.weeklyRank);
+    setDailyLogin(payload.stats.dailyLogin);
     setAttemptsLeftByGame((currentAttempts) => {
       const nextAttempts = { ...currentAttempts };
       payload.stats.gameAttempts.forEach((attempt) => {
@@ -319,6 +424,7 @@ export function App() {
     setRewardCatalog(rewardsPayload.map(toReward));
     setDailyLeaderboard(toRankedLeaderboard(dailyPayload, me.user.id));
     setWeeklyLeaderboard(toRankedLeaderboard(weeklyPayload, me.user.id));
+    return me;
   };
 
   useEffect(() => {
@@ -358,6 +464,50 @@ export function App() {
     setRoute(nextRoute);
   };
 
+  const showDailyBonusAfterDelay = (bonus: { points: number; progress: ApiDailyLoginProgress } | null) => {
+    if (!bonus) return;
+    window.setTimeout(() => {
+      setDailyBonusModal(bonus);
+    }, 1000);
+  };
+
+  const applyAuthPayload = async (payload: Awaited<ReturnType<typeof playpointApi.verifyOtp>>) => {
+    window.localStorage.setItem(tokenStorageKey, payload.token);
+    setAuthToken(payload.token);
+      setUserId(payload.user.id);
+      setUserEmail(payload.user.email ?? "");
+      setUserEmailVerifiedAt(payload.user.emailVerifiedAt);
+      setUserPhone(payload.user.phone ?? "");
+      setProfileName(payload.user.displayName);
+    setUserPoints(payload.user.totalPoints);
+    setUserCoins(payload.user.coins);
+    if (payload.dailyLogin) {
+      setDailyLogin(payload.dailyLogin.progress);
+    }
+    if (payload.dailyLogin?.awardedToday) {
+      setPendingDailyBonus({
+        points: payload.dailyLogin.points,
+        progress: payload.dailyLogin.progress
+      });
+    }
+    if (payload.isNewUser) {
+      navigate("profile-setup");
+      return;
+    }
+
+    const me = await refreshAccount(payload.token);
+    if (payload.dailyLogin?.awardedToday) {
+      setPendingDailyBonus(null);
+      navigate("home");
+      showDailyBonusAfterDelay({
+        points: payload.dailyLogin.points,
+        progress: me?.stats.dailyLogin ?? payload.dailyLogin.progress
+      });
+      return;
+    }
+    navigate("home");
+  };
+
   const requestOtp = async () => {
     const normalizedPhoneValue = phoneValue.replace(/\D/g, "");
     if (normalizedPhoneValue.length !== 9) return;
@@ -381,18 +531,33 @@ export function App() {
     try {
       setApiBusy(true);
       const payload = await playpointApi.verifyOtp(verifiedPhone || phoneValue, otpValue);
-      window.localStorage.setItem(tokenStorageKey, payload.token);
-      setAuthToken(payload.token);
-      setUserId(payload.user.id);
-      setProfileName(payload.user.displayName);
-      setUserPoints(payload.user.totalPoints);
-      setUserCoins(payload.user.coins);
-      if (payload.isNewUser) {
-        navigate("profile-setup");
-      } else {
-        await refreshAccount(payload.token);
-        navigate("home");
-      }
+      await applyAuthPayload(payload);
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
+  const loginWithGoogle = async () => {
+    try {
+      setApiBusy(true);
+      const idToken = await getGoogleIdToken();
+      const payload = await playpointApi.loginWithGoogle(idToken);
+      await applyAuthPayload(payload);
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
+  const loginWithApple = async () => {
+    try {
+      setApiBusy(true);
+      const idToken = await getAppleIdToken();
+      const payload = await playpointApi.loginWithApple(idToken);
+      await applyAuthPayload(payload);
     } catch (error: unknown) {
       window.alert(getApiErrorMessage(error));
     } finally {
@@ -410,8 +575,17 @@ export function App() {
       setApiBusy(true);
       const payload = await playpointApi.updateMe(authToken, profileName);
       applyMePayload(payload);
-      await refreshAccount(authToken);
+      const me = await refreshAccount(authToken);
       navigate("home");
+      showDailyBonusAfterDelay(
+        pendingDailyBonus
+          ? {
+              points: pendingDailyBonus.points,
+              progress: me?.stats.dailyLogin ?? pendingDailyBonus.progress
+            }
+          : null
+      );
+      setPendingDailyBonus(null);
     } catch (error: unknown) {
       window.alert(getApiErrorMessage(error));
     } finally {
@@ -504,6 +678,9 @@ export function App() {
     setDevOtpCode("");
     setOtpExpiresInSeconds(0);
     setUserId("");
+    setUserEmail("");
+    setUserEmailVerifiedAt(null);
+    setUserPhone("");
     setProfileName(userSummary.displayName);
     setUserPoints(0);
     setUserCoins(14);
@@ -558,6 +735,8 @@ export function App() {
               phoneValue={phoneValue}
               setPhoneValue={(value) => setPhoneValue(value.replace(/\D/g, "").slice(0, 9))}
               text={text}
+              onAppleLogin={loginWithApple}
+              onGoogleLogin={loginWithGoogle}
               onRequestOtp={requestOtp}
             />
           ) : null}
@@ -672,8 +851,11 @@ export function App() {
               setLanguage={setLanguage}
               text={text}
               userCoins={userCoins}
+              userEmail={userEmail}
+              userEmailVerifiedAt={userEmailVerifiedAt}
               userPoints={userPoints}
               userRank={userRank}
+              dailyLogin={dailyLogin}
               gamesPlayed={gamesPlayed}
               gameHistory={gameHistory}
               lastGameResult={lastGameResult}
@@ -685,8 +867,24 @@ export function App() {
             <EditProfilePage
               profileName={profileName}
               text={text}
+              userEmail={userEmail}
+              userEmailVerifiedAt={userEmailVerifiedAt}
+              userPhone={userPhone}
               userPoints={userPoints}
               setProfileName={setProfileName}
+              onRequestEmailVerification={async (email) => {
+                if (!authToken) return "";
+                const payload = await playpointApi.requestEmailVerification(authToken, email);
+                return payload.devCode ?? "";
+              }}
+              onVerifyEmail={async (email, code) => {
+                if (!authToken) return;
+                const payload = await playpointApi.verifyEmail(authToken, email, code);
+                setUserEmail(payload.user.email ?? "");
+                setUserEmailVerifiedAt(payload.user.emailVerifiedAt);
+                setUserPoints(payload.user.totalPoints);
+                await refreshAccount(authToken);
+              }}
               onSaveProfile={async (nextName) => {
                 if (!authToken) return;
                 const payload = await playpointApi.updateMe(authToken, nextName);
@@ -700,6 +898,14 @@ export function App() {
         </div>
 
         {showChrome ? <BottomNav route={route} text={text} onNavigate={navigate} /> : null}
+        {dailyBonusModal ? (
+          <DailyBonusModal
+            points={dailyBonusModal.points}
+            progress={dailyBonusModal.progress}
+            text={text}
+            onClose={() => setDailyBonusModal(null)}
+          />
+        ) : null}
       </main>
     </div>
   );
@@ -846,12 +1052,16 @@ function PhonePage({
   phoneValue,
   setPhoneValue,
   text,
+  onAppleLogin,
+  onGoogleLogin,
   onRequestOtp
 }: {
   disabled: boolean;
   phoneValue: string;
   setPhoneValue: (value: string) => void;
   text: TextGetter;
+  onAppleLogin: () => void;
+  onGoogleLogin: () => void;
   onRequestOtp: () => void;
 }) {
   return (
@@ -893,8 +1103,8 @@ function PhonePage({
             <span />
           </div>
           <div className="social-actions">
-            <button type="button" aria-label="Continue with Google">G</button>
-            <button type="button" aria-label="Continue with Apple"></button>
+            <button type="button" disabled={disabled} aria-label="Continue with Google" onClick={onGoogleLogin}>G</button>
+            <button type="button" disabled={disabled} aria-label="Continue with Apple" onClick={onAppleLogin}></button>
           </div>
         </div>
       </main>
@@ -1804,7 +2014,48 @@ function RewardsPage({
   );
 }
 
+function DailyBonusModal({
+  points,
+  progress,
+  text,
+  onClose
+}: {
+  points: number;
+  progress: ApiDailyLoginProgress;
+  text: TextGetter;
+  onClose: () => void;
+}) {
+  return (
+    <div className="daily-bonus-backdrop" role="presentation">
+      <section className="daily-bonus-modal" role="dialog" aria-modal="true" aria-labelledby="daily-bonus-title">
+        <button aria-label="Close" className="modal-close-button" type="button" onClick={onClose}>
+          <X size={18} />
+        </button>
+        <div className="daily-bonus-icon">
+          <Sparkles size={34} />
+        </div>
+        <h2 id="daily-bonus-title">{text("dailyBonus.title")}</h2>
+        <p>{text("dailyBonus.text")}</p>
+        <strong>
+          <PointsLabel value={points} prefix="+" />
+        </strong>
+        <div className="daily-bonus-days">
+          {progress.weekDays.map((day) => (
+            <span className={day.claimed ? "active" : ""} key={day.index}>
+              {day.claimed ? <CheckCircle2 size={14} /> : day.index}
+            </span>
+          ))}
+        </div>
+        <button className="primary-action" type="button" onClick={onClose}>
+          {text("common.continue")}
+        </button>
+      </section>
+    </div>
+  );
+}
+
 function ProfilePage({
+  dailyLogin,
   darkMode,
   language,
   profileName,
@@ -1813,6 +2064,8 @@ function ProfilePage({
   setLanguage,
   text,
   userCoins,
+  userEmail,
+  userEmailVerifiedAt,
   userPoints,
   userRank,
   gamesPlayed,
@@ -1821,6 +2074,7 @@ function ProfilePage({
   onNavigate,
   onLogout
 }: {
+  dailyLogin: ApiDailyLoginProgress | null;
   darkMode: boolean;
   language: Language;
   profileName: string;
@@ -1829,6 +2083,8 @@ function ProfilePage({
   setLanguage: (value: Language) => void;
   text: TextGetter;
   userCoins: number;
+  userEmail: string;
+  userEmailVerifiedAt: string | null;
   userPoints: number;
   userRank: number;
   gamesPlayed: number;
@@ -1862,6 +2118,19 @@ function ProfilePage({
     tone: "positive" as const
   }));
   const visibleHistoryItems = showFullHistory ? historyItems : historyItems.slice(0, 3);
+  const emailIsVerified = Boolean(userEmailVerifiedAt);
+  const visibleDailyLogin =
+    dailyLogin ??
+    ({
+      cycleProgress: 0,
+      pointsPerDay: pointRules.dailyLoginBonus,
+      todayClaimed: false,
+      totalClaims: 0,
+      weekDays: Array.from({ length: 7 }, (_, index) => ({
+        claimed: false,
+        index: index + 1
+      }))
+    } satisfies ApiDailyLoginProgress);
 
   return (
     <section className="profile-screen">
@@ -1880,35 +2149,31 @@ function ProfilePage({
         <p>{text("profile.player")} #88219</p>
       </section>
 
-      <section className="profile-preferences" aria-label="Profile preferences">
-        <div className="profile-language-card">
-          <span className="preference-icon">{darkMode ? <Moon size={20} /> : <Sun size={20} />}</span>
+      <section className="daily-login-card">
+        <div className="daily-login-card-header">
+          <span>
+            <Sparkles size={20} />
+          </span>
           <div>
-            <strong>{text("profile.darkMode")}</strong>
-            <div className="language-segment" role="group" aria-label="Dark mode">
-              <button className={!darkMode ? "active" : ""} type="button" onClick={() => setDarkMode(false)}>
-                OFF
-              </button>
-              <button className={darkMode ? "active" : ""} type="button" onClick={() => setDarkMode(true)}>
-                ON
-              </button>
-            </div>
+            <h3>{text("profile.dailyBonusTitle")}</h3>
+            <p>
+              {visibleDailyLogin.todayClaimed ? text("profile.dailyBonusClaimed") : text("profile.dailyBonusAvailable")}
+            </p>
           </div>
+          <strong>
+            +{formatter.format(visibleDailyLogin.pointsPerDay)}
+          </strong>
         </div>
-        <div className="profile-language-card">
-          <span className="preference-icon"><Languages size={20} /></span>
-          <div>
-            <strong>{text("profile.language")}</strong>
-            <div className="language-segment" role="group" aria-label="Language">
-              <button className={language === "ka" ? "active" : ""} type="button" onClick={() => setLanguage("ka")}>
-                KA
-              </button>
-              <button className={language === "en" ? "active" : ""} type="button" onClick={() => setLanguage("en")}>
-                EN
-              </button>
-            </div>
-          </div>
+        <div className="daily-login-days" aria-label={text("profile.dailyBonusTitle")}>
+          {visibleDailyLogin.weekDays.map((day) => (
+            <span className={day.claimed ? "active" : ""} key={day.index}>
+              {day.index}
+            </span>
+          ))}
         </div>
+        <small>
+          {formatter.format(visibleDailyLogin.cycleProgress)}/7 {text("profile.dailyBonusProgress")}
+        </small>
       </section>
 
       <section className="profile-stats-bento">
@@ -1943,6 +2208,23 @@ function ProfilePage({
           <p>{text("profile.games")}</p>
           <h4>{formatter.format(gamesPlayed)}</h4>
         </article>
+      </section>
+
+      <section className={emailIsVerified ? "profile-verification-card verified" : "profile-verification-card"}>
+        <div className="verification-icon">
+          {emailIsVerified ? <BadgeCheck size={22} /> : <Mail size={22} />}
+        </div>
+        <div>
+          <h3>{emailIsVerified ? text("profile.emailVerified") : text("profile.verifyEmailTitle")}</h3>
+          <p>
+            {emailIsVerified
+              ? userEmail || text("profile.emailVerifiedText")
+              : text("profile.verifyEmailText")}
+          </p>
+        </div>
+        <button type="button" onClick={() => onNavigate("edit-profile")}>
+          {emailIsVerified ? text("profile.manage") : text("profile.verifyEmailAction")}
+        </button>
       </section>
 
       <section className="profile-section-block">
@@ -2005,6 +2287,37 @@ function ProfilePage({
         ) : null}
       </section>
 
+      <section className="profile-preferences" aria-label="Profile preferences">
+        <div className="profile-language-card">
+          <span className="preference-icon">{darkMode ? <Moon size={20} /> : <Sun size={20} />}</span>
+          <div>
+            <strong>{text("profile.darkMode")}</strong>
+            <div className="language-segment" role="group" aria-label="Dark mode">
+              <button className={!darkMode ? "active" : ""} type="button" onClick={() => setDarkMode(false)}>
+                OFF
+              </button>
+              <button className={darkMode ? "active" : ""} type="button" onClick={() => setDarkMode(true)}>
+                ON
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="profile-language-card">
+          <span className="preference-icon"><Languages size={20} /></span>
+          <div>
+            <strong>{text("profile.language")}</strong>
+            <div className="language-segment" role="group" aria-label="Language">
+              <button className={language === "ka" ? "active" : ""} type="button" onClick={() => setLanguage("ka")}>
+                KA
+              </button>
+              <button className={language === "en" ? "active" : ""} type="button" onClick={() => setLanguage("en")}>
+                EN
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="profile-logout-section">
         <button type="button" onClick={onLogout}>
           <LogOut size={20} />
@@ -2018,25 +2331,45 @@ function ProfilePage({
 function EditProfilePage({
   profileName,
   text,
+  userEmail,
+  userEmailVerifiedAt,
+  userPhone,
   userPoints,
   setProfileName,
+  onRequestEmailVerification,
+  onVerifyEmail,
   onSaveProfile,
   onNavigate
 }: {
   profileName: string;
   text: TextGetter;
+  userEmail: string;
+  userEmailVerifiedAt: string | null;
+  userPhone: string;
   userPoints: number;
   setProfileName: (value: string) => void;
+  onRequestEmailVerification: (email: string) => Promise<string>;
+  onVerifyEmail: (email: string, code: string) => Promise<void>;
   onSaveProfile: (name: string) => Promise<void>;
   onNavigate: (route: Route) => void;
 }) {
-  const [email, setEmail] = useState("giorgi.m@example.ge");
+  const [email, setEmail] = useState(userEmail);
+  const [emailCode, setEmailCode] = useState("");
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [emailDevCode, setEmailDevCode] = useState("");
   const [saved, setSaved] = useState(false);
   const normalizedName = profileName.trim();
+  const normalizedEmail = email.trim();
+  const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+  const emailIsVerified = Boolean(userEmailVerifiedAt && normalizedEmail === userEmail);
   const nameIsValid =
     normalizedName.length >= displayNameMinLength &&
     normalizedName.length <= displayNameMaxLength &&
     displayNamePattern.test(normalizedName);
+
+  useEffect(() => {
+    setEmail(userEmail);
+  }, [userEmail]);
 
   const saveProfile = async () => {
     if (!nameIsValid) return;
@@ -2084,7 +2417,7 @@ function EditProfilePage({
             icon={<Phone size={20} />}
             id="phone"
             label={text("edit.phone")}
-            value="+995 555 12 34 56"
+            value={userPhone || text("edit.phoneMissing")}
             onChange={() => undefined}
             trailing={<Lock size={16} />}
             hint={text("edit.phoneHint")}
@@ -2098,6 +2431,54 @@ function EditProfilePage({
             placeholder="email@example.com"
             type="email"
           />
+          <div className="email-verify-box">
+            <div>
+              <strong>{emailIsVerified ? text("edit.emailVerified") : text("edit.emailBonus")}</strong>
+              <p>{emailIsVerified ? text("edit.emailVerifiedHint") : text("edit.emailBonusHint")}</p>
+            </div>
+            {emailIsVerified ? (
+              <BadgeCheck size={20} />
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={!emailIsValid}
+                  onClick={async () => {
+                    const devCode = await onRequestEmailVerification(normalizedEmail);
+                    setEmailDevCode(devCode);
+                    setEmailCodeSent(true);
+                    setEmailCode("");
+                  }}
+                >
+                  {text("edit.emailSendCode")}
+                </button>
+                {emailCodeSent ? (
+                  <div className="email-code-row">
+                    <input
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder={text("edit.emailCode")}
+                      value={emailCode}
+                      onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    />
+                    <button
+                      type="button"
+                      disabled={emailCode.length < 4}
+                      onClick={async () => {
+                        await onVerifyEmail(normalizedEmail, emailCode);
+                        setEmailCodeSent(false);
+                        setEmailDevCode("");
+                        setEmailCode("");
+                      }}
+                    >
+                      {text("edit.emailVerify")}
+                    </button>
+                  </div>
+                ) : null}
+                {emailDevCode ? <p className="email-dev-code">Test email code: {emailDevCode}</p> : null}
+              </>
+            )}
+          </div>
         </form>
 
         <div className="security-card">
