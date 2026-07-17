@@ -238,7 +238,7 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #8a8a92;
+  color: #ff8f01bd;
   font-size: 12px;
   font-weight: 1000;
   line-height: 1;
@@ -247,7 +247,7 @@ h3 {
 
 .xp-label svg {
   flex: 0 0 auto;
-  color: #8a8a92;
+  color: #ff8f01bd;
 }
 
 .level-progress {
@@ -276,6 +276,10 @@ h3 {
   color: #6e607a;
   font-size: 11px;
   font-weight: 900;
+}
+
+.level-progress-top span b {
+  color: #ff8f01bd;
 }
 
 .level-progress-track {
@@ -1758,6 +1762,17 @@ h3 {
   box-shadow: 0 8px 18px rgb(100 23 216 / 14%);
 }
 
+.podium-avatar img,
+.podium-avatar .avatar-choice-visual {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.podium-avatar img {
+  object-fit: cover;
+}
+
 .rank-1 .podium-avatar {
   width: 86px;
   height: 86px;
@@ -2998,7 +3013,7 @@ h3 {
 }
 
 .reward-bonus-payout .xp-label {
-  color: #8a8a92;
+  color: #ff8f01bd;
 }
 
 .reward-bonus-brand {
@@ -3805,7 +3820,7 @@ h3 {
 .profile-verification-card h3 {
   margin: 0 0 4px;
   color: #6417d8;
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .profile-verification-card.verified h3 {

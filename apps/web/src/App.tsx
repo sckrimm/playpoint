@@ -290,7 +290,7 @@ function LevelProgressBar({ progress, text }: { progress: ApiLevelProgress | nul
     <div className="level-progress">
       <div className="level-progress-top">
         <strong>LVL {formatter.format(safeProgress.level)}</strong>
-        <span>{formatter.format(safeProgress.xp)}/{formatter.format(safeProgress.xpRequired)} XP</span>
+        <span><b>{formatter.format(safeProgress.xp)}</b>/{formatter.format(safeProgress.xpRequired)} XP</span>
       </div>
       <div className="level-progress-track" aria-label="Level XP progress">
         {Array.from({ length: 20 }, (_, index) => (
@@ -2113,7 +2113,7 @@ function LeaderboardPage({
         {podiumOrder.map((player) => (
           <article className={`podium-player rank-${player.rank}`} key={`${player.rank}-${player.name}`}>
             <div className="podium-avatar">
-              <User size={player.rank === 1 ? 34 : 26} />
+              <AvatarVisual avatarUrl={player.avatarUrl ?? null} iconSize={player.rank === 1 ? 34 : 26} />
               <strong>{player.rank}</strong>
             </div>
             <h3>{player.name}</h3>
