@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, User } from "@prisma/client";
 import { pointRules } from "@playpoint/shared";
+import { grantXpForPointAward, type LevelProgress } from "./progression";
 
 type DbClient = Prisma.TransactionClient | PrismaClient;
 
@@ -62,6 +63,7 @@ export async function getDailyLoginProgress(db: DbClient, userId: string) {
 
 export async function awardDailyLoginBonus(db: DbClient, userId: string): Promise<{
   awardedToday: boolean;
+  levelProgress: LevelProgress | null;
   progress: DailyLoginProgress;
   user: User;
 }> {
@@ -84,6 +86,7 @@ export async function awardDailyLoginBonus(db: DbClient, userId: string): Promis
 
     return {
       awardedToday: false,
+      levelProgress: null,
       progress,
       user
     };
@@ -98,7 +101,7 @@ export async function awardDailyLoginBonus(db: DbClient, userId: string): Promis
     }
   });
 
-  const user = await db.user.update({
+  let user = await db.user.update({
     where: { id: userId },
     data: {
       totalPoints: {
@@ -106,10 +109,13 @@ export async function awardDailyLoginBonus(db: DbClient, userId: string): Promis
       }
     }
   });
+  const xpResult = await grantXpForPointAward(db, userId);
+  user = xpResult.user;
   const progress = await getDailyLoginProgress(db, userId);
 
   return {
     awardedToday: true,
+    levelProgress: xpResult.progress,
     progress,
     user
   };

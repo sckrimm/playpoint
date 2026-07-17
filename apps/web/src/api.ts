@@ -5,13 +5,19 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:4000
 export type ApiUser = {
   id: string;
   avatarUrl: string | null;
+  birthDate: string | null;
   coins: number;
   displayName: string;
   email: string | null;
   emailVerifiedAt: string | null;
+  interests: string[];
+  level: number;
   phone: string | null;
   phoneVerifiedAt: string | null;
+  passwordSetAt: string | null;
   totalPoints: number;
+  totalXp: number;
+  xp: number;
 };
 
 export type ApiReward = {
@@ -61,9 +67,34 @@ export type ApiDailyLoginProgress = {
   }>;
 };
 
+export type ApiLevelProgress = {
+  level: number;
+  levelBonusPoints: number;
+  progressPercent: number;
+  xp: number;
+  xpAwarded: number;
+  xpRequired: number;
+  levelUps: Array<{
+    bonusPoints: number;
+    level: number;
+  }>;
+};
+
+export type ApiProfileCompletion = {
+  awarded: boolean;
+  percent: number;
+  rewardPoints: number;
+  tasks: Array<{
+    completed: boolean;
+    key: "avatar" | "birthDate" | "displayName" | "email" | "interests" | "password" | "phone";
+    label: string;
+  }>;
+};
+
 export type ApiAuthPayload = {
   dailyLogin?: {
     awardedToday: boolean;
+    levelProgress: ApiLevelProgress | null;
     points: number;
     progress: ApiDailyLoginProgress;
   };
@@ -84,6 +115,8 @@ export type ApiMe = {
   }>;
   stats: {
     dailyLogin: ApiDailyLoginProgress;
+    levelProgress: ApiLevelProgress;
+    profileCompletion: ApiProfileCompletion;
     dailyRank: number | null;
     gameAttempts: Array<{
       attemptsLeft: number;
@@ -92,6 +125,7 @@ export type ApiMe = {
       usedAttempts: number;
     }>;
     gamesPlayed: number;
+    rewardEngagements: string[];
     weeklyRank: number | null;
   };
   rewardClaims: ApiRewardClaim[];
@@ -147,6 +181,28 @@ function normalizeRewardImageUrl(imageUrl: string | null) {
     .replace(/\/assets\/(reward-[^/]+-photo)\.png$/, "/assets/$1.webp");
 }
 
+function normalizeRewardBrandLogoUrl(brandName: string, logoUrl: string | null) {
+  const fallbackLogos: Record<string, string> = {
+    "Burger Palace": "/assets/reward-burger.svg",
+    "CineClub": "/assets/reward-cinema.svg",
+    "Coffee Lab": "/assets/reward-coffee.svg",
+    "FitHub": "/assets/reward-fitness.svg",
+    "GameZone": "/assets/reward-gaming.svg",
+    "TechStore": "/assets/reward-headphones.svg"
+  };
+
+  return (
+    logoUrl
+      ?.replace(/\/assets\/brand-burger-palace\.png$/, "/assets/reward-burger.svg")
+      .replace(/\/assets\/brand-cineclub\.png$/, "/assets/reward-cinema.svg")
+      .replace(/\/assets\/brand-coffee-lab\.png$/, "/assets/reward-coffee.svg")
+      .replace(/\/assets\/brand-fithub\.png$/, "/assets/reward-fitness.svg")
+      .replace(/\/assets\/brand-gamezone\.png$/, "/assets/reward-gaming.svg")
+      .replace(/\/assets\/brand-tech-store\.png$/, "/assets/reward-headphones.svg") ??
+    fallbackLogos[brandName]
+  );
+}
+
 export function toReward(apiReward: ApiReward): Reward {
   return {
     id: apiReward.slug,
@@ -155,6 +211,7 @@ export function toReward(apiReward: ApiReward): Reward {
     points: apiReward.requiredPoints,
     category: apiReward.category,
     image: normalizeRewardImageUrl(apiReward.imageUrl),
+    brandLogo: normalizeRewardBrandLogoUrl(apiReward.brand.name, apiReward.brand.logoUrl),
     quantity: apiReward.quantity,
     remainingQuantity: Math.max(0, apiReward.quantity - apiReward.claimedCount)
   };
@@ -199,7 +256,7 @@ export const playpointApi = {
     );
   },
   verifyEmail(token: string, email: string, code: string) {
-    return apiFetch<{ ok: true; user: ApiUser }>("/auth/verify-email", {
+    return apiFetch<{ levelProgress?: ApiLevelProgress | null; ok: true; user: ApiUser }>("/auth/verify-email", {
       method: "POST",
       token,
       body: JSON.stringify({ email, code })
@@ -214,11 +271,21 @@ export const playpointApi = {
   getMe(token: string) {
     return apiFetch<ApiMe>("/me", { token });
   },
-  updateMe(token: string, displayName: string) {
+  updateMe(
+    token: string,
+    profile: {
+      avatarUrl?: string | null;
+      birthDate?: string | null;
+      displayName?: string;
+      interests?: string[];
+      password?: string;
+      passwordConfirm?: string;
+    }
+  ) {
     return apiFetch<ApiMe>("/me", {
       method: "PATCH",
       token,
-      body: JSON.stringify({ displayName })
+      body: JSON.stringify(profile)
     });
   },
   getRewards() {
@@ -235,9 +302,10 @@ export const playpointApi = {
   },
   finishGame(token: string, gameId: GameId, attempt: GameAttemptStart, result: GameResult) {
     return apiFetch<{
+      levelProgress: ApiLevelProgress;
       rank: { daily: number | null; weekly: number | null };
       score: GameResult & { rawScore: number; playPoints: number };
-      user: Pick<ApiUser, "coins" | "displayName" | "id" | "totalPoints">;
+      user: Pick<ApiUser, "coins" | "displayName" | "id" | "level" | "totalPoints" | "totalXp" | "xp">;
     }>(`/games/${gameId}/finish`, {
       method: "POST",
       token,
@@ -258,6 +326,19 @@ export const playpointApi = {
       claim: ApiRewardClaim;
       user: Pick<ApiUser, "coins" | "displayName" | "id" | "totalPoints">;
     }>(`/rewards/${rewardId}/claim`, {
+      method: "POST",
+      token
+    });
+  },
+  engageReward(token: string, rewardId: string) {
+    return apiFetch<{
+      alreadyAwarded: boolean;
+      levelProgress: ApiLevelProgress | null;
+      points: number;
+      rewardId: string;
+      user: Pick<ApiUser, "coins" | "displayName" | "id" | "level" | "totalPoints" | "totalXp" | "xp">;
+      won: boolean;
+    }>(`/rewards/${rewardId}/engage`, {
       method: "POST",
       token
     });

@@ -3,6 +3,7 @@ import { calculatePlayPoints } from "@playpoint/shared";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
 import { createSessionToken, hashScoreToken, requireSession } from "../modules/auth/auth.helpers";
+import { grantXpForPointAward } from "../modules/points/progression";
 
 const gameParamsSchema = z.object({
   gameId: z.string().min(1)
@@ -247,22 +248,26 @@ export function registerGameRoutes(app: FastifyInstance) {
         }
       });
 
-      const user = await tx.user.update({
+      await tx.user.update({
         where: { id: auth.session.userId },
         data: {
           totalPoints: {
             increment: playPoints
           }
-        },
-        select: {
-          coins: true,
-          displayName: true,
-          id: true,
-          totalPoints: true
         }
       });
+      const xpResult = await grantXpForPointAward(tx, auth.session.userId);
+      const user = {
+        coins: xpResult.user.coins,
+        displayName: xpResult.user.displayName,
+        id: xpResult.user.id,
+        level: xpResult.user.level,
+        totalPoints: xpResult.user.totalPoints,
+        totalXp: xpResult.user.totalXp,
+        xp: xpResult.user.xp
+      };
 
-      return { score, user };
+      return { levelProgress: xpResult.progress, score, user };
     });
 
     const [dailyRank, weeklyRank] = await Promise.all([
@@ -275,6 +280,7 @@ export function registerGameRoutes(app: FastifyInstance) {
         daily: dailyRank,
         weekly: weeklyRank
       },
+      levelProgress: result.levelProgress,
       score: result.score,
       user: result.user
     };

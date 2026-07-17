@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FreeMode, Scrollbar } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
@@ -9,7 +9,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   Brain,
-  Camera,
+  Calendar,
   CircleDollarSign,
   CheckCircle2,
   ChevronDown,
@@ -50,7 +50,7 @@ import {
   userSummary
 } from "@playpoint/shared";
 import { AimHitGame } from "./games/aim-hit/AimHitGame";
-import { ApiError, type ApiDailyLoginProgress, type GameAttemptStart, playpointApi, toReward } from "./api";
+import { ApiError, type ApiDailyLoginProgress, type ApiLevelProgress, type ApiProfileCompletion, type GameAttemptStart, playpointApi, toReward } from "./api";
 import { ColorRushGame } from "./games/color-rush/ColorRushGame";
 import { getText, type Language, type TextGetter } from "./i18n";
 import { MemoryGame } from "./games/memory/MemoryGame";
@@ -110,6 +110,27 @@ const formatter = new Intl.NumberFormat("en-US");
 const displayNamePattern = /^[\p{L}\p{N}_ ]+$/u;
 const displayNameMinLength = 3;
 const displayNameMaxLength = 24;
+const profileInterestIds = [
+  "food",
+  "coffee",
+  "cinema",
+  "gaming",
+  "tech",
+  "fitness",
+  "music",
+  "travel",
+  "fashion",
+  "sports"
+] as const;
+const avatarChoices = [
+  { color: "#6417d8", icon: Sparkles, id: "spark", label: "Spark" },
+  { color: "#0fa83f", icon: Trophy, id: "trophy", label: "Trophy" },
+  { color: "#8b2cff", icon: Star, id: "star", label: "Star" },
+  { color: "#f5b21b", icon: Gamepad2, id: "game", label: "Game" }
+].map((choice) => ({
+  ...choice,
+  value: `avatar:${choice.id}`
+}));
 
 function AnimatedPoints({
   value,
@@ -173,6 +194,115 @@ function PointsLabel({
       {prefix}
       {animated ? <AnimatedPoints value={value} /> : formatter.format(value)}
     </span>
+  );
+}
+
+function XpLabel({ value, prefix = "+" }: { value: number; prefix?: string }) {
+  return (
+    <span className="xp-label">
+      <Star size={13} />
+      {prefix}
+      {formatter.format(value)} XP
+    </span>
+  );
+}
+
+function AvatarVisual({ avatarUrl, iconSize = 42 }: { avatarUrl: string | null; iconSize?: number }) {
+  const avatarChoice = avatarChoices.find((choice) => choice.value === avatarUrl);
+  if (avatarChoice) {
+    const Icon = avatarChoice.icon;
+    return (
+      <span className="avatar-choice-visual" style={{ "--avatar-color": avatarChoice.color } as CSSProperties}>
+        <Icon size={iconSize} />
+      </span>
+    );
+  }
+
+  return avatarUrl ? <img src={avatarUrl} alt="" /> : <User size={iconSize} />;
+}
+
+function AvatarPickerModal({
+  selectedAvatarUrl,
+  text,
+  onClose,
+  onSelect
+}: {
+  selectedAvatarUrl: string | null;
+  text: TextGetter;
+  onClose: () => void;
+  onSelect: (avatarUrl: string) => void;
+}) {
+  return (
+    <div className="avatar-modal-backdrop" role="presentation" onClick={onClose}>
+      <section className="avatar-modal" role="dialog" aria-modal="true" aria-label="Choose avatar" onClick={(event) => event.stopPropagation()}>
+        <div className="avatar-modal-header">
+          <h3>{text("edit.photo")}</h3>
+          <button type="button" aria-label="Close" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="avatar-choice-grid">
+          {avatarChoices.map((choice) => {
+            const Icon = choice.icon;
+            const selected = selectedAvatarUrl === choice.value;
+            return (
+              <button
+                className={selected ? "active" : ""}
+                key={choice.id}
+                type="button"
+                onClick={() => {
+                  onSelect(choice.value);
+                  onClose();
+                }}
+              >
+                <span style={{ "--avatar-color": choice.color } as CSSProperties}>
+                  <Icon size={30} />
+                </span>
+                <strong>{choice.label}</strong>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function getInterestLabel(interestId: string, text: TextGetter) {
+  return text(`interest.${interestId}`);
+}
+
+function LevelProgressBar({ progress, text }: { progress: ApiLevelProgress | null; text: TextGetter }) {
+  const safeProgress =
+    progress ??
+    ({
+      level: 1,
+      levelBonusPoints: pointRules.firstLevelBonus,
+      levelUps: [],
+      progressPercent: 0,
+      xp: 0,
+      xpAwarded: 0,
+      xpRequired: pointRules.firstLevelXp
+    } satisfies ApiLevelProgress);
+  const filledSegments = Math.min(20, Math.floor((safeProgress.xp / safeProgress.xpRequired) * 20));
+
+  return (
+    <div className="level-progress">
+      <div className="level-progress-top">
+        <strong>LVL {formatter.format(safeProgress.level)}</strong>
+        <span>{formatter.format(safeProgress.xp)}/{formatter.format(safeProgress.xpRequired)} XP</span>
+      </div>
+      <div className="level-progress-track" aria-label="Level XP progress">
+        {Array.from({ length: 20 }, (_, index) => (
+          <span className={index < filledSegments ? "active" : ""} key={index}>
+            {(index + 1) % 5 === 0 ? <i /> : null}
+          </span>
+        ))}
+      </div>
+      <small>
+        {formatter.format(safeProgress.levelBonusPoints)} {text("common.points")} LVL {formatter.format(safeProgress.level + 1)}
+      </small>
+    </div>
   );
 }
 
@@ -347,9 +477,16 @@ export function App() {
   const [userEmail, setUserEmail] = useState("");
   const [userEmailVerifiedAt, setUserEmailVerifiedAt] = useState<string | null>(null);
   const [userPhone, setUserPhone] = useState("");
+  const [userPhoneVerifiedAt, setUserPhoneVerifiedAt] = useState<string | null>(null);
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
+  const [userBirthDate, setUserBirthDate] = useState<string | null>(null);
+  const [userInterests, setUserInterests] = useState<string[]>([]);
+  const [userPasswordSetAt, setUserPasswordSetAt] = useState<string | null>(null);
   const [profileName, setProfileName] = useState<string>(userSummary.displayName);
   const [userPoints, setUserPoints] = useState<number>(0);
   const [userCoins, setUserCoins] = useState<number>(14);
+  const [levelProgress, setLevelProgress] = useState<ApiLevelProgress | null>(null);
+  const [lastAwardProgress, setLastAwardProgress] = useState<ApiLevelProgress | null>(null);
   const [gamesPlayed, setGamesPlayed] = useState<number>(0);
   const [gameHistory, setGameHistory] = useState<GameHistoryItem[]>([]);
   const [attemptsLeftByGame, setAttemptsLeftByGame] = useState<AttemptsLeftByGame>(() => createDefaultAttempts());
@@ -358,6 +495,7 @@ export function App() {
   const [language, setLanguage] = useState<Language>("ka");
   const [darkMode, setDarkMode] = useState(false);
   const [purchasedRewards, setPurchasedRewards] = useState<Reward[]>([]);
+  const [rewardEngagementIds, setRewardEngagementIds] = useState<Set<string>>(() => new Set());
   const [rewardCatalog, setRewardCatalog] = useState<Reward[]>(rewards);
   const [otpValue, setOtpValue] = useState("");
   const [selectedGameId, setSelectedGameId] = useState<GameId>("aim-hit");
@@ -380,8 +518,9 @@ export function App() {
   );
   const [apiBusy, setApiBusy] = useState(false);
   const [dailyLogin, setDailyLogin] = useState<ApiDailyLoginProgress | null>(null);
-  const [dailyBonusModal, setDailyBonusModal] = useState<{ points: number; progress: ApiDailyLoginProgress } | null>(null);
-  const [pendingDailyBonus, setPendingDailyBonus] = useState<{ points: number; progress: ApiDailyLoginProgress } | null>(null);
+  const [profileCompletion, setProfileCompletion] = useState<ApiProfileCompletion | null>(null);
+  const [dailyBonusModal, setDailyBonusModal] = useState<{ levelProgress: ApiLevelProgress | null; points: number; progress: ApiDailyLoginProgress } | null>(null);
+  const [pendingDailyBonus, setPendingDailyBonus] = useState<{ levelProgress: ApiLevelProgress | null; points: number; progress: ApiDailyLoginProgress } | null>(null);
   const rankedLeaderboard = route === "leaderboard-weekly" ? weeklyLeaderboard : dailyLeaderboard;
   const userRank =
     (route === "leaderboard-weekly" ? weeklyRank : dailyRank) ??
@@ -394,14 +533,22 @@ export function App() {
     setUserEmail(payload.user.email ?? "");
     setUserEmailVerifiedAt(payload.user.emailVerifiedAt);
     setUserPhone(payload.user.phone ?? "");
+    setUserPhoneVerifiedAt(payload.user.phoneVerifiedAt);
+    setUserAvatarUrl(payload.user.avatarUrl);
+    setUserBirthDate(payload.user.birthDate ? payload.user.birthDate.slice(0, 10) : null);
+    setUserInterests(payload.user.interests ?? []);
+    setUserPasswordSetAt(payload.user.passwordSetAt);
     setProfileName(payload.user.displayName);
     setUserPoints(payload.user.totalPoints);
     setUserCoins(payload.user.coins);
+    setLevelProgress(payload.stats.levelProgress);
     setGamesPlayed(payload.stats.gamesPlayed);
     setGameHistory(payload.gameHistory);
     setDailyRank(payload.stats.dailyRank);
     setWeeklyRank(payload.stats.weeklyRank);
     setDailyLogin(payload.stats.dailyLogin);
+    setProfileCompletion(payload.stats.profileCompletion);
+    setRewardEngagementIds(new Set(payload.stats.rewardEngagements));
     setAttemptsLeftByGame((currentAttempts) => {
       const nextAttempts = { ...currentAttempts };
       payload.stats.gameAttempts.forEach((attempt) => {
@@ -464,7 +611,7 @@ export function App() {
     setRoute(nextRoute);
   };
 
-  const showDailyBonusAfterDelay = (bonus: { points: number; progress: ApiDailyLoginProgress } | null) => {
+  const showDailyBonusAfterDelay = (bonus: { levelProgress: ApiLevelProgress | null; points: number; progress: ApiDailyLoginProgress } | null) => {
     if (!bonus) return;
     window.setTimeout(() => {
       setDailyBonusModal(bonus);
@@ -483,9 +630,11 @@ export function App() {
     setUserCoins(payload.user.coins);
     if (payload.dailyLogin) {
       setDailyLogin(payload.dailyLogin.progress);
+      if (payload.dailyLogin.levelProgress) setLevelProgress(payload.dailyLogin.levelProgress);
     }
     if (payload.dailyLogin?.awardedToday) {
       setPendingDailyBonus({
+        levelProgress: payload.dailyLogin.levelProgress,
         points: payload.dailyLogin.points,
         progress: payload.dailyLogin.progress
       });
@@ -500,6 +649,7 @@ export function App() {
       setPendingDailyBonus(null);
       navigate("home");
       showDailyBonusAfterDelay({
+        levelProgress: payload.dailyLogin.levelProgress ?? me?.stats.levelProgress ?? null,
         points: payload.dailyLogin.points,
         progress: me?.stats.dailyLogin ?? payload.dailyLogin.progress
       });
@@ -565,7 +715,7 @@ export function App() {
     }
   };
 
-  const finishProfileSetup = async () => {
+  const finishProfileSetup = async (name = profileName, avatarUrl = userAvatarUrl) => {
     if (!authToken) {
       navigate("phone");
       return;
@@ -573,13 +723,14 @@ export function App() {
 
     try {
       setApiBusy(true);
-      const payload = await playpointApi.updateMe(authToken, profileName);
+      const payload = await playpointApi.updateMe(authToken, { avatarUrl, displayName: name });
       applyMePayload(payload);
       const me = await refreshAccount(authToken);
       navigate("home");
       showDailyBonusAfterDelay(
         pendingDailyBonus
           ? {
+              levelProgress: pendingDailyBonus.levelProgress ?? me?.stats.levelProgress ?? null,
               points: pendingDailyBonus.points,
               progress: me?.stats.dailyLogin ?? pendingDailyBonus.progress
             }
@@ -633,6 +784,8 @@ export function App() {
       setLastGameResult(syncedResult);
       setUserPoints(payload.user.totalPoints);
       setUserCoins(payload.user.coins);
+      setLevelProgress(payload.levelProgress);
+      setLastAwardProgress(payload.levelProgress);
       setDailyRank(payload.rank.daily);
       setWeeklyRank(payload.rank.weekly);
       setCurrentAttempt(null);
@@ -667,6 +820,40 @@ export function App() {
     }
   };
 
+  const collectRewardEngagementBonus = async (reward: Reward) => {
+    if (!authToken) {
+      navigate("phone");
+      return null;
+    }
+
+    try {
+      setApiBusy(true);
+      const payload = await playpointApi.engageReward(authToken, reward.id);
+      setUserPoints((currentPoints) => Math.max(currentPoints, payload.user.totalPoints));
+      setUserCoins(payload.user.coins);
+      if (payload.levelProgress) {
+        const nextProgress = payload.levelProgress;
+        setLevelProgress((currentProgress) => {
+          if (
+            currentProgress &&
+            (nextProgress.level < currentProgress.level ||
+              (nextProgress.level === currentProgress.level && nextProgress.xp < currentProgress.xp))
+          ) {
+            return currentProgress;
+          }
+          return nextProgress;
+        });
+        setLastAwardProgress(nextProgress);
+      }
+      return payload;
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+      return null;
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
   const restartRegistration = () => {
     if (authToken) {
       playpointApi.logout(authToken).catch(() => undefined);
@@ -681,15 +868,24 @@ export function App() {
     setUserEmail("");
     setUserEmailVerifiedAt(null);
     setUserPhone("");
+    setUserPhoneVerifiedAt(null);
+    setUserAvatarUrl(null);
+    setUserBirthDate(null);
+    setUserInterests([]);
+    setUserPasswordSetAt(null);
     setProfileName(userSummary.displayName);
     setUserPoints(0);
     setUserCoins(14);
+    setLevelProgress(null);
+    setLastAwardProgress(null);
     setGamesPlayed(0);
     setGameHistory([]);
     setAttemptsLeftByGame(createDefaultAttempts());
     setDailyRank(null);
     setWeeklyRank(null);
     setPurchasedRewards([]);
+    setRewardEngagementIds(new Set());
+    setProfileCompletion(null);
     setRewardCatalog(rewards);
     setDailyLeaderboard(buildLeaderboard(userSummary.displayName, userSummary.points));
     setWeeklyLeaderboard(buildLeaderboard(userSummary.displayName, userSummary.points));
@@ -758,6 +954,7 @@ export function App() {
             <ProfileSetupPage
               disabled={apiBusy}
               profileName={profileName}
+              userAvatarUrl={userAvatarUrl}
               setProfileName={setProfileName}
               text={text}
               onFinish={finishProfileSetup}
@@ -804,6 +1001,7 @@ export function App() {
               text={text}
               userPoints={userPoints}
               userRank={userRank}
+              levelProgress={lastAwardProgress}
               onNavigate={navigate}
               onPlayAgain={selectGame}
             />
@@ -835,9 +1033,11 @@ export function App() {
           {route === "rewards" ? (
             <RewardsPage
               purchasedRewards={purchasedRewards}
+              rewardEngagementIds={rewardEngagementIds}
               rewards={rewardCatalog}
               text={text}
               userPoints={userPoints}
+              onCollectRewardBonus={collectRewardEngagementBonus}
               onClaimReward={claimReward}
             />
           ) : null}
@@ -846,16 +1046,23 @@ export function App() {
               darkMode={darkMode}
               language={language}
               profileName={profileName}
+              profileCompletion={profileCompletion}
+              profileInterests={userInterests}
               purchasedRewards={purchasedRewards}
               setDarkMode={setDarkMode}
               setLanguage={setLanguage}
               text={text}
               userCoins={userCoins}
+              userBirthDate={userBirthDate}
+              userPasswordSetAt={userPasswordSetAt}
               userEmail={userEmail}
               userEmailVerifiedAt={userEmailVerifiedAt}
+              userAvatarUrl={userAvatarUrl}
+              userPhoneVerifiedAt={userPhoneVerifiedAt}
               userPoints={userPoints}
               userRank={userRank}
               dailyLogin={dailyLogin}
+              levelProgress={levelProgress}
               gamesPlayed={gamesPlayed}
               gameHistory={gameHistory}
               lastGameResult={lastGameResult}
@@ -867,9 +1074,13 @@ export function App() {
             <EditProfilePage
               profileName={profileName}
               text={text}
+              userAvatarUrl={userAvatarUrl}
+              userBirthDate={userBirthDate}
               userEmail={userEmail}
               userEmailVerifiedAt={userEmailVerifiedAt}
               userPhone={userPhone}
+              userInterests={userInterests}
+              userPasswordSetAt={userPasswordSetAt}
               userPoints={userPoints}
               setProfileName={setProfileName}
               onRequestEmailVerification={async (email) => {
@@ -883,11 +1094,18 @@ export function App() {
                 setUserEmail(payload.user.email ?? "");
                 setUserEmailVerifiedAt(payload.user.emailVerifiedAt);
                 setUserPoints(payload.user.totalPoints);
+                if (payload.levelProgress) setLevelProgress(payload.levelProgress);
                 await refreshAccount(authToken);
               }}
-              onSaveProfile={async (nextName) => {
+              onSaveProfile={async (nextName, nextAvatarUrl, nextInterests, nextBirthDate, nextPassword, nextPasswordConfirm) => {
                 if (!authToken) return;
-                const payload = await playpointApi.updateMe(authToken, nextName);
+                const payload = await playpointApi.updateMe(authToken, {
+                  avatarUrl: nextAvatarUrl,
+                  birthDate: nextBirthDate,
+                  displayName: nextName,
+                  interests: nextInterests,
+                  ...(nextPassword ? { password: nextPassword, passwordConfirm: nextPasswordConfirm } : {})
+                });
                 applyMePayload(payload);
                 await refreshAccount(authToken);
                 navigate("profile");
@@ -900,6 +1118,7 @@ export function App() {
         {showChrome ? <BottomNav route={route} text={text} onNavigate={navigate} /> : null}
         {dailyBonusModal ? (
           <DailyBonusModal
+            levelProgress={dailyBonusModal.levelProgress}
             points={dailyBonusModal.points}
             progress={dailyBonusModal.progress}
             text={text}
@@ -1249,27 +1468,36 @@ function OtpPage({
 function ProfileSetupPage({
   disabled,
   profileName,
+  userAvatarUrl,
   setProfileName,
   text,
   onFinish
 }: {
   disabled: boolean;
   profileName: string;
+  userAvatarUrl: string | null;
   setProfileName: (value: string) => void;
   text: TextGetter;
-  onFinish: () => Promise<void>;
+  onFinish: (name: string, avatarUrl: string | null) => Promise<void>;
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
+  const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(userAvatarUrl);
   const normalizedName = profileName.trim();
   const nameIsValid =
     normalizedName.length >= displayNameMinLength &&
     normalizedName.length <= displayNameMaxLength &&
     displayNamePattern.test(normalizedName);
 
+  useEffect(() => {
+    setSelectedAvatarUrl(userAvatarUrl);
+  }, [userAvatarUrl]);
+
   const finishSetup = () => {
+    if (!nameIsValid) return;
     setShowSuccess(true);
     window.setTimeout(() => {
-      onFinish().finally(() => setShowSuccess(false));
+      onFinish(normalizedName, selectedAvatarUrl).finally(() => setShowSuccess(false));
     }, 900);
   };
 
@@ -1289,13 +1517,13 @@ function ProfileSetupPage({
         <section className="setup-card">
           <div className="setup-orb orb-a" />
           <div className="setup-orb orb-b" />
-          <div className="avatar-upload">
-            <User size={52} />
-            <button type="button" aria-label="Upload avatar">
-              <Camera size={20} />
+          <div className="avatar-upload setup-avatar-picker">
+            <AvatarVisual avatarUrl={selectedAvatarUrl} iconSize={52} />
+            <button type="button" aria-label="Choose avatar" onClick={() => setAvatarModalOpen(true)}>
+              <Pencil size={20} />
             </button>
           </div>
-          <button className="skip-photo" type="button">
+          <button className="skip-photo" type="button" onClick={() => setAvatarModalOpen(true)}>
             {text("setup.skipPhoto")}
           </button>
 
@@ -1318,6 +1546,7 @@ function ProfileSetupPage({
           <div className="bonus-strip">
             <Sparkles size={18} />
             {text("setup.bonusPrefix")} {pointRules.registrationBonus} {text("setup.bonusSuffix")}
+            <XpLabel value={pointRules.xpPerPointAward} />
           </div>
         </section>
 
@@ -1339,6 +1568,14 @@ function ProfileSetupPage({
             <div className="success-progress"><span /></div>
           </div>
         </div>
+      ) : null}
+      {avatarModalOpen ? (
+        <AvatarPickerModal
+          selectedAvatarUrl={selectedAvatarUrl}
+          text={text}
+          onClose={() => setAvatarModalOpen(false)}
+          onSelect={setSelectedAvatarUrl}
+        />
       ) : null}
     </section>
   );
@@ -1734,6 +1971,7 @@ function GameFramePage({
 }
 
 function ScorePopupPage({
+  levelProgress,
   result,
   text,
   userPoints,
@@ -1741,6 +1979,7 @@ function ScorePopupPage({
   onNavigate,
   onPlayAgain
 }: {
+  levelProgress: ApiLevelProgress | null;
   result: GameResult;
   text: TextGetter;
   userPoints: number;
@@ -1763,8 +2002,17 @@ function ScorePopupPage({
         <div>
           <span>{text("score.pointsEarned")}</span>
           <strong><PointsLabel className="score-earned-points" value={result.playPoints} prefix="+" /></strong>
+          <em className="score-xp"><XpLabel value={levelProgress?.xpAwarded ?? pointRules.xpPerPointAward} /></em>
         </div>
       </div>
+      {levelProgress?.levelUps.length ? (
+        <div className="level-up-banner">
+          <Sparkles size={18} />
+          <span>
+            LVL {formatter.format(levelProgress.level)} • +{formatter.format(levelProgress.levelUps.at(-1)?.bonusPoints ?? 0)} {text("common.points")}
+          </span>
+        </div>
+      ) : null}
       <div className="score-breakdown">
         <span>{text("score.hits")}: {result.hits ?? 0}</span>
         <span>{text("score.misses")}: {result.misses ?? 0}</span>
@@ -1907,19 +2155,26 @@ function LeaderboardPage({
 
 function RewardsPage({
   purchasedRewards,
+  rewardEngagementIds,
   rewards,
   text,
   userPoints,
+  onCollectRewardBonus,
   onClaimReward
 }: {
   purchasedRewards: Reward[];
+  rewardEngagementIds: Set<string>;
   rewards: Reward[];
   text: TextGetter;
   userPoints: number;
+  onCollectRewardBonus: (reward: Reward) => Promise<Awaited<ReturnType<typeof playpointApi.engageReward>> | null>;
   onClaimReward: (reward: Reward) => Promise<boolean>;
 }) {
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+  const [collectingRewardIds, setCollectingRewardIds] = useState<Set<string>>(() => new Set());
+  const [flippedRewardIds, setFlippedRewardIds] = useState<Set<string>>(() => new Set());
+  const [rewardRevealResults, setRewardRevealResults] = useState<Map<string, "lost" | "won">>(() => new Map());
   const [selectedCategory, setSelectedCategory] = useState<Reward["category"] | "all">("all");
   const filteredRewards =
     selectedCategory === "all" ? rewards : rewards.filter((reward) => reward.category === selectedCategory);
@@ -1942,9 +2197,81 @@ function RewardsPage({
           const rewardOwned = purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id);
           const rewardOutOfStock = reward.remainingQuantity === 0;
           const rewardAffordable = userPoints >= reward.points;
+          const rewardBonusCollected = rewardEngagementIds.has(reward.id) || flippedRewardIds.has(reward.id);
+          const rewardBonusCollecting = collectingRewardIds.has(reward.id);
+          const revealResult = rewardRevealResults.get(reward.id);
 
           return (
           <article className={`reward-card reward-${reward.id}`} key={reward.id}>
+            {!rewardBonusCollected ? (
+              <button
+                className={[
+                  "reward-bonus-overlay",
+                  rewardBonusCollecting ? "flipping" : "",
+                  revealResult ? `revealed ${revealResult}` : ""
+                ].filter(Boolean).join(" ")}
+                type="button"
+                onClick={async () => {
+                  if (rewardBonusCollecting || revealResult) return;
+                  setCollectingRewardIds((currentIds) => new Set(currentIds).add(reward.id));
+                  const result = await onCollectRewardBonus(reward);
+                  if (!result) {
+                    setCollectingRewardIds((currentIds) => {
+                      const nextIds = new Set(currentIds);
+                      nextIds.delete(reward.id);
+                      return nextIds;
+                    });
+                    return;
+                  }
+                  setRewardRevealResults((currentResults) => new Map(currentResults).set(reward.id, result.won ? "won" : "lost"));
+                  window.setTimeout(() => {
+                    setFlippedRewardIds((currentIds) => {
+                      return new Set(currentIds).add(reward.id);
+                    });
+                    setCollectingRewardIds((currentIds) => {
+                      const nextIds = new Set(currentIds);
+                      nextIds.delete(reward.id);
+                      return nextIds;
+                    });
+                  }, 2000);
+                }}
+              >
+                {revealResult ? (
+                  <span className="reward-reveal-result">
+                    {revealResult === "won" ? (
+                      <>
+                        <CheckCircle2 size={24} />
+                        <strong>მოიგე</strong>
+                        <span>
+                          <PointsLabel value={pointRules.rewardEngagementBonus} prefix="+" />
+                          <XpLabel value={pointRules.xpPerPointAward} />
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <X size={24} />
+                        <strong>დღეს ვერ მოიგე</strong>
+                        <small>სცადე სხვა პრიზი</small>
+                      </>
+                    )}
+                  </span>
+                ) : (
+                  <>
+                    <span className="reward-bonus-brand">
+                      <Sparkles size={24} />
+                      <strong>PlayPoint</strong>
+                    </span>
+                    <span className="reward-bonus-hint">
+                      შემოატრიალე და სცადე ბონუსი
+                    </span>
+                    <span className="reward-bonus-payout">
+                      <PointsLabel value={pointRules.rewardEngagementBonus} prefix="+" />
+                      <XpLabel value={pointRules.xpPerPointAward} />
+                    </span>
+                  </>
+                )}
+              </button>
+            ) : null}
             <div className="reward-visual">
               {reward.image ? <img src={reward.image} alt="" /> : <Gift size={34} />}
               {typeof reward.remainingQuantity === "number" ? (
@@ -2015,11 +2342,13 @@ function RewardsPage({
 }
 
 function DailyBonusModal({
+  levelProgress,
   points,
   progress,
   text,
   onClose
 }: {
+  levelProgress: ApiLevelProgress | null;
   points: number;
   progress: ApiDailyLoginProgress;
   text: TextGetter;
@@ -2039,6 +2368,17 @@ function DailyBonusModal({
         <strong>
           <PointsLabel value={points} prefix="+" />
         </strong>
+        <div className="daily-bonus-xp">
+          <XpLabel value={levelProgress?.xpAwarded ?? pointRules.xpPerPointAward} />
+        </div>
+        {levelProgress?.levelUps.length ? (
+          <div className="level-up-banner compact">
+            <Sparkles size={16} />
+            <span>
+              LVL {formatter.format(levelProgress.level)} • +{formatter.format(levelProgress.levelUps.at(-1)?.bonusPoints ?? 0)} {text("common.points")}
+            </span>
+          </div>
+        ) : null}
         <div className="daily-bonus-days">
           {progress.weekDays.map((day) => (
             <span className={day.claimed ? "active" : ""} key={day.index}>
@@ -2058,14 +2398,21 @@ function ProfilePage({
   dailyLogin,
   darkMode,
   language,
+  levelProgress,
   profileName,
+  profileCompletion,
+  profileInterests,
   purchasedRewards,
   setDarkMode,
   setLanguage,
   text,
   userCoins,
+  userBirthDate,
+  userPasswordSetAt,
+  userAvatarUrl,
   userEmail,
   userEmailVerifiedAt,
+  userPhoneVerifiedAt,
   userPoints,
   userRank,
   gamesPlayed,
@@ -2077,14 +2424,21 @@ function ProfilePage({
   dailyLogin: ApiDailyLoginProgress | null;
   darkMode: boolean;
   language: Language;
+  levelProgress: ApiLevelProgress | null;
   profileName: string;
+  profileCompletion: ApiProfileCompletion | null;
+  profileInterests: string[];
   purchasedRewards: Reward[];
   setDarkMode: (value: boolean) => void;
   setLanguage: (value: Language) => void;
   text: TextGetter;
   userCoins: number;
+  userBirthDate: string | null;
+  userPasswordSetAt: string | null;
+  userAvatarUrl: string | null;
   userEmail: string;
   userEmailVerifiedAt: string | null;
+  userPhoneVerifiedAt: string | null;
   userPoints: number;
   userRank: number;
   gamesPlayed: number;
@@ -2119,6 +2473,27 @@ function ProfilePage({
   }));
   const visibleHistoryItems = showFullHistory ? historyItems : historyItems.slice(0, 3);
   const emailIsVerified = Boolean(userEmailVerifiedAt);
+  const profileCompletionProgress =
+    profileCompletion ??
+    ({
+      awarded: false,
+      percent: Math.round(
+        ([
+          profileName.trim().length >= 3,
+          Boolean(userPhoneVerifiedAt),
+          emailIsVerified,
+          Boolean(userAvatarUrl),
+          profileInterests.length === 3,
+          Boolean(userBirthDate),
+          Boolean(userPasswordSetAt)
+        ].filter(Boolean).length / 7) *
+          100
+      ),
+      rewardPoints: pointRules.profileCompletionBonus,
+      tasks: []
+    } satisfies ApiProfileCompletion);
+  const profileProgressTone =
+    profileCompletionProgress.percent >= 80 ? "high" : profileCompletionProgress.percent >= 50 ? "medium" : "low";
   const visibleDailyLogin =
     dailyLogin ??
     ({
@@ -2136,9 +2511,13 @@ function ProfilePage({
     <section className="profile-screen">
       <section className="profile-hero">
         <button className="profile-avatar-wrap" type="button" onClick={() => onNavigate("edit-profile")}>
-          <div className="profile-avatar-gradient">
+          <div
+            className="profile-avatar-progress"
+            style={{ "--profile-progress": `${profileCompletionProgress.percent}%` } as CSSProperties}
+            aria-label={`Profile completion ${profileCompletionProgress.percent}%`}
+          >
             <div className="profile-avatar">
-              <User size={44} />
+              <AvatarVisual avatarUrl={userAvatarUrl} iconSize={42} />
             </div>
           </div>
           <span className="profile-edit-badge">
@@ -2146,10 +2525,29 @@ function ProfilePage({
           </span>
         </button>
         <h2>{profileName || text("profile.fallbackName")}</h2>
-        <p>{text("profile.player")} #88219</p>
+        <p className="profile-progress-copy">
+          <span>{text("profile.player")} #88219</span>
+          <span>
+            <b className={`profile-progress-value ${profileProgressTone}`}>{profileCompletionProgress.percent}%</b>
+            <em>
+              <Sparkles size={13} />
+              +{formatter.format(profileCompletionProgress.rewardPoints)}
+            </em>
+          </span>
+        </p>
+        <button className="profile-interest-tags" type="button" onClick={() => onNavigate("edit-profile")}>
+          {profileInterests.length > 0 ? (
+            profileInterests.map((interestId) => (
+              <span key={interestId}>{getInterestLabel(interestId, text)}</span>
+            ))
+          ) : (
+            <span>{text("profile.chooseInterests")}</span>
+          )}
+        </button>
       </section>
 
       <section className="daily-login-card">
+        <LevelProgressBar progress={levelProgress} text={text} />
         <div className="daily-login-card-header">
           <span>
             <Sparkles size={20} />
@@ -2331,9 +2729,13 @@ function ProfilePage({
 function EditProfilePage({
   profileName,
   text,
+  userAvatarUrl,
+  userBirthDate,
   userEmail,
   userEmailVerifiedAt,
   userPhone,
+  userInterests,
+  userPasswordSetAt,
   userPoints,
   setProfileName,
   onRequestEmailVerification,
@@ -2343,20 +2745,37 @@ function EditProfilePage({
 }: {
   profileName: string;
   text: TextGetter;
+  userAvatarUrl: string | null;
+  userBirthDate: string | null;
   userEmail: string;
   userEmailVerifiedAt: string | null;
   userPhone: string;
+  userInterests: string[];
+  userPasswordSetAt: string | null;
   userPoints: number;
   setProfileName: (value: string) => void;
   onRequestEmailVerification: (email: string) => Promise<string>;
   onVerifyEmail: (email: string, code: string) => Promise<void>;
-  onSaveProfile: (name: string) => Promise<void>;
+  onSaveProfile: (
+    name: string,
+    avatarUrl: string | null,
+    interests: string[],
+    birthDate: string | null,
+    password: string,
+    passwordConfirm: string
+  ) => Promise<void>;
   onNavigate: (route: Route) => void;
 }) {
   const [email, setEmail] = useState(userEmail);
   const [emailCode, setEmailCode] = useState("");
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [emailDevCode, setEmailDevCode] = useState("");
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
+  const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(userAvatarUrl);
+  const [birthDate, setBirthDate] = useState(userBirthDate ?? "");
+  const [selectedInterests, setSelectedInterests] = useState<string[]>(userInterests);
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [saved, setSaved] = useState(false);
   const normalizedName = profileName.trim();
   const normalizedEmail = email.trim();
@@ -2366,14 +2785,41 @@ function EditProfilePage({
     normalizedName.length >= displayNameMinLength &&
     normalizedName.length <= displayNameMaxLength &&
     displayNamePattern.test(normalizedName);
+  const passwordTouched = Boolean(password || passwordConfirm);
+  const passwordIsValid = !passwordTouched || (password.length >= 6 && password === passwordConfirm);
+  const birthDateIsValid = Boolean(birthDate);
 
   useEffect(() => {
     setEmail(userEmail);
   }, [userEmail]);
 
+  useEffect(() => {
+    setSelectedAvatarUrl(userAvatarUrl);
+  }, [userAvatarUrl]);
+
+  useEffect(() => {
+    setBirthDate(userBirthDate ?? "");
+  }, [userBirthDate]);
+
+  useEffect(() => {
+    setSelectedInterests(userInterests);
+  }, [userInterests]);
+
+  const toggleInterest = (interestId: string) => {
+    setSelectedInterests((currentInterests) => {
+      if (currentInterests.includes(interestId)) {
+        return currentInterests.filter((item) => item !== interestId);
+      }
+      if (currentInterests.length >= 3) return currentInterests;
+      return [...currentInterests, interestId];
+    });
+  };
+
   const saveProfile = async () => {
-    if (!nameIsValid) return;
-    await onSaveProfile(normalizedName);
+    if (!nameIsValid || selectedInterests.length !== 3 || !birthDateIsValid || !passwordIsValid) return;
+    await onSaveProfile(normalizedName, selectedAvatarUrl, selectedInterests, birthDate || null, password, passwordConfirm);
+    setPassword("");
+    setPasswordConfirm("");
     setSaved(true);
     window.setTimeout(() => setSaved(false), 1800);
   };
@@ -2393,8 +2839,8 @@ function EditProfilePage({
       <main className="edit-profile-main">
         <section className="edit-avatar-section">
           <div className="edit-avatar">
-            <User size={58} />
-            <button aria-label="Edit Profile Picture" type="button">
+            <AvatarVisual avatarUrl={selectedAvatarUrl} iconSize={52} />
+            <button aria-label="Edit Profile Picture" type="button" onClick={() => setAvatarModalOpen(true)}>
               <Pencil size={18} />
             </button>
           </div>
@@ -2421,6 +2867,15 @@ function EditProfilePage({
             onChange={() => undefined}
             trailing={<Lock size={16} />}
             hint={text("edit.phoneHint")}
+          />
+          <EditField
+            icon={<Calendar size={20} />}
+            id="birthDate"
+            label={text("edit.birthDate")}
+            value={birthDate}
+            onChange={setBirthDate}
+            type="date"
+            hint={text("edit.birthDateHint")}
           />
           <EditField
             icon={<Mail size={20} />}
@@ -2479,7 +2934,54 @@ function EditProfilePage({
               </>
             )}
           </div>
+          <EditField
+            icon={<Lock size={20} />}
+            id="password"
+            label={userPasswordSetAt ? text("edit.passwordUpdate") : text("edit.password")}
+            value={password}
+            onChange={setPassword}
+            placeholder={text("edit.passwordPlaceholder")}
+            type="password"
+            hint={userPasswordSetAt ? text("edit.passwordSetHint") : text("edit.passwordHint")}
+          />
+          <EditField
+            icon={<ShieldCheck size={20} />}
+            id="passwordConfirm"
+            label={text("edit.passwordConfirm")}
+            value={passwordConfirm}
+            onChange={setPasswordConfirm}
+            placeholder={text("edit.passwordConfirmPlaceholder")}
+            type="password"
+            hint={passwordTouched && !passwordIsValid ? text("edit.passwordMismatch") : undefined}
+          />
         </form>
+
+        <section className="edit-interest-section">
+          <div className="edit-interest-heading">
+            <div>
+              <h3>{text("edit.interestsTitle")}</h3>
+              <p>{text("edit.interestsHint")}</p>
+            </div>
+            <strong>{selectedInterests.length}/3</strong>
+          </div>
+          <div className="interest-choice-grid">
+            {profileInterestIds.map((interestId) => {
+              const selected = selectedInterests.includes(interestId);
+              const disabled = !selected && selectedInterests.length >= 3;
+              return (
+                <button
+                  className={selected ? "active" : ""}
+                  disabled={disabled}
+                  key={interestId}
+                  type="button"
+                  onClick={() => toggleInterest(interestId)}
+                >
+                  {getInterestLabel(interestId, text)}
+                </button>
+              );
+            })}
+          </div>
+        </section>
 
         <div className="security-card">
           <div>
@@ -2493,11 +2995,25 @@ function EditProfilePage({
       </main>
 
       <footer className="edit-save-footer">
-        <button type="button" className={saved ? "saved" : ""} disabled={!nameIsValid} onClick={saveProfile}>
+        <button
+          type="button"
+          className={saved ? "saved" : ""}
+          disabled={!nameIsValid || selectedInterests.length !== 3 || !birthDateIsValid || !passwordIsValid}
+          onClick={saveProfile}
+        >
           <span>{saved ? text("edit.saved") : text("edit.save")}</span>
           <CheckCircle2 size={18} />
         </button>
       </footer>
+
+      {avatarModalOpen ? (
+        <AvatarPickerModal
+          selectedAvatarUrl={selectedAvatarUrl}
+          text={text}
+          onClose={() => setAvatarModalOpen(false)}
+          onSelect={setSelectedAvatarUrl}
+        />
+      ) : null}
     </section>
   );
 }
@@ -2557,6 +3073,7 @@ function HistoryItem({
         <strong className={tone}>
           <PointsLabel value={Math.abs(points)} prefix={points >= 0 ? "+" : "-"} />
         </strong>
+        {points > 0 ? <XpLabel value={pointRules.xpPerPointAward} /> : null}
         <span>{result}</span>
       </div>
     </article>
@@ -2623,7 +3140,7 @@ function LeaderboardList({
         <div className={player.isCurrentUser ? "rank-row current-user" : "rank-row"} key={`${player.rank}-${player.name}`}>
           <strong className="rank-number">{player.rank}</strong>
           <span className="rank-avatar">
-            {player.avatarUrl ? <img src={player.avatarUrl} alt="" /> : <User size={18} />}
+            <AvatarVisual avatarUrl={player.avatarUrl ?? null} iconSize={18} />
           </span>
           <span className="rank-copy">
             <b>{player.name}</b>

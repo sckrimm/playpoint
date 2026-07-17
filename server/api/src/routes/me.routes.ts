@@ -1,18 +1,49 @@
 import type { FastifyInstance } from "fastify";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
-import { requireSession } from "../modules/auth/auth.helpers";
+import { hashPassword, requireSession } from "../modules/auth/auth.helpers";
 import { getDailyLoginProgress } from "../modules/points/daily-login";
+import { awardProfileCompletionBonusIfReady, buildProfileCompletionProgress } from "../modules/points/profile-completion";
+import { buildLevelProgress } from "../modules/points/progression";
+
+const profileInterestIds = [
+  "food",
+  "coffee",
+  "cinema",
+  "gaming",
+  "tech",
+  "fitness",
+  "music",
+  "travel",
+  "fashion",
+  "sports"
+] as const;
 
 const updateMeSchema = z.object({
-  avatarUrl: z.string().url().nullable().optional(),
-  displayName: z.string().trim().min(3).max(24).regex(/^[\p{L}\p{N}_ ]+$/u).optional()
+  avatarUrl: z.string().trim().min(1).max(2000).nullable().optional(),
+  birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  displayName: z.string().trim().min(3).max(24).regex(/^[\p{L}\p{N}_ ]+$/u).optional(),
+  interests: z
+    .array(z.enum(profileInterestIds))
+    .length(3)
+    .refine((items) => new Set(items).size === items.length, "Interests must be unique")
+    .optional(),
+  password: z.string().min(6).max(72).optional(),
+  passwordConfirm: z.string().min(6).max(72).optional()
+}).refine((data) => !data.password && !data.passwordConfirm ? true : data.password === data.passwordConfirm, {
+  message: "Passwords do not match",
+  path: ["passwordConfirm"]
 });
 
 function startOfToday() {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
   return date;
+}
+
+function bonusDateKey(date = new Date()) {
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Tbilisi" });
 }
 
 async function getRank(userId: string) {
@@ -27,22 +58,28 @@ async function getRank(userId: string) {
 
 async function getMePayload(userId: string) {
   const today = startOfToday();
-  const [user, rewardClaims, gameHistory, gamesPlayed, dailyRank, weeklyRank, games, attemptsToday, dailyLogin] = await Promise.all([
+  const [user, rewardClaims, rewardEngagements, profileCompletionBonus, gameHistory, gamesPlayed, dailyRank, weeklyRank, games, rewards, attemptsToday, dailyLogin] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
         avatarUrl: true,
+        birthDate: true,
         coins: true,
         createdAt: true,
         displayName: true,
         email: true,
         emailVerifiedAt: true,
         id: true,
+        interests: true,
+        level: true,
         phone: true,
         phoneVerifiedAt: true,
+        passwordSetAt: true,
         role: true,
         totalPoints: true,
-        updatedAt: true
+        totalXp: true,
+        updatedAt: true,
+        xp: true
       }
     }),
     prisma.rewardClaim.findMany({
@@ -61,6 +98,28 @@ async function getMePayload(userId: string) {
         }
       },
       orderBy: { createdAt: "desc" }
+    }),
+    prisma.pointBonus.findMany({
+      where: {
+        awardKey: {
+          startsWith: `reward-engagement:${bonusDateKey()}`
+        },
+        userId
+      },
+      select: {
+        awardKey: true
+      }
+    }),
+    prisma.pointBonus.findUnique({
+      where: {
+        userId_awardKey: {
+          awardKey: "profile-completion",
+          userId
+        }
+      },
+      select: {
+        id: true
+      }
     }),
     prisma.score.findMany({
       where: { userId },
@@ -87,6 +146,13 @@ async function getMePayload(userId: string) {
         slug: true
       }
     }),
+    prisma.reward.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        slug: true
+      }
+    }),
     prisma.gameAttempt.groupBy({
       by: ["gameId"],
       where: {
@@ -102,6 +168,7 @@ async function getMePayload(userId: string) {
     getDailyLoginProgress(prisma, userId)
   ]);
   const attemptsByGameId = new Map(attemptsToday.map((attempt) => [attempt.gameId, attempt._count.gameId]));
+  const rewardSlugById = new Map(rewards.map((reward) => [reward.id, reward.slug]));
 
   return {
     user,
@@ -125,6 +192,14 @@ async function getMePayload(userId: string) {
         };
       }),
       dailyLogin,
+      levelProgress: buildLevelProgress(user),
+      profileCompletion: buildProfileCompletionProgress(user, Boolean(profileCompletionBonus)),
+      rewardEngagements: rewardEngagements
+        .map((engagement) => {
+          const rewardKey = engagement.awardKey.split(":").at(-1) ?? "";
+          return rewardSlugById.get(rewardKey) ?? rewardKey;
+        })
+        .filter((rewardKey) => rewards.some((reward) => reward.slug === rewardKey)),
       gamesPlayed,
       weeklyRank
     },
@@ -161,10 +236,31 @@ export function registerMeRoutes(app: FastifyInstance) {
     }
 
     try {
-      await prisma.user.update({
-        where: { id: auth.session.userId },
-        data: parsed.data
+      const updateData: Prisma.UserUpdateInput = {};
+      if ("avatarUrl" in parsed.data) updateData.avatarUrl = parsed.data.avatarUrl;
+      if ("birthDate" in parsed.data) updateData.birthDate = parsed.data.birthDate ? new Date(`${parsed.data.birthDate}T00:00:00.000Z`) : null;
+      if (parsed.data.displayName) updateData.displayName = parsed.data.displayName;
+      if (parsed.data.interests) updateData.interests = parsed.data.interests;
+      if (parsed.data.password) {
+        updateData.passwordHash = hashPassword(parsed.data.password);
+        updateData.passwordSetAt = new Date();
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: auth.session.userId },
+          data: updateData
+        });
+        return awardProfileCompletionBonusIfReady(tx, auth.session.userId);
       });
+
+      const payload = await getMePayload(auth.session.userId);
+      return {
+        ...payload,
+        levelProgress: result.levelProgress,
+        profileCompletion: result.profileCompletion,
+        user: result.user
+      };
     } catch (error: unknown) {
       if (
         typeof error === "object" &&
@@ -176,8 +272,6 @@ export function registerMeRoutes(app: FastifyInstance) {
       }
       throw error;
     }
-
-    return getMePayload(auth.session.userId);
   });
 
   app.get("/me/reward-claims", async (request, reply) => {

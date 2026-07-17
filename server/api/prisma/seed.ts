@@ -13,10 +13,12 @@ async function main() {
   const brands = await Promise.all([
     prisma.brand.upsert({
       where: { name: "Burger Palace" },
-      update: {},
+      update: {
+        logoUrl: "/assets/reward-burger.svg"
+      },
       create: {
         name: "Burger Palace",
-        logoUrl: "/assets/brand-burger-palace.png",
+        logoUrl: "/assets/reward-burger.svg",
         packageType: "basic",
         monthlyFeeGel: 1000,
         contactName: "Pilot Manager"
@@ -24,10 +26,12 @@ async function main() {
     }),
     prisma.brand.upsert({
       where: { name: "Coffee Lab" },
-      update: {},
+      update: {
+        logoUrl: "/assets/reward-coffee.svg"
+      },
       create: {
         name: "Coffee Lab",
-        logoUrl: "/assets/brand-coffee-lab.png",
+        logoUrl: "/assets/reward-coffee.svg",
         packageType: "plus",
         monthlyFeeGel: 1500,
         contactName: "Pilot Manager"
@@ -35,10 +39,12 @@ async function main() {
     }),
     prisma.brand.upsert({
       where: { name: "TechStore" },
-      update: {},
+      update: {
+        logoUrl: "/assets/reward-headphones.svg"
+      },
       create: {
         name: "TechStore",
-        logoUrl: "/assets/brand-tech-store.png",
+        logoUrl: "/assets/reward-headphones.svg",
         packageType: "plus",
         monthlyFeeGel: 1500,
         contactName: "Pilot Manager"
@@ -46,30 +52,36 @@ async function main() {
     }),
     prisma.brand.upsert({
       where: { name: "CineClub" },
-      update: {},
+      update: {
+        logoUrl: "/assets/reward-cinema.svg"
+      },
       create: {
         name: "CineClub",
-        logoUrl: "/assets/brand-cineclub.png",
+        logoUrl: "/assets/reward-cinema.svg",
         packageType: "basic",
         monthlyFeeGel: 1000
       }
     }),
     prisma.brand.upsert({
       where: { name: "GameZone" },
-      update: {},
+      update: {
+        logoUrl: "/assets/reward-gaming.svg"
+      },
       create: {
         name: "GameZone",
-        logoUrl: "/assets/brand-gamezone.png",
+        logoUrl: "/assets/reward-gaming.svg",
         packageType: "premium",
         monthlyFeeGel: 2500
       }
     }),
     prisma.brand.upsert({
       where: { name: "FitHub" },
-      update: {},
+      update: {
+        logoUrl: "/assets/reward-fitness.svg"
+      },
       create: {
         name: "FitHub",
-        logoUrl: "/assets/brand-fithub.png",
+        logoUrl: "/assets/reward-fitness.svg",
         packageType: "basic",
         monthlyFeeGel: 1000
       }

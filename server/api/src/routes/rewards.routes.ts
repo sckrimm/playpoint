@@ -1,11 +1,36 @@
+import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
+import { pointRules } from "@playpoint/shared";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
 import { requireSession } from "../modules/auth/auth.helpers";
+import { grantXpForPointAward } from "../modules/points/progression";
 
 const rewardParamsSchema = z.object({
   rewardId: z.string().min(1)
 });
+
+function bonusDateKey(date = new Date()) {
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Tbilisi" });
+}
+
+function getRewardEngagementAwardKey(rewardId: string, date = new Date()) {
+  return `reward-engagement:${bonusDateKey(date)}:${rewardId}`;
+}
+
+function getDailyWinningRewardIds(rewards: Array<{ id: string }>, dateKey = bonusDateKey()) {
+  const winnersCount = Math.floor(rewards.length / 2);
+  return new Set(
+    rewards
+      .map((reward) => ({
+        id: reward.id,
+        hash: crypto.createHash("sha256").update(`${dateKey}:${reward.id}`).digest("hex")
+      }))
+      .sort((left, right) => left.hash.localeCompare(right.hash))
+      .slice(0, winnersCount)
+      .map((reward) => reward.id)
+  );
+}
 
 export function registerRewardRoutes(app: FastifyInstance) {
   app.get("/rewards", async () => {
@@ -22,6 +47,141 @@ export function registerRewardRoutes(app: FastifyInstance) {
       },
       orderBy: [{ requiredPoints: "asc" }, { title: "asc" }]
     });
+  });
+
+  app.post("/rewards/:rewardId/engage", async (request, reply) => {
+    const auth = await requireSession(request, reply);
+    if (!auth) return;
+
+    const params = rewardParamsSchema.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ message: "Invalid reward id", issues: params.error.issues });
+
+    const reward = await prisma.reward.findFirst({
+      where: {
+        OR: [{ id: params.data.rewardId }, { slug: params.data.rewardId }]
+      },
+      select: {
+        active: true,
+        id: true,
+        slug: true
+      }
+    });
+
+    if (!reward || !reward.active) {
+      return reply.code(404).send({ message: "Reward not found or inactive" });
+    }
+
+    const dateKey = bonusDateKey();
+    const awardKey = getRewardEngagementAwardKey(reward.slug);
+    const activeRewards = await prisma.reward.findMany({
+      where: { active: true },
+      orderBy: [{ requiredPoints: "asc" }, { title: "asc" }],
+      select: { id: true }
+    });
+    const winningRewardIds = getDailyWinningRewardIds(activeRewards, dateKey);
+    const won = winningRewardIds.has(reward.id);
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${auth.session.userId} FOR UPDATE`;
+
+      const existingBonus = await tx.pointBonus.findUnique({
+        where: {
+          userId_awardKey: {
+            awardKey,
+            userId: auth.session.userId
+          }
+        },
+        select: {
+          id: true,
+          points: true
+        }
+      });
+
+      if (existingBonus) {
+        const user = await tx.user.findUniqueOrThrow({
+          where: { id: auth.session.userId },
+          select: {
+            coins: true,
+            displayName: true,
+            id: true,
+            level: true,
+            totalPoints: true,
+            totalXp: true,
+            xp: true
+          }
+        });
+        return {
+          alreadyAwarded: true,
+          points: existingBonus.points,
+          levelProgress: null,
+          rewardId: reward.slug,
+          won: existingBonus.points > 0,
+          user
+        };
+      }
+
+      await tx.pointBonus.create({
+        data: {
+          awardKey,
+          points: won ? pointRules.rewardEngagementBonus : 0,
+          reason: "reward_engagement",
+          userId: auth.session.userId
+        }
+      });
+
+      if (!won) {
+        const user = await tx.user.findUniqueOrThrow({
+          where: { id: auth.session.userId },
+          select: {
+            coins: true,
+            displayName: true,
+            id: true,
+            level: true,
+            totalPoints: true,
+            totalXp: true,
+            xp: true
+          }
+        });
+
+        return {
+          alreadyAwarded: false,
+          levelProgress: null,
+          points: 0,
+          rewardId: reward.slug,
+          user,
+          won: false
+        };
+      }
+
+      await tx.user.update({
+        where: { id: auth.session.userId },
+        data: {
+          totalPoints: {
+            increment: pointRules.rewardEngagementBonus
+          }
+        }
+      });
+
+      const xpResult = await grantXpForPointAward(tx, auth.session.userId);
+
+      return {
+        alreadyAwarded: false,
+        levelProgress: xpResult.progress,
+        points: pointRules.rewardEngagementBonus,
+        rewardId: reward.slug,
+        won: true,
+        user: {
+          coins: xpResult.user.coins,
+          displayName: xpResult.user.displayName,
+          id: xpResult.user.id,
+          level: xpResult.user.level,
+          totalPoints: xpResult.user.totalPoints,
+          totalXp: xpResult.user.totalXp,
+          xp: xpResult.user.xp
+        }
+      };
+    });
+
+    return result;
   });
 
   app.post("/rewards/:rewardId/claim", async (request, reply) => {

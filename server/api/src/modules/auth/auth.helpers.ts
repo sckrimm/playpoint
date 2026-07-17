@@ -41,6 +41,12 @@ export function hashScoreToken(token: string) {
     .digest("hex");
 }
 
+export function hashPassword(password: string) {
+  const salt = crypto.randomBytes(16).toString("base64url");
+  const hash = crypto.scryptSync(`${env.JWT_SECRET}:password:${password}`, salt, 64).toString("base64url");
+  return `scrypt:${salt}:${hash}`;
+}
+
 export function isHashMatch(first: string, second: string) {
   const firstBuffer = Buffer.from(first);
   const secondBuffer = Buffer.from(second);

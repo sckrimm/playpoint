@@ -67,6 +67,9 @@ enum PointBonusReason {
   daily_login
   email_verification
   phone_verification
+  profile_completion
+  level_up
+  reward_engagement
 }
 
 model User {
@@ -77,7 +80,14 @@ model User {
   emailVerifiedAt DateTime?
   displayName    String          @unique
   avatarUrl      String?
+  birthDate      DateTime?
+  interests      String[]        @default([])
+  passwordHash   String?
+  passwordSetAt  DateTime?
   totalPoints    Int             @default(0)
+  level          Int             @default(1)
+  xp             Int             @default(0)
+  totalXp        Int             @default(0)
   coins          Int             @default(14)
   role           UserRole        @default(user)
   createdAt      DateTime        @default(now())

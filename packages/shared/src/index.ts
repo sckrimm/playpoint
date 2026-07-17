@@ -31,6 +31,7 @@ export type Reward = {
   points: number;
   category: "food" | "leisure" | "tech" | "gaming";
   image?: string;
+  brandLogo?: string;
   quantity?: number;
   remainingQuantity?: number;
 };
@@ -40,9 +41,22 @@ export const pointRules = {
   dailyLoginBonus: 50,
   emailVerificationBonus: 50,
   phoneVerificationBonus: 50,
+  profileCompletionBonus: 500,
+  rewardEngagementBonus: 10,
+  xpPerPointAward: 5,
+  firstLevelXp: 20,
+  firstLevelBonus: 100,
   dailyAttemptsPerGame: 3,
   scoreToPointRatio: 0.01
 } as const;
+
+export function getLevelXpRequirement(level: number) {
+  return pointRules.firstLevelXp * 2 ** Math.max(0, level - 1);
+}
+
+export function getLevelBonusPoints(level: number) {
+  return pointRules.firstLevelBonus * 2 ** Math.max(0, level - 1);
+}
 
 export const aimHitRules = {
   durationSeconds: 10,

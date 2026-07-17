@@ -15,6 +15,8 @@ import {
   requireSession
 } from "../modules/auth/auth.helpers";
 import { awardDailyLoginBonus, getDailyLoginProgress, type DailyLoginProgress } from "../modules/points/daily-login";
+import { awardProfileCompletionBonusIfReady } from "../modules/points/profile-completion";
+import { grantXpForPointAward, type LevelProgress } from "../modules/points/progression";
 import { verifyAppleIdToken, verifyGoogleIdToken, type VerifiedSocialIdentity } from "../modules/auth/social.helpers";
 
 const requestOtpSchema = z.object({
@@ -174,14 +176,19 @@ export function registerAuthRoutes(app: FastifyInstance) {
             userId: user.id
           }
         });
+        user = (await grantXpForPointAward(tx, user.id)).user;
       }
 
       const dailyLoginResult = await awardDailyLoginBonus(tx, user.id);
       const dailyLogin = {
         awardedToday: dailyLoginResult.awardedToday,
+        levelProgress: dailyLoginResult.levelProgress,
         progress: dailyLoginResult.progress
       };
       user = dailyLoginResult.user;
+      const profileCompletionResult = await awardProfileCompletionBonusIfReady(tx, user.id);
+      user = profileCompletionResult.user;
+      dailyLogin.levelProgress = profileCompletionResult.levelProgress ?? dailyLogin.levelProgress;
 
       await tx.otpCode.update({
         where: { id: otp.id },
@@ -219,6 +226,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
       isNewUser: result.isNewUser,
       dailyLogin: {
         awardedToday: result.dailyLogin.awardedToday,
+        levelProgress: result.dailyLogin.levelProgress,
         points: pointRules.dailyLoginBonus,
         progress: result.dailyLogin.progress
       },
@@ -248,7 +256,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
 
       let isNewUser = false;
       let user = existingAccount?.user ?? null;
-      let dailyLogin: { awardedToday: boolean; progress: DailyLoginProgress };
+      let dailyLogin: { awardedToday: boolean; levelProgress: LevelProgress | null; progress: DailyLoginProgress };
 
       if (!user) {
         user =
@@ -277,6 +285,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
               userId: user.id
             }
           });
+          user = (await grantXpForPointAward(tx, user.id)).user;
         } else if (identity.emailVerified && identity.email && !user.email) {
           user = await tx.user.update({
             where: { id: user.id },
@@ -300,9 +309,13 @@ export function registerAuthRoutes(app: FastifyInstance) {
       const dailyLoginResult = await awardDailyLoginBonus(tx, user.id);
       dailyLogin = {
         awardedToday: dailyLoginResult.awardedToday,
+        levelProgress: dailyLoginResult.levelProgress,
         progress: dailyLoginResult.progress
       };
       user = dailyLoginResult.user;
+      const profileCompletionResult = await awardProfileCompletionBonusIfReady(tx, user.id);
+      user = profileCompletionResult.user;
+      dailyLogin.levelProgress = profileCompletionResult.levelProgress ?? dailyLogin.levelProgress;
 
       const session = await createSession(tx, user.id, token, expiresAt);
       return { dailyLogin, isNewUser, session, token, user };
@@ -325,6 +338,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
         isNewUser: result.isNewUser,
         dailyLogin: {
           awardedToday: result.dailyLogin.awardedToday,
+          levelProgress: result.dailyLogin.levelProgress,
           points: pointRules.dailyLoginBonus,
           progress: result.dailyLogin.progress
         },
@@ -352,6 +366,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
         isNewUser: result.isNewUser,
         dailyLogin: {
           awardedToday: result.dailyLogin.awardedToday,
+          levelProgress: result.dailyLogin.levelProgress,
           points: pointRules.dailyLoginBonus,
           progress: result.dailyLogin.progress
         },
@@ -463,6 +478,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
         select: { id: true }
       });
 
+      let levelProgress = null;
       if (!existingBonus) {
         await tx.pointBonus.create({
           data: {
@@ -481,6 +497,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
             }
           }
         });
+        const xpResult = await grantXpForPointAward(tx, user.id);
+        user = xpResult.user;
+        levelProgress = xpResult.progress;
       }
 
       await tx.otpCode.update({
@@ -490,12 +509,17 @@ export function registerAuthRoutes(app: FastifyInstance) {
         }
       });
 
-      return { user };
+      const profileCompletionResult = await awardProfileCompletionBonusIfReady(tx, user.id);
+      user = profileCompletionResult.user;
+      levelProgress = profileCompletionResult.levelProgress ?? levelProgress;
+
+      return { levelProgress, user };
     });
 
     if (result === "EMAIL_TAKEN") return reply.code(409).send({ message: "Email is already used" });
 
     return {
+      levelProgress: result.levelProgress,
       ok: true,
       user: result.user
     };
