@@ -15,6 +15,8 @@ export type ApiUser = {
   phone: string | null;
   phoneVerifiedAt: string | null;
   passwordSetAt: string | null;
+  referralCode: string | null;
+  referredById: string | null;
   totalPoints: number;
   totalXp: number;
   xp: number;
@@ -277,6 +279,7 @@ export const playpointApi = {
       avatarUrl?: string | null;
       birthDate?: string | null;
       displayName?: string;
+      referralCode?: string;
       interests?: string[];
       password?: string;
       passwordConfirm?: string;

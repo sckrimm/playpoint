@@ -18,6 +18,7 @@ import { awardDailyLoginBonus, getDailyLoginProgress, type DailyLoginProgress } 
 import { awardProfileCompletionBonusIfReady } from "../modules/points/profile-completion";
 import { grantXpForPointAward, type LevelProgress } from "../modules/points/progression";
 import { verifyAppleIdToken, verifyGoogleIdToken, type VerifiedSocialIdentity } from "../modules/auth/social.helpers";
+import { ensureReferralCode } from "../modules/referrals/referral.helpers";
 
 const requestOtpSchema = z.object({
   phone: z.string().min(6).max(24)
@@ -167,6 +168,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
             }
           });
 
+      await ensureReferralCode(tx, user.id);
+
       if (isNewUser) {
         await tx.pointBonus.create({
           data: {
@@ -305,6 +308,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
           }
         });
       }
+
+      await ensureReferralCode(tx, user.id);
 
       const dailyLoginResult = await awardDailyLoginBonus(tx, user.id);
       dailyLogin = {

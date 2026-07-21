@@ -943,6 +943,18 @@ h3 {
   background: #ffffff;
 }
 
+.setup-referral-field .text-input {
+  text-transform: uppercase;
+}
+
+.setup-referral-note {
+  margin: -8px 0 0;
+  color: #83748f;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .setup-actions {
   margin-top: auto;
   padding-top: clamp(16px, 3dvh, 28px);
@@ -3850,6 +3862,91 @@ h3 {
   background: #ffffff;
 }
 
+.profile-referral-card {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 14px;
+  border: 1px solid rgb(100 23 216 / 14%);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 3px 12px rgb(100 23 216 / 8%);
+}
+
+.profile-referral-card > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.profile-referral-card > div:first-child > span {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  color: #6417d8;
+  background: #efe5ff;
+}
+
+.profile-referral-card h3 {
+  margin: 0 0 4px;
+  color: #6417d8;
+  font-size: 16px;
+}
+
+.profile-referral-card p {
+  margin: 0;
+  color: #6e607a;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.referral-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.referral-code-row strong {
+  min-width: 0;
+  padding: 11px 12px;
+  overflow: hidden;
+  border: 1px dashed rgb(100 23 216 / 28%);
+  border-radius: 8px;
+  color: #1c0b2e;
+  background: #fbf8ff;
+  font-size: 13px;
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.referral-code-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #6417d8 0%, #8b2cff 52%);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.referral-code-row button:disabled {
+  cursor: not-allowed;
+  color: #83748f;
+  background: #eeeeee;
+}
+
 .daily-login-card {
   margin: -18px 0 24px;
   padding: 14px;
@@ -4718,6 +4815,7 @@ h3 {
 .dark-mode .profile-language-card,
 .dark-mode .mini-stat-card,
 .dark-mode .profile-verification-card,
+.dark-mode .profile-referral-card,
 .dark-mode .daily-login-card,
 .dark-mode .profile-list-item,
 .dark-mode .history-card,
@@ -4743,6 +4841,16 @@ h3 {
 .dark-mode .claim-modal h2,
 .dark-mode .coin-modal h2 {
   color: #ffffff;
+}
+
+.dark-mode .profile-referral-card p {
+  color: rgb(248 242 255 / 68%);
+}
+
+.dark-mode .referral-code-row strong {
+  border-color: rgb(216 198 242 / 22%);
+  color: #ffffff;
+  background: rgb(255 255 255 / 7%);
 }
 
 .dark-mode .reward-card .reward-bonus-overlay {

@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { pointRules } from "@playpoint/shared";
 import { z } from "zod";
@@ -16,20 +15,6 @@ function bonusDateKey(date = new Date()) {
 
 function getRewardEngagementAwardKey(rewardId: string, date = new Date()) {
   return `reward-engagement:${bonusDateKey(date)}:${rewardId}`;
-}
-
-function getDailyWinningRewardIds(rewards: Array<{ id: string }>, dateKey = bonusDateKey()) {
-  const winnersCount = Math.floor(rewards.length / 2);
-  return new Set(
-    rewards
-      .map((reward) => ({
-        id: reward.id,
-        hash: crypto.createHash("sha256").update(`${dateKey}:${reward.id}`).digest("hex")
-      }))
-      .sort((left, right) => left.hash.localeCompare(right.hash))
-      .slice(0, winnersCount)
-      .map((reward) => reward.id)
-  );
 }
 
 export function registerRewardRoutes(app: FastifyInstance) {
@@ -71,15 +56,7 @@ export function registerRewardRoutes(app: FastifyInstance) {
       return reply.code(404).send({ message: "Reward not found or inactive" });
     }
 
-    const dateKey = bonusDateKey();
     const awardKey = getRewardEngagementAwardKey(reward.slug);
-    const activeRewards = await prisma.reward.findMany({
-      where: { active: true },
-      orderBy: [{ requiredPoints: "asc" }, { title: "asc" }],
-      select: { id: true }
-    });
-    const winningRewardIds = getDailyWinningRewardIds(activeRewards, dateKey);
-    const won = winningRewardIds.has(reward.id);
     const result = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${auth.session.userId} FOR UPDATE`;
 
@@ -122,35 +99,11 @@ export function registerRewardRoutes(app: FastifyInstance) {
       await tx.pointBonus.create({
         data: {
           awardKey,
-          points: won ? pointRules.rewardEngagementBonus : 0,
+          points: pointRules.rewardEngagementBonus,
           reason: "reward_engagement",
           userId: auth.session.userId
         }
       });
-
-      if (!won) {
-        const user = await tx.user.findUniqueOrThrow({
-          where: { id: auth.session.userId },
-          select: {
-            coins: true,
-            displayName: true,
-            id: true,
-            level: true,
-            totalPoints: true,
-            totalXp: true,
-            xp: true
-          }
-        });
-
-        return {
-          alreadyAwarded: false,
-          levelProgress: null,
-          points: 0,
-          rewardId: reward.slug,
-          user,
-          won: false
-        };
-      }
 
       await tx.user.update({
         where: { id: auth.session.userId },

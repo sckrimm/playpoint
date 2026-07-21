@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Coins,
+  Copy,
   Gift,
   Gamepad2,
   Home,
@@ -101,6 +102,7 @@ type Route =
   | "edit-profile";
 
 const tokenStorageKey = "playpoint.authToken";
+const referralStorageKey = "playpoint.referralCode";
 const appleClientId = import.meta.env.VITE_APPLE_CLIENT_ID ?? "";
 const appleRedirectUri = import.meta.env.VITE_APPLE_REDIRECT_URI ?? window.location.origin;
 const defaultRoute: Route = window.localStorage.getItem(tokenStorageKey) ? "home" : "splash";
@@ -365,6 +367,16 @@ function readRoute(): Route {
   return route in screenMap ? route : defaultRoute;
 }
 
+function readReferralCode() {
+  const queryCode = new URLSearchParams(window.location.search).get("ref");
+  const hashQuery = window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "";
+  const hashCode = hashQuery ? new URLSearchParams(hashQuery).get("ref") : null;
+  return (queryCode || hashCode || window.localStorage.getItem(referralStorageKey) || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+}
+
 function buildLeaderboard(userName: string, userPoints: number): RankedLeaderboardEntry[] {
   const normalizedUserName = userName.trim() || userSummary.displayName;
   const basePlayers = leaderboard
@@ -482,6 +494,8 @@ export function App() {
   const [userBirthDate, setUserBirthDate] = useState<string | null>(null);
   const [userInterests, setUserInterests] = useState<string[]>([]);
   const [userPasswordSetAt, setUserPasswordSetAt] = useState<string | null>(null);
+  const [userReferralCode, setUserReferralCode] = useState<string | null>(null);
+  const [pendingReferralCode, setPendingReferralCode] = useState(readReferralCode);
   const [profileName, setProfileName] = useState<string>(userSummary.displayName);
   const [userPoints, setUserPoints] = useState<number>(0);
   const [userCoins, setUserCoins] = useState<number>(14);
@@ -538,6 +552,7 @@ export function App() {
     setUserBirthDate(payload.user.birthDate ? payload.user.birthDate.slice(0, 10) : null);
     setUserInterests(payload.user.interests ?? []);
     setUserPasswordSetAt(payload.user.passwordSetAt);
+    setUserReferralCode(payload.user.referralCode);
     setProfileName(payload.user.displayName);
     setUserPoints(payload.user.totalPoints);
     setUserCoins(payload.user.coins);
@@ -581,6 +596,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const referralCode = readReferralCode();
+    if (!referralCode) return;
+    window.localStorage.setItem(referralStorageKey, referralCode);
+    setPendingReferralCode(referralCode);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
 
@@ -621,11 +643,11 @@ export function App() {
   const applyAuthPayload = async (payload: Awaited<ReturnType<typeof playpointApi.verifyOtp>>) => {
     window.localStorage.setItem(tokenStorageKey, payload.token);
     setAuthToken(payload.token);
-      setUserId(payload.user.id);
-      setUserEmail(payload.user.email ?? "");
-      setUserEmailVerifiedAt(payload.user.emailVerifiedAt);
-      setUserPhone(payload.user.phone ?? "");
-      setProfileName(payload.user.displayName);
+    setUserId(payload.user.id);
+    setUserEmail(payload.user.email ?? "");
+    setUserEmailVerifiedAt(payload.user.emailVerifiedAt);
+    setUserPhone(payload.user.phone ?? "");
+    setProfileName(payload.user.displayName);
     setUserPoints(payload.user.totalPoints);
     setUserCoins(payload.user.coins);
     if (payload.dailyLogin) {
@@ -644,6 +666,8 @@ export function App() {
       return;
     }
 
+    window.localStorage.removeItem(referralStorageKey);
+    setPendingReferralCode("");
     const me = await refreshAccount(payload.token);
     if (payload.dailyLogin?.awardedToday) {
       setPendingDailyBonus(null);
@@ -715,7 +739,7 @@ export function App() {
     }
   };
 
-  const finishProfileSetup = async (name = profileName, avatarUrl = userAvatarUrl) => {
+  const finishProfileSetup = async (name = profileName, avatarUrl = userAvatarUrl, referralCode = pendingReferralCode) => {
     if (!authToken) {
       navigate("phone");
       return;
@@ -723,8 +747,15 @@ export function App() {
 
     try {
       setApiBusy(true);
-      const payload = await playpointApi.updateMe(authToken, { avatarUrl, displayName: name });
+      const normalizedReferralCode = referralCode.trim().toUpperCase();
+      const payload = await playpointApi.updateMe(authToken, {
+        avatarUrl,
+        displayName: name,
+        ...(normalizedReferralCode ? { referralCode: normalizedReferralCode } : {})
+      });
       applyMePayload(payload);
+      window.localStorage.removeItem(referralStorageKey);
+      setPendingReferralCode("");
       const me = await refreshAccount(authToken);
       navigate("home");
       showDailyBonusAfterDelay(
@@ -873,6 +904,7 @@ export function App() {
     setUserBirthDate(null);
     setUserInterests([]);
     setUserPasswordSetAt(null);
+    setUserReferralCode(null);
     setProfileName(userSummary.displayName);
     setUserPoints(0);
     setUserCoins(14);
@@ -955,7 +987,9 @@ export function App() {
               disabled={apiBusy}
               profileName={profileName}
               userAvatarUrl={userAvatarUrl}
+              pendingReferralCode={pendingReferralCode}
               setProfileName={setProfileName}
+              setPendingReferralCode={setPendingReferralCode}
               text={text}
               onFinish={finishProfileSetup}
             />
@@ -1061,6 +1095,7 @@ export function App() {
               userPhoneVerifiedAt={userPhoneVerifiedAt}
               userPoints={userPoints}
               userRank={userRank}
+              userReferralCode={userReferralCode}
               dailyLogin={dailyLogin}
               levelProgress={levelProgress}
               gamesPlayed={gamesPlayed}
@@ -1469,16 +1504,20 @@ function ProfileSetupPage({
   disabled,
   profileName,
   userAvatarUrl,
+  pendingReferralCode,
   setProfileName,
+  setPendingReferralCode,
   text,
   onFinish
 }: {
   disabled: boolean;
   profileName: string;
   userAvatarUrl: string | null;
+  pendingReferralCode: string;
   setProfileName: (value: string) => void;
+  setPendingReferralCode: (value: string) => void;
   text: TextGetter;
-  onFinish: (name: string, avatarUrl: string | null) => Promise<void>;
+  onFinish: (name: string, avatarUrl: string | null, referralCode: string) => Promise<void>;
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
@@ -1497,7 +1536,7 @@ function ProfileSetupPage({
     if (!nameIsValid) return;
     setShowSuccess(true);
     window.setTimeout(() => {
-      onFinish(normalizedName, selectedAvatarUrl).finally(() => setShowSuccess(false));
+      onFinish(normalizedName, selectedAvatarUrl, pendingReferralCode).finally(() => setShowSuccess(false));
     }, 900);
   };
 
@@ -1542,6 +1581,22 @@ function ProfileSetupPage({
             <Pencil size={18} />
           </div>
           {!nameIsValid && normalizedName ? <p className="field-error">{text("edit.nameHint")}</p> : null}
+
+          <label className="field-label" htmlFor="setupReferralCode">
+            {text("setup.referral")}
+          </label>
+          <div className="edit-field setup-referral-field">
+            <input
+              id="setupReferralCode"
+              className="text-input"
+              placeholder={text("setup.referralPlaceholder")}
+              value={pendingReferralCode}
+              onChange={(event) => setPendingReferralCode(event.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase())}
+              maxLength={16}
+            />
+            <Gift size={18} />
+          </div>
+          <p className="setup-referral-note">{text("setup.referralNote")}</p>
 
           <div className="bonus-strip">
             <Sparkles size={18} />
@@ -2174,7 +2229,7 @@ function RewardsPage({
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
   const [collectingRewardIds, setCollectingRewardIds] = useState<Set<string>>(() => new Set());
   const [flippedRewardIds, setFlippedRewardIds] = useState<Set<string>>(() => new Set());
-  const [rewardRevealResults, setRewardRevealResults] = useState<Map<string, "lost" | "won">>(() => new Map());
+  const [rewardRevealResults, setRewardRevealResults] = useState<Map<string, "won">>(() => new Map());
   const [selectedCategory, setSelectedCategory] = useState<Reward["category"] | "all">("all");
   const filteredRewards =
     selectedCategory === "all" ? rewards : rewards.filter((reward) => reward.category === selectedCategory);
@@ -2223,7 +2278,7 @@ function RewardsPage({
                     });
                     return;
                   }
-                  setRewardRevealResults((currentResults) => new Map(currentResults).set(reward.id, result.won ? "won" : "lost"));
+                  setRewardRevealResults((currentResults) => new Map(currentResults).set(reward.id, "won"));
                   window.setTimeout(() => {
                     setFlippedRewardIds((currentIds) => {
                       return new Set(currentIds).add(reward.id);
@@ -2238,22 +2293,12 @@ function RewardsPage({
               >
                 {revealResult ? (
                   <span className="reward-reveal-result">
-                    {revealResult === "won" ? (
-                      <>
-                        <CheckCircle2 size={24} />
-                        <strong>მოიგე</strong>
-                        <span>
-                          <PointsLabel value={pointRules.rewardEngagementBonus} prefix="+" />
-                          <XpLabel value={pointRules.xpPerPointAward} />
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <X size={24} />
-                        <strong>დღეს ვერ მოიგე</strong>
-                        <small>სცადე სხვა პრიზი</small>
-                      </>
-                    )}
+                    <CheckCircle2 size={24} />
+                    <strong>მოიგე</strong>
+                    <span>
+                      <PointsLabel value={pointRules.rewardEngagementBonus} prefix="+" />
+                      <XpLabel value={pointRules.xpPerPointAward} />
+                    </span>
                   </span>
                 ) : (
                   <>
@@ -2415,6 +2460,7 @@ function ProfilePage({
   userPhoneVerifiedAt,
   userPoints,
   userRank,
+  userReferralCode,
   gamesPlayed,
   gameHistory,
   lastGameResult,
@@ -2441,6 +2487,7 @@ function ProfilePage({
   userPhoneVerifiedAt: string | null;
   userPoints: number;
   userRank: number;
+  userReferralCode: string | null;
   gamesPlayed: number;
   gameHistory: GameHistoryItem[];
   lastGameResult: GameResult;
@@ -2449,6 +2496,7 @@ function ProfilePage({
 }) {
   const [showAllPrizes, setShowAllPrizes] = useState(false);
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [referralCopied, setReferralCopied] = useState(false);
   const visibleRewards = showAllPrizes ? purchasedRewards : purchasedRewards.slice(0, 2);
   const gameHistoryIcons: Record<GameId, ReactNode> = {
     "aim-hit": <Target size={20} />,
@@ -2506,6 +2554,27 @@ function ProfilePage({
         index: index + 1
       }))
     } satisfies ApiDailyLoginProgress);
+  const referralLink = userReferralCode
+    ? `${window.location.origin}${window.location.pathname}?ref=${encodeURIComponent(userReferralCode)}`
+    : "";
+  const copyReferralLink = async () => {
+    if (!referralLink) return;
+    try {
+      await navigator.clipboard.writeText(referralLink);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = referralLink;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setReferralCopied(true);
+    window.setTimeout(() => setReferralCopied(false), 1600);
+  };
 
   return (
     <section className="profile-screen">
@@ -2544,6 +2613,25 @@ function ProfilePage({
             <span>{text("profile.chooseInterests")}</span>
           )}
         </button>
+      </section>
+
+      <section className="profile-referral-card">
+        <div>
+          <span>
+            <Gift size={20} />
+          </span>
+          <section>
+            <h3>{text("profile.referralTitle")}</h3>
+            <p>{text("profile.referralText")}</p>
+          </section>
+        </div>
+        <div className="referral-code-row">
+          <strong>{userReferralCode || "--------"}</strong>
+          <button type="button" disabled={!userReferralCode} onClick={copyReferralLink}>
+            <Copy size={16} />
+            {referralCopied ? text("profile.referralCopied") : text("profile.referralCopy")}
+          </button>
+        </div>
       </section>
 
       <section className="daily-login-card">

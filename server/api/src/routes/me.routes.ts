@@ -6,6 +6,7 @@ import { hashPassword, requireSession } from "../modules/auth/auth.helpers";
 import { getDailyLoginProgress } from "../modules/points/daily-login";
 import { awardProfileCompletionBonusIfReady, buildProfileCompletionProgress } from "../modules/points/profile-completion";
 import { buildLevelProgress } from "../modules/points/progression";
+import { ensureReferralCode, findReferrerId } from "../modules/referrals/referral.helpers";
 
 const profileInterestIds = [
   "food",
@@ -24,6 +25,7 @@ const updateMeSchema = z.object({
   avatarUrl: z.string().trim().min(1).max(2000).nullable().optional(),
   birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   displayName: z.string().trim().min(3).max(24).regex(/^[\p{L}\p{N}_ ]+$/u).optional(),
+  referralCode: z.string().trim().min(4).max(16).optional(),
   interests: z
     .array(z.enum(profileInterestIds))
     .length(3)
@@ -58,6 +60,7 @@ async function getRank(userId: string) {
 
 async function getMePayload(userId: string) {
   const today = startOfToday();
+  await ensureReferralCode(prisma, userId);
   const [user, rewardClaims, rewardEngagements, profileCompletionBonus, gameHistory, gamesPlayed, dailyRank, weeklyRank, games, rewards, attemptsToday, dailyLogin] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -75,6 +78,8 @@ async function getMePayload(userId: string) {
         phone: true,
         phoneVerifiedAt: true,
         passwordSetAt: true,
+        referralCode: true,
+        referredById: true,
         role: true,
         totalPoints: true,
         totalXp: true,
@@ -237,6 +242,7 @@ export function registerMeRoutes(app: FastifyInstance) {
 
     try {
       const updateData: Prisma.UserUpdateInput = {};
+      const requestedReferralCode = parsed.data.referralCode?.trim().toUpperCase();
       if ("avatarUrl" in parsed.data) updateData.avatarUrl = parsed.data.avatarUrl;
       if ("birthDate" in parsed.data) updateData.birthDate = parsed.data.birthDate ? new Date(`${parsed.data.birthDate}T00:00:00.000Z`) : null;
       if (parsed.data.displayName) updateData.displayName = parsed.data.displayName;
@@ -247,6 +253,22 @@ export function registerMeRoutes(app: FastifyInstance) {
       }
 
       const result = await prisma.$transaction(async (tx) => {
+        if (requestedReferralCode) {
+          const currentUser = await tx.user.findUniqueOrThrow({
+            where: { id: auth.session.userId },
+            select: {
+              referralCode: true,
+              referredById: true
+            }
+          });
+          if (currentUser.referredById) throw new Error("REFERRAL_ALREADY_SET");
+          if (currentUser.referralCode === requestedReferralCode) throw new Error("INVALID_REFERRAL_CODE");
+
+          const referrerId = await findReferrerId(tx, requestedReferralCode);
+          if (!referrerId || referrerId === auth.session.userId) throw new Error("INVALID_REFERRAL_CODE");
+          updateData.referredBy = { connect: { id: referrerId } };
+        }
+
         await tx.user.update({
           where: { id: auth.session.userId },
           data: updateData
@@ -269,6 +291,12 @@ export function registerMeRoutes(app: FastifyInstance) {
         (error as { code?: string }).code === "P2002"
       ) {
         return reply.code(409).send({ message: "Display name is already taken" });
+      }
+      if (error instanceof Error && error.message === "INVALID_REFERRAL_CODE") {
+        return reply.code(400).send({ message: "Invalid referral code" });
+      }
+      if (error instanceof Error && error.message === "REFERRAL_ALREADY_SET") {
+        return reply.code(409).send({ message: "Referral code is already applied" });
       }
       throw error;
     }

@@ -84,6 +84,8 @@ model User {
   interests      String[]        @default([])
   passwordHash   String?
   passwordSetAt  DateTime?
+  referralCode   String?         @unique
+  referredById   String?
   totalPoints    Int             @default(0)
   level          Int             @default(1)
   xp             Int             @default(0)
@@ -100,8 +102,11 @@ model User {
   pointBonuses   PointBonus[]
   rewardClaims   RewardClaim[]
   analyticsEvents AnalyticsEvent[]
+  referredBy     User?           @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals      User[]          @relation("UserReferrals")
 
   @@index([role])
+  @@index([referredById])
 }
 
 model AuthAccount {
