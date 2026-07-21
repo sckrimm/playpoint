@@ -5,7 +5,8 @@ import { prisma } from "../db/prisma";
 import { hashPassword, requireSession } from "../modules/auth/auth.helpers";
 import { getDailyLoginProgress } from "../modules/points/daily-login";
 import { awardProfileCompletionBonusIfReady, buildProfileCompletionProgress } from "../modules/points/profile-completion";
-import { buildLevelProgress } from "../modules/points/progression";
+import { awardReferralBonuses } from "../modules/points/referral-bonus";
+import { buildLevelProgress, type LevelProgress } from "../modules/points/progression";
 import { ensureReferralCode, findReferrerId } from "../modules/referrals/referral.helpers";
 
 const profileInterestIds = [
@@ -253,6 +254,7 @@ export function registerMeRoutes(app: FastifyInstance) {
       }
 
       const result = await prisma.$transaction(async (tx) => {
+        let referralLevelProgress: LevelProgress | null = null;
         if (requestedReferralCode) {
           const currentUser = await tx.user.findUniqueOrThrow({
             where: { id: auth.session.userId },
@@ -267,13 +269,19 @@ export function registerMeRoutes(app: FastifyInstance) {
           const referrerId = await findReferrerId(tx, requestedReferralCode);
           if (!referrerId || referrerId === auth.session.userId) throw new Error("INVALID_REFERRAL_CODE");
           updateData.referredBy = { connect: { id: referrerId } };
+          const referralBonusResult = await awardReferralBonuses(tx, auth.session.userId, referrerId);
+          referralLevelProgress = referralBonusResult.inviteeLevelProgress;
         }
 
         await tx.user.update({
           where: { id: auth.session.userId },
           data: updateData
         });
-        return awardProfileCompletionBonusIfReady(tx, auth.session.userId);
+        const profileCompletionResult = await awardProfileCompletionBonusIfReady(tx, auth.session.userId);
+        return {
+          ...profileCompletionResult,
+          levelProgress: profileCompletionResult.levelProgress ?? referralLevelProgress
+        };
       });
 
       const payload = await getMePayload(auth.session.userId);

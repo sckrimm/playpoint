@@ -42,6 +42,8 @@ export const pointRules = {
   emailVerificationBonus: 50,
   phoneVerificationBonus: 50,
   profileCompletionBonus: 500,
+  referralSignupBonus: 100,
+  referralInviteBonus: 200,
   rewardEngagementBonus: 10,
   xpPerPointAward: 5,
   firstLevelXp: 20,

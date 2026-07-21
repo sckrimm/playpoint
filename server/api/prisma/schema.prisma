@@ -68,6 +68,8 @@ enum PointBonusReason {
   email_verification
   phone_verification
   profile_completion
+  referral_signup
+  referral_invite
   level_up
   reward_engagement
 }
