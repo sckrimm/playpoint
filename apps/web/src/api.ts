@@ -119,6 +119,7 @@ export type ApiMe = {
     dailyLogin: ApiDailyLoginProgress;
     levelProgress: ApiLevelProgress;
     profileCompletion: ApiProfileCompletion;
+    referralCount: number;
     dailyRank: number | null;
     gameAttempts: Array<{
       attemptsLeft: number;

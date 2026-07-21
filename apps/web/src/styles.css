@@ -251,7 +251,7 @@ h3 {
 }
 
 .level-progress {
-  margin-bottom: 14px;
+  margin: 0 0 14px;
   padding: 12px;
   border: 1px solid rgb(100 23 216 / 12%);
   border-radius: 8px;
@@ -3444,17 +3444,28 @@ h3 {
 }
 
 .profile-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 22px 16px 20px;
-  margin-bottom: 32px;
-  text-align: center;
+  padding: 16px;
+  margin-bottom: 18px;
+  border: 1px solid rgb(216 198 242 / 30%);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 3px 12px rgb(100 23 216 / 8%);
+}
+
+.profile-hero-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.profile-hero-copy {
+  min-width: 0;
 }
 
 .profile-avatar-wrap {
   position: relative;
-  margin: 0 0 16px;
+  margin: 0;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -3523,6 +3534,10 @@ h3 {
   color: #1a1c1c;
   font-size: 20px;
   line-height: 28px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-hero p {
@@ -3534,7 +3549,7 @@ h3 {
 
 .profile-progress-copy {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   gap: 5px;
 }
 
@@ -3570,6 +3585,36 @@ h3 {
   font-style: normal;
   font-size: 13px;
   font-weight: 1000;
+}
+
+.profile-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(74px, auto));
+  gap: 6px;
+}
+
+.profile-hero-stats span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: #6417d8;
+  background: #ffffff;
+  box-shadow: 0 5px 14px rgb(0 0 0 / 8%);
+  font-size: 11px;
+  font-weight: 1000;
+}
+
+.profile-hero-stats span:last-child {
+  color: #825100;
+}
+
+.profile-hero-stats strong {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .profile-interest-tags {
@@ -3663,9 +3708,8 @@ h3 {
 
 .profile-stats-bento {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 32px;
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 24px;
 }
 
 .balance-card {
@@ -3891,9 +3935,25 @@ h3 {
 }
 
 .profile-referral-card h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 4px;
   color: #6417d8;
   font-size: 16px;
+}
+
+.profile-referral-card h3 small {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: #6417d8;
+  background: #efe5ff;
+  font-size: 10px;
+  font-weight: 1000;
 }
 
 .profile-referral-card p {
@@ -3948,7 +4008,7 @@ h3 {
 }
 
 .daily-login-card {
-  margin: -18px 0 24px;
+  margin: 0 0 14px;
   padding: 14px;
   border: 1px solid rgb(216 198 242 / 48%);
   border-radius: 8px;
@@ -4847,6 +4907,21 @@ h3 {
   color: rgb(248 242 255 / 68%);
 }
 
+.dark-mode .profile-referral-card h3 small {
+  color: #f8f2ff;
+  background: rgb(100 23 216 / 36%);
+}
+
+.dark-mode .profile-hero-stats span {
+  color: #d8c6f2;
+  background: #ffffff;
+}
+
+.dark-mode .profile-hero-stats span:last-child {
+  color: #ffd66b;
+  background: #ffffff;
+}
+
 .dark-mode .referral-code-row strong {
   border-color: rgb(216 198 242 / 22%);
   color: #ffffff;
@@ -5037,6 +5112,71 @@ h3 {
 
   .auth-content {
     min-height: calc(100dvh - 36px - env(safe-area-inset-bottom));
+  }
+
+  .profile-hero {
+    position: relative;
+    padding: 14px;
+  }
+
+  .profile-hero-main {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    padding-right: 116px;
+  }
+
+  .profile-avatar-progress {
+    width: 72px;
+    height: 72px;
+  }
+
+  .profile-hero h2 {
+    font-size: 18px;
+    line-height: 24px;
+  }
+
+  .profile-interest-tags {
+    max-width: 320px;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .profile-interest-tags span {
+    min-height: 28px;
+    padding: 6px 10px;
+    font-size: inherit;
+  }
+
+  .profile-hero-stats svg {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+  }
+
+  .profile-hero-stats strong {
+    font-size: 11px;
+  }
+
+  .profile-hero-stats {
+    position: absolute;
+    top: 14px;
+    right: 10px;
+    grid-template-columns: repeat(2, 48px);
+    gap: 6px;
+  }
+
+  .profile-hero-stats span {
+    gap: 4px;
+    min-height: 38px;
+    padding: 0 6px;
+    font-size: 10px;
+  }
+
+  .daily-login-card,
+  .level-progress,
+  .profile-referral-card {
+    padding: 12px;
   }
 }
 
@@ -5344,12 +5484,10 @@ h3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .profile-stats-bento {
-    grid-template-columns: 1.4fr 1fr 1fr;
-  }
-
-  .balance-card {
-    grid-column: auto;
+  .daily-login-days span {
+    min-height: 72px;
+    font-size: 40px;
+    line-height: 1;
   }
 
   .leaderboard-screen {

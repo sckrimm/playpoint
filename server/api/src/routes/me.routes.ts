@@ -62,7 +62,21 @@ async function getRank(userId: string) {
 async function getMePayload(userId: string) {
   const today = startOfToday();
   await ensureReferralCode(prisma, userId);
-  const [user, rewardClaims, rewardEngagements, profileCompletionBonus, gameHistory, gamesPlayed, dailyRank, weeklyRank, games, rewards, attemptsToday, dailyLogin] = await Promise.all([
+  const [
+    user,
+    rewardClaims,
+    rewardEngagements,
+    profileCompletionBonus,
+    gameHistory,
+    gamesPlayed,
+    dailyRank,
+    weeklyRank,
+    games,
+    rewards,
+    attemptsToday,
+    dailyLogin,
+    referralCount
+  ] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
@@ -171,7 +185,12 @@ async function getMePayload(userId: string) {
         gameId: true
       }
     }),
-    getDailyLoginProgress(prisma, userId)
+    getDailyLoginProgress(prisma, userId),
+    prisma.user.count({
+      where: {
+        referredById: userId
+      }
+    })
   ]);
   const attemptsByGameId = new Map(attemptsToday.map((attempt) => [attempt.gameId, attempt._count.gameId]));
   const rewardSlugById = new Map(rewards.map((reward) => [reward.id, reward.slug]));
@@ -200,6 +219,7 @@ async function getMePayload(userId: string) {
       dailyLogin,
       levelProgress: buildLevelProgress(user),
       profileCompletion: buildProfileCompletionProgress(user, Boolean(profileCompletionBonus)),
+      referralCount,
       rewardEngagements: rewardEngagements
         .map((engagement) => {
           const rewardKey = engagement.awardKey.split(":").at(-1) ?? "";

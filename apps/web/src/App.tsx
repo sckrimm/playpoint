@@ -10,10 +10,10 @@ import {
   BadgeCheck,
   Brain,
   Calendar,
-  CircleDollarSign,
   CheckCircle2,
   ChevronDown,
   Coins,
+  CircleDollarSign,
   Copy,
   Gift,
   Gamepad2,
@@ -495,6 +495,7 @@ export function App() {
   const [userInterests, setUserInterests] = useState<string[]>([]);
   const [userPasswordSetAt, setUserPasswordSetAt] = useState<string | null>(null);
   const [userReferralCode, setUserReferralCode] = useState<string | null>(null);
+  const [userReferralCount, setUserReferralCount] = useState(0);
   const [pendingReferralCode, setPendingReferralCode] = useState(readReferralCode);
   const [profileName, setProfileName] = useState<string>(userSummary.displayName);
   const [userPoints, setUserPoints] = useState<number>(0);
@@ -563,6 +564,7 @@ export function App() {
     setWeeklyRank(payload.stats.weeklyRank);
     setDailyLogin(payload.stats.dailyLogin);
     setProfileCompletion(payload.stats.profileCompletion);
+    setUserReferralCount(payload.stats.referralCount);
     setRewardEngagementIds(new Set(payload.stats.rewardEngagements));
     setAttemptsLeftByGame((currentAttempts) => {
       const nextAttempts = { ...currentAttempts };
@@ -905,6 +907,7 @@ export function App() {
     setUserInterests([]);
     setUserPasswordSetAt(null);
     setUserReferralCode(null);
+    setUserReferralCount(0);
     setProfileName(userSummary.displayName);
     setUserPoints(0);
     setUserCoins(14);
@@ -1095,6 +1098,7 @@ export function App() {
               userPhoneVerifiedAt={userPhoneVerifiedAt}
               userPoints={userPoints}
               userRank={userRank}
+              userReferralCount={userReferralCount}
               userReferralCode={userReferralCode}
               dailyLogin={dailyLogin}
               levelProgress={levelProgress}
@@ -2460,6 +2464,7 @@ function ProfilePage({
   userPhoneVerifiedAt,
   userPoints,
   userRank,
+  userReferralCount,
   userReferralCode,
   gamesPlayed,
   gameHistory,
@@ -2487,6 +2492,7 @@ function ProfilePage({
   userPhoneVerifiedAt: string | null;
   userPoints: number;
   userRank: number;
+  userReferralCount: number;
   userReferralCode: string | null;
   gamesPlayed: number;
   gameHistory: GameHistoryItem[];
@@ -2579,31 +2585,45 @@ function ProfilePage({
   return (
     <section className="profile-screen">
       <section className="profile-hero">
-        <button className="profile-avatar-wrap" type="button" onClick={() => onNavigate("edit-profile")}>
-          <div
-            className="profile-avatar-progress"
-            style={{ "--profile-progress": `${profileCompletionProgress.percent}%` } as CSSProperties}
-            aria-label={`Profile completion ${profileCompletionProgress.percent}%`}
-          >
-            <div className="profile-avatar">
-              <AvatarVisual avatarUrl={userAvatarUrl} iconSize={42} />
+        <div className="profile-hero-main">
+          <button className="profile-avatar-wrap" type="button" onClick={() => onNavigate("edit-profile")}>
+            <div
+              className="profile-avatar-progress"
+              style={{ "--profile-progress": `${profileCompletionProgress.percent}%` } as CSSProperties}
+              aria-label={`Profile completion ${profileCompletionProgress.percent}%`}
+            >
+              <div className="profile-avatar">
+                <AvatarVisual avatarUrl={userAvatarUrl} iconSize={42} />
+              </div>
             </div>
+            <span className="profile-edit-badge">
+              <Pencil size={16} />
+            </span>
+          </button>
+          <div className="profile-hero-copy">
+            <h2>{profileName || text("profile.fallbackName")}</h2>
+            <p className="profile-progress-copy">
+              <span>{text("profile.player")} #88219</span>
+              <span>
+                <b className={`profile-progress-value ${profileProgressTone}`}>{profileCompletionProgress.percent}%</b>
+                <em>
+                  <Sparkles size={13} />
+                  +{formatter.format(profileCompletionProgress.rewardPoints)}
+                </em>
+              </span>
+            </p>
           </div>
-          <span className="profile-edit-badge">
-            <Pencil size={16} />
-          </span>
-        </button>
-        <h2>{profileName || text("profile.fallbackName")}</h2>
-        <p className="profile-progress-copy">
-          <span>{text("profile.player")} #88219</span>
-          <span>
-            <b className={`profile-progress-value ${profileProgressTone}`}>{profileCompletionProgress.percent}%</b>
-            <em>
-              <Sparkles size={13} />
-              +{formatter.format(profileCompletionProgress.rewardPoints)}
-            </em>
-          </span>
-        </p>
+          <div className="profile-hero-stats" aria-label={`${text("profile.rating")}, ${text("profile.games")}`}>
+            <span>
+              <Medal size={17} />
+              <strong>#{userRank}</strong>
+            </span>
+            <span>
+              <Gamepad2 size={17} />
+              <strong>{formatter.format(gamesPlayed)}</strong>
+            </span>
+          </div>
+        </div>
         <button className="profile-interest-tags" type="button" onClick={() => onNavigate("edit-profile")}>
           {profileInterests.length > 0 ? (
             profileInterests.map((interestId) => (
@@ -2615,27 +2635,31 @@ function ProfilePage({
         </button>
       </section>
 
-      <section className="profile-referral-card">
-        <div>
-          <span>
-            <Gift size={20} />
-          </span>
-          <section>
-            <h3>{text("profile.referralTitle")}</h3>
-            <p>{text("profile.referralText")}</p>
-          </section>
-        </div>
-        <div className="referral-code-row">
-          <strong>{userReferralCode || "--------"}</strong>
-          <button type="button" disabled={!userReferralCode} onClick={copyReferralLink}>
-            <Copy size={16} />
-            {referralCopied ? text("profile.referralCopied") : text("profile.referralCopy")}
-          </button>
-        </div>
+      <section className="profile-stats-bento">
+        <article className="balance-card">
+          <div>
+            <p>{text("profile.balance")}</p>
+            <div className="balance-total-row">
+              <h3><AnimatedPoints value={userPoints} /></h3>
+              <span>
+                <TrendingUp size={16} />
+                <PointsLabel value={lastGameResult.playPoints} prefix="+" /> {text("profile.lastGame")}
+              </span>
+            </div>
+            <div className="balance-coin-row">
+              <Coins size={18} />
+              <strong>{formatter.format(userCoins)}</strong>
+              <small>{text("profile.coin")}</small>
+            </div>
+          </div>
+          <div className="balance-icon">
+            <CircleDollarSign size={48} />
+          </div>
+          <div className="balance-orb" />
+        </article>
       </section>
 
       <section className="daily-login-card">
-        <LevelProgressBar progress={levelProgress} text={text} />
         <div className="daily-login-card-header">
           <span>
             <Sparkles size={20} />
@@ -2662,56 +2686,44 @@ function ProfilePage({
         </small>
       </section>
 
-      <section className="profile-stats-bento">
-        <article className="balance-card">
-          <div>
-            <p>{text("profile.balance")}</p>
-            <div className="balance-total-row">
-              <h3><AnimatedPoints value={userPoints} /></h3>
-              <span>
-                <TrendingUp size={16} />
-                <PointsLabel value={lastGameResult.playPoints} prefix="+" /> {text("profile.lastGame")}
-              </span>
-            </div>
-            <div className="balance-coin-row">
-              <Coins size={18} />
-              <strong>{formatter.format(userCoins)}</strong>
-              <small>{text("profile.coin")}</small>
-            </div>
-          </div>
-          <div className="balance-icon">
-            <CircleDollarSign size={48} />
-          </div>
-          <div className="balance-orb" />
-        </article>
-        <article className="mini-stat-card">
-          <Medal size={26} />
-          <p>{text("profile.rating")}</p>
-          <h4>#{userRank}</h4>
-        </article>
-        <article className="mini-stat-card">
-          <Gamepad2 size={26} />
-          <p>{text("profile.games")}</p>
-          <h4>{formatter.format(gamesPlayed)}</h4>
-        </article>
+      <LevelProgressBar progress={levelProgress} text={text} />
+
+      <section className="profile-referral-card">
+        <div>
+          <span>
+            <Gift size={20} />
+          </span>
+          <section>
+            <h3>
+              {text("profile.referralTitle")}
+              <small>{userReferralCount} {text("profile.referralCount")}</small>
+            </h3>
+            <p>{text("profile.referralText")}</p>
+          </section>
+        </div>
+        <div className="referral-code-row">
+          <strong>{userReferralCode || "--------"}</strong>
+          <button type="button" disabled={!userReferralCode} onClick={copyReferralLink}>
+            <Copy size={16} />
+            {referralCopied ? text("profile.referralCopied") : text("profile.referralCopy")}
+          </button>
+        </div>
       </section>
 
-      <section className={emailIsVerified ? "profile-verification-card verified" : "profile-verification-card"}>
-        <div className="verification-icon">
-          {emailIsVerified ? <BadgeCheck size={22} /> : <Mail size={22} />}
-        </div>
-        <div>
-          <h3>{emailIsVerified ? text("profile.emailVerified") : text("profile.verifyEmailTitle")}</h3>
-          <p>
-            {emailIsVerified
-              ? userEmail || text("profile.emailVerifiedText")
-              : text("profile.verifyEmailText")}
-          </p>
-        </div>
-        <button type="button" onClick={() => onNavigate("edit-profile")}>
-          {emailIsVerified ? text("profile.manage") : text("profile.verifyEmailAction")}
-        </button>
-      </section>
+      {!emailIsVerified ? (
+        <section className="profile-verification-card">
+          <div className="verification-icon">
+            <Mail size={22} />
+          </div>
+          <div>
+            <h3>{text("profile.verifyEmailTitle")}</h3>
+            <p>{text("profile.verifyEmailText")}</p>
+          </div>
+          <button type="button" onClick={() => onNavigate("edit-profile")}>
+            {text("profile.verifyEmailAction")}
+          </button>
+        </section>
+      ) : null}
 
       <section className="profile-section-block">
         <div className="profile-section-title">
