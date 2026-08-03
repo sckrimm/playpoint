@@ -4424,6 +4424,28 @@ h3 {
   padding-bottom: 18px;
 }
 
+.admin-menu-toggle,
+.admin-menu-close {
+  display: none;
+}
+
+.admin-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: block;
+  border: 0;
+  background: rgb(31 23 48 / 36%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.admin-menu-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .admin-sidebar {
   position: sticky;
   top: 0;
@@ -4443,6 +4465,10 @@ h3 {
   margin: 0;
   color: #1f1730;
   font-size: 18px;
+}
+
+.admin-sidebar-brand {
+  position: relative;
 }
 
 .admin-main,
@@ -4661,7 +4687,7 @@ h3 {
 
 .admin-analytics-item span strong {
   color: inherit;
-  font-size: 22px;
+  font-size: 16px;
 }
 
 .admin-header-progress button small,
@@ -4853,6 +4879,18 @@ h3 {
 
 .admin-rewards-panel h3 {
   margin-top: 0;
+}
+
+.admin-rewards-panel {
+  grid-column: 1 / -1;
+}
+
+.admin-users-panel {
+  grid-column: 1 / -1;
+}
+
+.admin-rewards-panel .admin-rows {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .admin-rows {
@@ -5396,6 +5434,8 @@ h3 {
 .admin-summary-stack {
   display: grid;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .admin-inline-status {
@@ -6205,6 +6245,17 @@ h3 {
   background: rgb(255 255 255 / 6%);
 }
 
+.dark-mode .admin-menu-toggle,
+.dark-mode .admin-menu-close {
+  border-color: rgb(255 255 255 / 10%);
+  color: #ffffff;
+  background: rgb(255 255 255 / 7%);
+}
+
+.dark-mode .admin-sidebar {
+  border-color: rgb(255 255 255 / 10%);
+}
+
 .dark-mode .game-card h3,
 .dark-mode .reward-card h3,
 .dark-mode .profile-list-item h4,
@@ -6440,15 +6491,61 @@ h3 {
   }
 
   .admin-screen {
+    position: relative;
     grid-template-columns: 1fr;
     gap: 12px;
+    padding-top: 50px;
+  }
+
+  .admin-menu-toggle,
+  .admin-menu-close {
+    display: inline-grid;
+    width: 46px;
+    height: 46px;
+    place-items: center;
+    border: 1px solid rgb(216 198 242 / 54%);
+    border-radius: 8px;
+    color: #6417d8;
+    background: #ffffff;
+    box-shadow: 0 6px 16px rgb(100 23 216 / 10%);
+  }
+
+  .admin-menu-toggle {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top));
+    left: 12px;
+    z-index: 75;
   }
 
   .admin-sidebar {
-    position: static;
-    min-height: auto;
-    gap: 12px;
-    padding: 12px;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 90;
+    width: min(82vw, 320px);
+    min-height: 100dvh;
+    overflow-y: auto;
+    gap: 14px;
+    padding: max(18px, env(safe-area-inset-top)) 14px 18px;
+    border-radius: 0 8px 8px 0;
+    box-shadow: 18px 0 38px rgb(28 4 58 / 18%);
+    transform: translateX(-104%);
+    transition: transform 220ms ease;
+  }
+
+  .admin-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .admin-sidebar-brand {
+    padding-right: 44px;
+  }
+
+  .admin-menu-close {
+    position: absolute;
+    top: 0;
+    right: 0;
   }
 
   .admin-main-nav {
@@ -6582,6 +6679,10 @@ h3 {
 
   .admin-panel {
     grid-column: 1 / -1;
+  }
+
+  .admin-rewards-panel .admin-rows {
+    grid-template-columns: 1fr;
   }
 
   .admin-stat-card {
@@ -6893,6 +6994,12 @@ h3 {
     justify-content: flex-start;
     padding: 8px 6px;
     font-size: 18px;
+  }
+
+  .admin-menu-toggle,
+  .admin-menu-backdrop,
+  .admin-menu-close {
+    display: none;
   }
 
   .desktop-nav {

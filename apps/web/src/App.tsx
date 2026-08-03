@@ -25,6 +25,7 @@ import {
   LogOut,
   Loader2,
   Mail,
+  Menu,
   Medal,
   Moon,
   Pencil,
@@ -1990,6 +1991,7 @@ function AdminLogin({ text, onLogin }: { text: TextGetter; onLogin: (token: stri
 function AdminPage({ authToken, text }: { authToken: string; text: TextGetter }) {
   const [activeAdminArea, setActiveAdminArea] = useState<"campaignsCms" | "economy" | "gamesCms" | "rewardsCms" | "usersAdmin">("economy");
   const [activeSection, setActiveSection] = useState<"overview" | "users" | "rewards" | "wallet">("overview");
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [adminToken, setAdminToken] = useState(() => window.localStorage.getItem(adminTokenStorageKey) ?? "");
   const [adminData, setAdminData] = useState<ApiAdminEconomy | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -2029,6 +2031,16 @@ function AdminPage({ authToken, text }: { authToken: string; text: TextGetter })
     { id: "rewards" as const, label: text("admin.rewards"), icon: Gift },
     { id: "wallet" as const, label: text("admin.wallet"), icon: Layers3 }
   ];
+  const closeAdminMenu = () => setAdminMenuOpen(false);
+  const selectAdminArea = (area: typeof activeAdminArea) => {
+    setActiveAdminArea(area);
+    closeAdminMenu();
+  };
+  const selectAdminSection = (section: typeof activeSection) => {
+    setActiveAdminArea("economy");
+    setActiveSection(section);
+    closeAdminMenu();
+  };
   const headerMetrics = [
     {
       label: text("admin.users"),
@@ -2071,13 +2083,31 @@ function AdminPage({ authToken, text }: { authToken: string; text: TextGetter })
 
   return (
     <section className="admin-screen">
-      <aside className="admin-sidebar" aria-label="Admin navigation">
+      <button
+        className="admin-menu-toggle"
+        type="button"
+        onClick={() => setAdminMenuOpen((open) => !open)}
+        aria-expanded={adminMenuOpen}
+        aria-label={adminMenuOpen ? "Close admin navigation" : "Open admin navigation"}
+      >
+        {adminMenuOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
+      <button
+        className={`admin-menu-backdrop${adminMenuOpen ? " open" : ""}`}
+        type="button"
+        aria-label="Close admin navigation"
+        onClick={closeAdminMenu}
+      />
+      <aside className={`admin-sidebar${adminMenuOpen ? " open" : ""}`} aria-label="Admin navigation">
         <div className="admin-sidebar-brand">
           <span className="admin-brand-mark">
             <Sparkles size={18} />
             {text("admin.kicker")}
           </span>
           <h2>{text("admin.title")}</h2>
+          <button className="admin-menu-close" type="button" onClick={closeAdminMenu} aria-label="Close admin navigation">
+            <X size={20} />
+          </button>
         </div>
         <nav className="admin-main-nav">
           <div className="admin-nav-group">
@@ -2094,7 +2124,7 @@ function AdminPage({ authToken, text }: { authToken: string; text: TextGetter })
                     className={activeSection === section.id ? "active" : ""}
                     key={section.id}
                     type="button"
-                    onClick={() => setActiveSection(section.id)}
+                    onClick={() => selectAdminSection(section.id)}
                   >
                     <Icon size={16} />
                     {section.label}
@@ -2103,19 +2133,19 @@ function AdminPage({ authToken, text }: { authToken: string; text: TextGetter })
               })}
             </div> : null}
           </div>
-          <button className={activeAdminArea === "rewardsCms" ? "active" : ""} type="button" onClick={() => setActiveAdminArea("rewardsCms")}>
+          <button className={activeAdminArea === "rewardsCms" ? "active" : ""} type="button" onClick={() => selectAdminArea("rewardsCms")}>
             <Gift size={17} />
             {text("admin.cmsRewards")}
           </button>
-          <button className={activeAdminArea === "usersAdmin" ? "active" : ""} type="button" onClick={() => setActiveAdminArea("usersAdmin")}>
+          <button className={activeAdminArea === "usersAdmin" ? "active" : ""} type="button" onClick={() => selectAdminArea("usersAdmin")}>
             <User size={17} />
             {text("admin.usersAdmin")}
           </button>
-          <button className={activeAdminArea === "campaignsCms" ? "active" : ""} type="button" onClick={() => setActiveAdminArea("campaignsCms")}>
+          <button className={activeAdminArea === "campaignsCms" ? "active" : ""} type="button" onClick={() => selectAdminArea("campaignsCms")}>
             <Calendar size={17} />
             {text("admin.campaignsCms")}
           </button>
-          <button className={activeAdminArea === "gamesCms" ? "active" : ""} type="button" onClick={() => setActiveAdminArea("gamesCms")}>
+          <button className={activeAdminArea === "gamesCms" ? "active" : ""} type="button" onClick={() => selectAdminArea("gamesCms")}>
             <Gamepad2 size={17} />
             {text("admin.cmsGames")}
           </button>
@@ -2237,15 +2267,17 @@ function AdminOverview({ data, text }: { data: ApiAdminEconomy; text: TextGetter
 
 function AdminUsers({ data, text }: { data: ApiAdminEconomy; text: TextGetter }) {
   return (
-    <AdminPanel title={text("admin.users")}>
-      <AdminRows
-        rows={data.recentUsers.map((user) => ({
-          left: user.displayName,
-          right: `${formatter.format(user.marketCoins)} MC`,
-          sub: `${formatter.format(user.seasonScore)} Season Score • ${user.role}`
-        }))}
-      />
-    </AdminPanel>
+    <div className="admin-grid">
+      <AdminPanel className="admin-users-panel" title={text("admin.users")}>
+        <AdminRows
+          rows={data.recentUsers.map((user) => ({
+            left: user.displayName,
+            right: `${formatter.format(user.marketCoins)} MC`,
+            sub: `${formatter.format(user.seasonScore)} Season Score • ${user.role}`
+          }))}
+        />
+      </AdminPanel>
+    </div>
   );
 }
 
@@ -3141,9 +3173,9 @@ function AdminGamesCms({ authToken, text }: { authToken: string; text: TextGette
   );
 }
 
-function AdminPanel({ children, title }: { children: ReactNode; title: string }) {
+function AdminPanel({ children, className = "", title }: { children: ReactNode; className?: string; title: string }) {
   return (
-    <article className="admin-panel">
+    <article className={`admin-panel${className ? ` ${className}` : ""}`}>
       <h3>{title}</h3>
       {children}
     </article>
