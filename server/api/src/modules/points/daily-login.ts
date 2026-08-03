@@ -106,6 +106,12 @@ export async function awardDailyLoginBonus(db: DbClient, userId: string): Promis
     data: {
       totalPoints: {
         increment: pointRules.dailyLoginBonus
+      },
+      seasonScore: {
+        increment: pointRules.dailyLoginBonus
+      },
+      lifetimeScore: {
+        increment: pointRules.dailyLoginBonus
       }
     }
   });

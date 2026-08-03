@@ -8,6 +8,7 @@ import "swiper/css/scrollbar";
 import {
   ArrowLeft,
   BadgeCheck,
+  BarChart3,
   Brain,
   Calendar,
   CheckCircle2,
@@ -18,6 +19,7 @@ import {
   Gift,
   Gamepad2,
   Home,
+  Layers3,
   Languages,
   Lock,
   LogOut,
@@ -41,6 +43,7 @@ import {
   X
 } from "lucide-react";
 import {
+  type Game,
   type GameId,
   type GameResult,
   type Reward,
@@ -51,7 +54,7 @@ import {
   userSummary
 } from "@playpoint/shared";
 import { AimHitGame } from "./games/aim-hit/AimHitGame";
-import { ApiError, type ApiDailyLoginProgress, type ApiLevelProgress, type ApiProfileCompletion, type GameAttemptStart, playpointApi, toReward } from "./api";
+import { ApiError, type ApiAdminAdjustmentPayload, type ApiAdminCampaign, type ApiAdminCampaignOptions, type ApiAdminCampaignPayload, type ApiAdminEconomy, type ApiAdminGame, type ApiAdminGamePayload, type ApiAdminRewardPayload, type ApiAdminUserDetail, type ApiAdminUserSummary, type ApiDailyLoginProgress, type ApiGameCatalogItem, type ApiLevelProgress, type ApiProfileCompletion, type ApiReward, type ApiSeasonConversionNotice, type ApiWalletHistoryItem, type GameAttemptStart, playpointApi, toReward } from "./api";
 import { ColorRushGame } from "./games/color-rush/ColorRushGame";
 import { getText, type Language, type TextGetter } from "./i18n";
 import { MemoryGame } from "./games/memory/MemoryGame";
@@ -99,10 +102,12 @@ type Route =
   | "leaderboard-weekly"
   | "rewards"
   | "profile"
-  | "edit-profile";
+  | "edit-profile"
+  | "admin";
 
 const tokenStorageKey = "playpoint.authToken";
 const referralStorageKey = "playpoint.referralCode";
+const conversionNoticeStorageKey = "playpoint.seenSeasonConversionIds";
 const appleClientId = import.meta.env.VITE_APPLE_CLIENT_ID ?? "";
 const appleRedirectUri = import.meta.env.VITE_APPLE_REDIRECT_URI ?? window.location.origin;
 const defaultRoute: Route = window.localStorage.getItem(tokenStorageKey) ? "home" : "splash";
@@ -195,6 +200,16 @@ function PointsLabel({
       <Sparkles size={14} />
       {prefix}
       {animated ? <AnimatedPoints value={value} /> : formatter.format(value)}
+    </span>
+  );
+}
+
+function MarketCoinLabel({ value, prefix = "" }: { value: number; prefix?: string }) {
+  return (
+    <span className="market-coin-label">
+      <Coins size={14} />
+      {prefix}
+      {formatter.format(value)}
     </span>
   );
 }
@@ -308,15 +323,6 @@ function LevelProgressBar({ progress, text }: { progress: ApiLevelProgress | nul
   );
 }
 
-const coinPackages = [
-  { id: "starter", coins: 14, price: "₾1.99", label: "Starter" },
-  { id: "boost", coins: 30, price: "₾3.99", label: "Boost" },
-  { id: "player", coins: 65, price: "₾7.99", label: "Player" },
-  { id: "pro", coins: 140, price: "₾14.99", label: "Pro" },
-  { id: "champion", coins: 320, price: "₾29.99", label: "Champion" },
-  { id: "legend", coins: 720, price: "₾59.99", label: "Legend" }
-];
-
 type RankedLeaderboardEntry = {
   rank: number;
   id?: string;
@@ -348,7 +354,8 @@ const screenMap: Record<Route, string> = {
   "leaderboard-weekly": "prototype/screens/leaderboard-weekly",
   rewards: "prototype/screens/rewards",
   profile: "prototype/screens/profile",
-  "edit-profile": "prototype/screens/edit-profile"
+  "edit-profile": "prototype/screens/edit-profile",
+  admin: "prototype/screens/admin"
 };
 
 const gameIcons = {
@@ -360,9 +367,41 @@ const gameIcons = {
   "rocket-tap": Target
 };
 
-const comingSoonGameIds: GameId[] = ["lucky-spin", "rocket-tap"];
+type CatalogGame = Game & {
+  comingSoon?: boolean;
+  dailyAttemptLimit?: number;
+};
+
+const fallbackComingSoonGameIds: GameId[] = ["lucky-spin", "rocket-tap"];
+const gameIdSet = new Set<GameId>(games.map((game) => game.id));
+
+function isKnownGameId(value: string): value is GameId {
+  return gameIdSet.has(value as GameId);
+}
+
+function mergeGameCatalog(catalog: ApiGameCatalogItem[]): CatalogGame[] {
+  const staticGameMap = new Map(games.map((game) => [game.id, game]));
+  const mergedGames = catalog
+    .flatMap((game) => {
+      if (!game.active || !isKnownGameId(game.slug)) return [];
+      const staticGame = staticGameMap.get(game.slug);
+      if (!staticGame) return [];
+      return {
+        ...staticGame,
+        name: game.title || staticGame.name,
+        icon: game.iconUrl || staticGame.icon,
+        comingSoon: game.comingSoon,
+        dailyAttemptLimit: game.dailyAttemptLimit
+      };
+    });
+
+  return mergedGames.length
+    ? mergedGames
+    : games.map((game) => ({ ...game, comingSoon: fallbackComingSoonGameIds.includes(game.id) }));
+}
 
 function readRoute(): Route {
+  if (window.location.pathname.replace(/\/+$/, "") === "/admin") return "admin";
   const route = window.location.hash.replace("#/", "") as Route;
   return route in screenMap ? route : defaultRoute;
 }
@@ -375,6 +414,20 @@ function readReferralCode() {
     .trim()
     .replace(/[^a-zA-Z0-9]/g, "")
     .toUpperCase();
+}
+
+function readSeenConversionIds() {
+  try {
+    return new Set(JSON.parse(window.localStorage.getItem(conversionNoticeStorageKey) ?? "[]") as string[]);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function markConversionNoticeSeen(conversionId: string) {
+  const seenIds = readSeenConversionIds();
+  seenIds.add(conversionId);
+  window.localStorage.setItem(conversionNoticeStorageKey, JSON.stringify([...seenIds].slice(-24)));
 }
 
 function buildLeaderboard(userName: string, userPoints: number): RankedLeaderboardEntry[] {
@@ -499,7 +552,7 @@ export function App() {
   const [pendingReferralCode, setPendingReferralCode] = useState(readReferralCode);
   const [profileName, setProfileName] = useState<string>(userSummary.displayName);
   const [userPoints, setUserPoints] = useState<number>(0);
-  const [userCoins, setUserCoins] = useState<number>(14);
+  const [userCoins, setUserCoins] = useState<number>(0);
   const [levelProgress, setLevelProgress] = useState<ApiLevelProgress | null>(null);
   const [lastAwardProgress, setLastAwardProgress] = useState<ApiLevelProgress | null>(null);
   const [gamesPlayed, setGamesPlayed] = useState<number>(0);
@@ -512,6 +565,7 @@ export function App() {
   const [purchasedRewards, setPurchasedRewards] = useState<Reward[]>([]);
   const [rewardEngagementIds, setRewardEngagementIds] = useState<Set<string>>(() => new Set());
   const [rewardCatalog, setRewardCatalog] = useState<Reward[]>(rewards);
+  const [gameCatalog, setGameCatalog] = useState<CatalogGame[]>(() => mergeGameCatalog([]));
   const [otpValue, setOtpValue] = useState("");
   const [selectedGameId, setSelectedGameId] = useState<GameId>("aim-hit");
   const [currentAttempt, setCurrentAttempt] = useState<GameAttemptStart | null>(null);
@@ -534,8 +588,11 @@ export function App() {
   const [apiBusy, setApiBusy] = useState(false);
   const [dailyLogin, setDailyLogin] = useState<ApiDailyLoginProgress | null>(null);
   const [profileCompletion, setProfileCompletion] = useState<ApiProfileCompletion | null>(null);
+  const [walletHistory, setWalletHistory] = useState<ApiWalletHistoryItem[]>([]);
+  const [expiringMarketCoins, setExpiringMarketCoins] = useState(0);
   const [dailyBonusModal, setDailyBonusModal] = useState<{ levelProgress: ApiLevelProgress | null; points: number; progress: ApiDailyLoginProgress } | null>(null);
   const [pendingDailyBonus, setPendingDailyBonus] = useState<{ levelProgress: ApiLevelProgress | null; points: number; progress: ApiDailyLoginProgress } | null>(null);
+  const [seasonConversionModal, setSeasonConversionModal] = useState<ApiSeasonConversionNotice | null>(null);
   const rankedLeaderboard = route === "leaderboard-weekly" ? weeklyLeaderboard : dailyLeaderboard;
   const userRank =
     (route === "leaderboard-weekly" ? weeklyRank : dailyRank) ??
@@ -555,8 +612,8 @@ export function App() {
     setUserPasswordSetAt(payload.user.passwordSetAt);
     setUserReferralCode(payload.user.referralCode);
     setProfileName(payload.user.displayName);
-    setUserPoints(payload.user.totalPoints);
-    setUserCoins(payload.user.coins);
+    setUserPoints(payload.user.seasonScore ?? payload.user.totalPoints);
+    setUserCoins(payload.user.marketCoins ?? payload.user.coins);
     setLevelProgress(payload.stats.levelProgress);
     setGamesPlayed(payload.stats.gamesPlayed);
     setGameHistory(payload.gameHistory);
@@ -565,6 +622,13 @@ export function App() {
     setDailyLogin(payload.stats.dailyLogin);
     setProfileCompletion(payload.stats.profileCompletion);
     setUserReferralCount(payload.stats.referralCount);
+    setWalletHistory(payload.wallet.history);
+    setExpiringMarketCoins(payload.wallet.expiringMarketCoins);
+    if (payload.wallet.latestConversion && !readSeenConversionIds().has(payload.wallet.latestConversion.id)) {
+      window.setTimeout(() => {
+        setSeasonConversionModal((currentNotice) => currentNotice ?? payload.wallet.latestConversion);
+      }, 1600);
+    }
     setRewardEngagementIds(new Set(payload.stats.rewardEngagements));
     setAttemptsLeftByGame((currentAttempts) => {
       const nextAttempts = { ...currentAttempts };
@@ -578,14 +642,16 @@ export function App() {
 
   const refreshAccount = async (token = authToken) => {
     if (!token) return;
-    const [me, rewardsPayload, dailyPayload, weeklyPayload] = await Promise.all([
+    const [me, rewardsPayload, gamesPayload, dailyPayload, weeklyPayload] = await Promise.all([
       playpointApi.getMe(token),
       playpointApi.getRewards(),
+      playpointApi.getGames(),
       playpointApi.getLeaderboard("daily"),
       playpointApi.getLeaderboard("weekly")
     ]);
     applyMePayload(me);
     setRewardCatalog(rewardsPayload.map(toReward));
+    setGameCatalog(mergeGameCatalog(gamesPayload));
     setDailyLeaderboard(toRankedLeaderboard(dailyPayload, me.user.id));
     setWeeklyLeaderboard(toRankedLeaderboard(weeklyPayload, me.user.id));
     return me;
@@ -650,8 +716,8 @@ export function App() {
     setUserEmailVerifiedAt(payload.user.emailVerifiedAt);
     setUserPhone(payload.user.phone ?? "");
     setProfileName(payload.user.displayName);
-    setUserPoints(payload.user.totalPoints);
-    setUserCoins(payload.user.coins);
+    setUserPoints(payload.user.seasonScore ?? payload.user.totalPoints);
+    setUserCoins(payload.user.marketCoins ?? payload.user.coins);
     if (payload.dailyLogin) {
       setDailyLogin(payload.dailyLogin.progress);
       if (payload.dailyLogin.levelProgress) setLevelProgress(payload.dailyLogin.levelProgress);
@@ -815,8 +881,8 @@ export function App() {
         playPoints: payload.score.playPoints
       };
       setLastGameResult(syncedResult);
-      setUserPoints(payload.user.totalPoints);
-      setUserCoins(payload.user.coins);
+      setUserPoints(payload.user.seasonScore ?? payload.user.totalPoints);
+      setUserCoins(payload.user.marketCoins ?? payload.user.coins);
       setLevelProgress(payload.levelProgress);
       setLastAwardProgress(payload.levelProgress);
       setDailyRank(payload.rank.daily);
@@ -841,8 +907,8 @@ export function App() {
     try {
       setApiBusy(true);
       const payload = await playpointApi.claimReward(authToken, reward.id);
-      setUserPoints(payload.user.totalPoints);
-      setUserCoins(payload.user.coins);
+      setUserPoints(payload.user.seasonScore ?? payload.user.totalPoints);
+      setUserCoins(payload.user.marketCoins ?? payload.user.coins);
       await refreshAccount(authToken);
       return true;
     } catch (error: unknown) {
@@ -862,8 +928,8 @@ export function App() {
     try {
       setApiBusy(true);
       const payload = await playpointApi.engageReward(authToken, reward.id);
-      setUserPoints((currentPoints) => Math.max(currentPoints, payload.user.totalPoints));
-      setUserCoins(payload.user.coins);
+      setUserPoints((currentPoints) => Math.max(currentPoints, payload.user.seasonScore ?? payload.user.totalPoints));
+      setUserCoins(payload.user.marketCoins ?? payload.user.coins);
       if (payload.levelProgress) {
         const nextProgress = payload.levelProgress;
         setLevelProgress((currentProgress) => {
@@ -910,11 +976,14 @@ export function App() {
     setUserReferralCount(0);
     setProfileName(userSummary.displayName);
     setUserPoints(0);
-    setUserCoins(14);
+    setUserCoins(0);
     setLevelProgress(null);
     setLastAwardProgress(null);
     setGamesPlayed(0);
     setGameHistory([]);
+    setWalletHistory([]);
+    setExpiringMarketCoins(0);
+    setSeasonConversionModal(null);
     setAttemptsLeftByGame(createDefaultAttempts());
     setDailyRank(null);
     setWeeklyRank(null);
@@ -940,8 +1009,14 @@ export function App() {
     navigate("splash");
   };
 
-  const showChrome = !["splash", "phone", "otp", "profile-setup", "game-loading"].includes(route);
-  const shellClassName = ["phone-shell", !showChrome ? "auth-shell" : "", route === "splash" ? "splash-shell" : ""]
+  const isAdminRoute = route === "admin";
+  const showChrome = !isAdminRoute && !["splash", "phone", "otp", "profile-setup", "game-loading"].includes(route);
+  const shellClassName = [
+    "phone-shell",
+    !showChrome && !isAdminRoute ? "auth-shell" : "",
+    route === "splash" ? "splash-shell" : "",
+    isAdminRoute ? "admin-shell" : ""
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -958,7 +1033,7 @@ export function App() {
           />
         ) : null}
 
-        <div className={showChrome ? "screen-content" : "screen-content auth-content"}>
+        <div className={isAdminRoute ? "screen-content admin-content" : showChrome ? "screen-content" : "screen-content auth-content"}>
           {route === "splash" ? <SplashPage text={text} onNavigate={navigate} /> : null}
           {route === "phone" ? (
             <PhonePage
@@ -1001,13 +1076,13 @@ export function App() {
             <HomePage
               attemptsLeftByGame={attemptsLeftByGame}
               dailyLeaderboard={dailyLeaderboard}
+              gameCatalog={gameCatalog}
               weeklyLeaderboard={weeklyLeaderboard}
               purchasedRewards={purchasedRewards}
               rewardCatalog={rewardCatalog}
               text={text}
               userCoins={userCoins}
               userPoints={userPoints}
-              onBuyCoins={(coins) => setUserCoins((currentCoins) => currentCoins + coins)}
               onClaimReward={claimReward}
               onNavigate={navigate}
               onSelectGame={selectGame}
@@ -1016,6 +1091,7 @@ export function App() {
           {route === "all-games" ? (
             <AllGamesPage
               attemptsLeftByGame={attemptsLeftByGame}
+              gameCatalog={gameCatalog}
               text={text}
               onSelectGame={selectGame}
             />
@@ -1073,7 +1149,7 @@ export function App() {
               rewardEngagementIds={rewardEngagementIds}
               rewards={rewardCatalog}
               text={text}
-              userPoints={userPoints}
+              userCoins={userCoins}
               onCollectRewardBonus={collectRewardEngagementBonus}
               onClaimReward={claimReward}
             />
@@ -1090,6 +1166,7 @@ export function App() {
               setLanguage={setLanguage}
               text={text}
               userCoins={userCoins}
+              expiringMarketCoins={expiringMarketCoins}
               userBirthDate={userBirthDate}
               userPasswordSetAt={userPasswordSetAt}
               userEmail={userEmail}
@@ -1104,6 +1181,7 @@ export function App() {
               levelProgress={levelProgress}
               gamesPlayed={gamesPlayed}
               gameHistory={gameHistory}
+              walletHistory={walletHistory}
               lastGameResult={lastGameResult}
               onNavigate={navigate}
               onLogout={restartRegistration}
@@ -1132,7 +1210,7 @@ export function App() {
                 const payload = await playpointApi.verifyEmail(authToken, email, code);
                 setUserEmail(payload.user.email ?? "");
                 setUserEmailVerifiedAt(payload.user.emailVerifiedAt);
-                setUserPoints(payload.user.totalPoints);
+                setUserPoints(payload.user.seasonScore ?? payload.user.totalPoints);
                 if (payload.levelProgress) setLevelProgress(payload.levelProgress);
                 await refreshAccount(authToken);
               }}
@@ -1152,6 +1230,9 @@ export function App() {
               onNavigate={navigate}
             />
           ) : null}
+          {route === "admin" ? (
+            <AdminPage authToken={authToken} text={text} />
+          ) : null}
         </div>
 
         {showChrome ? <BottomNav route={route} text={text} onNavigate={navigate} /> : null}
@@ -1162,6 +1243,16 @@ export function App() {
             progress={dailyBonusModal.progress}
             text={text}
             onClose={() => setDailyBonusModal(null)}
+          />
+        ) : null}
+        {seasonConversionModal ? (
+          <SeasonConversionModal
+            conversion={seasonConversionModal}
+            text={text}
+            onClose={() => {
+              markConversionNoticeSeen(seasonConversionModal.id);
+              setSeasonConversionModal(null);
+            }}
           />
         ) : null}
       </main>
@@ -1643,12 +1734,12 @@ function ProfileSetupPage({
 function HomePage({
   attemptsLeftByGame,
   dailyLeaderboard,
+  gameCatalog,
   purchasedRewards,
   rewardCatalog,
   text,
   userCoins,
   userPoints,
-  onBuyCoins,
   onClaimReward,
   onNavigate,
   onSelectGame,
@@ -1656,21 +1747,20 @@ function HomePage({
 }: {
   attemptsLeftByGame: AttemptsLeftByGame;
   dailyLeaderboard: RankedLeaderboardEntry[];
+  gameCatalog: CatalogGame[];
   purchasedRewards: Reward[];
   rewardCatalog: Reward[];
   text: TextGetter;
   userCoins: number;
   userPoints: number;
-  onBuyCoins: (coins: number) => void;
   onClaimReward: (reward: Reward) => Promise<boolean>;
   onNavigate: (route: Route) => void;
   onSelectGame: (gameId: GameId) => void;
   weeklyLeaderboard: RankedLeaderboardEntry[];
 }) {
-  const [coinModalOpen, setCoinModalOpen] = useState(false);
   const [homeLeaderboardScope, setHomeLeaderboardScope] = useState<"daily" | "weekly">("daily");
-  const playableGames = games
-    .filter((game) => !comingSoonGameIds.includes(game.id))
+  const playableGames = gameCatalog
+    .filter((game) => !game.comingSoon)
     .map((game, index) => ({ game, index }))
     .sort((left, right) => {
       const leftAttempts = attemptsLeftByGame[left.game.id] ?? pointRules.dailyAttemptsPerGame;
@@ -1733,9 +1823,7 @@ function HomePage({
               </SwiperSlide>
             );
           })}
-          {comingSoonGameIds.map((gameId) => {
-            const game = games.find((item) => item.id === gameId);
-            if (!game) return null;
+          {gameCatalog.filter((game) => game.comingSoon).map((game) => {
             return (
               <SwiperSlide className="game-slide" key={game.id}>
                 <GameCard
@@ -1785,7 +1873,7 @@ function HomePage({
             purchasedRewards={purchasedRewards}
             rewards={rewardCatalog}
             text={text}
-            userPoints={userPoints}
+            userCoins={userCoins}
             onClaimReward={onClaimReward}
           />
         </article>
@@ -1797,48 +1885,12 @@ function HomePage({
           <h2>{text("home.buyCoins")}</h2>
           <p>{text("home.buyCoinsText")}</p>
         </div>
-        <button type="button" onClick={() => setCoinModalOpen(true)}>
+        <button type="button" onClick={() => onNavigate("rewards")}>
           <Coins size={18} />
           <strong>{formatter.format(userCoins)}</strong>
-          <span>{text("common.buy")}</span>
+          <span>{text("home.spendCoins")}</span>
         </button>
       </section>
-
-      {coinModalOpen ? (
-        <div className="coin-modal-backdrop" role="presentation">
-          <section className="coin-modal" role="dialog" aria-modal="true" aria-labelledby="coin-modal-title">
-            <header>
-              <div>
-                <span>{text("home.coinStore")}</span>
-                <h2 id="coin-modal-title">{text("home.coinModalTitle")}</h2>
-              </div>
-              <button type="button" onClick={() => setCoinModalOpen(false)} aria-label="Close coin store">
-                <X size={20} />
-              </button>
-            </header>
-            <div className="coin-package-grid">
-              {coinPackages.map((pack) => (
-                <button
-                  className="coin-package"
-                  key={pack.id}
-                  type="button"
-                  onClick={() => {
-                    onBuyCoins(pack.coins);
-                    setCoinModalOpen(false);
-                  }}
-                >
-                  <span>{pack.label}</span>
-                  <strong>
-                    <Coins size={18} />
-                    {formatter.format(pack.coins)}
-                  </strong>
-                  <em>{pack.price}</em>
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
-      ) : null}
 
       <section className="section info-strip">
         <ShieldCheck size={20} />
@@ -1881,17 +1933,1175 @@ function GameCard({
   );
 }
 
+function AdminPage({ authToken, text }: { authToken: string; text: TextGetter }) {
+  const [activeAdminArea, setActiveAdminArea] = useState<"campaignsCms" | "economy" | "gamesCms" | "rewardsCms" | "usersAdmin">("economy");
+  const [activeSection, setActiveSection] = useState<"overview" | "users" | "rewards" | "wallet">("overview");
+  const [adminData, setAdminData] = useState<ApiAdminEconomy | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let ignore = false;
+    setLoading(true);
+    setErrorMessage("");
+    if (!authToken) {
+      setLoading(false);
+      setErrorMessage(text("admin.authRequired"));
+      return () => {
+        ignore = true;
+      };
+    }
+    playpointApi.getAdminEconomy(authToken)
+      .then((payload) => {
+        if (!ignore) setAdminData(payload);
+      })
+      .catch((error: unknown) => {
+        if (!ignore) setErrorMessage(getApiErrorMessage(error));
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [authToken]);
+
+  const sections = [
+    { id: "overview" as const, label: text("admin.overview"), icon: BarChart3 },
+    { id: "users" as const, label: text("admin.users"), icon: User },
+    { id: "rewards" as const, label: text("admin.rewards"), icon: Gift },
+    { id: "wallet" as const, label: text("admin.wallet"), icon: Layers3 }
+  ];
+  const headerMetrics = [
+    {
+      label: text("admin.users"),
+      value: adminData?.summary.usersCount ?? 0,
+      progress: adminData ? Math.min(100, (adminData.summary.usersCount / 100) * 100) : 0,
+      icon: User
+    },
+    {
+      label: text("admin.gameScoreEarned"),
+      value: adminData?.summary.totalGameScore ?? 0,
+      progress: adminData ? Math.min(100, (adminData.summary.totalGameScore / 10000) * 100) : 0,
+      icon: Target
+    },
+    {
+      label: "Market Coins",
+      value: adminData?.summary.totalMarketCoins ?? 0,
+      progress: adminData ? Math.min(100, (adminData.summary.totalMarketCoins / 5000) * 100) : 0,
+      icon: Coins
+    },
+    {
+      label: text("admin.totalXp"),
+      value: adminData?.summary.totalXp ?? 0,
+      progress: adminData ? Math.min(100, (adminData.summary.totalXp / 1000) * 100) : 0,
+      icon: Star
+    }
+  ];
+
+  return (
+    <section className="admin-screen">
+      <aside className="admin-sidebar" aria-label="Admin navigation">
+        <div className="admin-sidebar-brand">
+          <span className="admin-brand-mark">
+            <Sparkles size={18} />
+            {text("admin.kicker")}
+          </span>
+          <h2>{text("admin.title")}</h2>
+        </div>
+        <nav className="admin-main-nav">
+          <div className="admin-nav-group">
+            <button className={activeAdminArea === "economy" ? "active" : ""} type="button" onClick={() => setActiveAdminArea("economy")}>
+              <BarChart3 size={17} />
+              {text("admin.economy")}
+              <ChevronDown className="admin-nav-caret" size={15} />
+            </button>
+            {activeAdminArea === "economy" ? <div className="admin-tabs" aria-label="Economy subsections">
+              {sections.map((section) => {
+                const Icon = section.icon;
+                return (
+                  <button
+                    className={activeSection === section.id ? "active" : ""}
+                    key={section.id}
+                    type="button"
+                    onClick={() => setActiveSection(section.id)}
+                  >
+                    <Icon size={16} />
+                    {section.label}
+                  </button>
+                );
+              })}
+            </div> : null}
+          </div>
+          <button className={activeAdminArea === "rewardsCms" ? "active" : ""} type="button" onClick={() => setActiveAdminArea("rewardsCms")}>
+            <Gift size={17} />
+            {text("admin.cmsRewards")}
+          </button>
+          <button className={activeAdminArea === "usersAdmin" ? "active" : ""} type="button" onClick={() => setActiveAdminArea("usersAdmin")}>
+            <User size={17} />
+            {text("admin.usersAdmin")}
+          </button>
+          <button className={activeAdminArea === "campaignsCms" ? "active" : ""} type="button" onClick={() => setActiveAdminArea("campaignsCms")}>
+            <Calendar size={17} />
+            {text("admin.campaignsCms")}
+          </button>
+          <button className={activeAdminArea === "gamesCms" ? "active" : ""} type="button" onClick={() => setActiveAdminArea("gamesCms")}>
+            <Gamepad2 size={17} />
+            {text("admin.cmsGames")}
+          </button>
+          <button type="button" disabled>
+            <ShieldCheck size={17} />
+            {text("admin.cmsSettings")}
+          </button>
+        </nav>
+        <button type="button" onClick={() => window.location.reload()}>
+          <RotateCcw size={16} />
+          {text("admin.refresh")}
+        </button>
+      </aside>
+      <div className="admin-main">
+        <div className="admin-header">
+          <div>
+            <span>{activeAdminArea === "economy" ? text("admin.economy") : activeAdminArea === "rewardsCms" ? text("admin.cmsRewards") : activeAdminArea === "usersAdmin" ? text("admin.usersAdmin") : activeAdminArea === "campaignsCms" ? text("admin.campaignsCms") : text("admin.cmsGames")}</span>
+            <h2>{activeAdminArea === "economy" ? sections.find((section) => section.id === activeSection)?.label : activeAdminArea === "rewardsCms" ? text("admin.cmsRewards") : activeAdminArea === "usersAdmin" ? text("admin.usersAdmin") : activeAdminArea === "campaignsCms" ? text("admin.campaignsCms") : text("admin.cmsGames")}</h2>
+            <p>{activeAdminArea === "economy" ? text("admin.subtitle") : activeAdminArea === "rewardsCms" ? text("admin.rewardsCmsSubtitle") : activeAdminArea === "usersAdmin" ? text("admin.usersAdminSubtitle") : activeAdminArea === "campaignsCms" ? text("admin.campaignsCmsSubtitle") : text("admin.gamesCmsSubtitle")}</p>
+          </div>
+          {activeAdminArea === "economy" ? <div className="admin-summary-stack">
+            <div className="admin-empty admin-empty-inline admin-analytics" aria-label="Admin analytics">
+              {headerMetrics.map((metric) => {
+                const Icon = metric.icon;
+                return (
+                  <div
+                    className="admin-analytics-item"
+                    key={metric.label}
+                    style={{ "--admin-progress": `${metric.progress}%` } as CSSProperties}
+                  >
+                    <span>
+                      <Icon size={14} />
+                      <strong>{formatter.format(metric.value)}</strong>
+                    </span>
+                    <small>{metric.label}</small>
+                  </div>
+                );
+              })}
+            </div>
+            {loading ? (
+              <div className="admin-inline-status">
+                <Loader2 size={16} />
+                <span>{text("loading.title")}</span>
+              </div>
+            ) : errorMessage ? (
+              <div className="admin-inline-status">
+                <ShieldCheck size={16} />
+                <span>{errorMessage}</span>
+              </div>
+            ) : null}
+          </div> : null}
+        </div>
+
+        {activeAdminArea === "economy" && !loading && !errorMessage && adminData ? (
+          <>
+            {activeSection === "overview" ? <AdminOverview data={adminData} text={text} /> : null}
+            {activeSection === "users" ? <AdminUsers data={adminData} text={text} /> : null}
+            {activeSection === "rewards" ? <AdminRewards data={adminData} text={text} /> : null}
+            {activeSection === "wallet" ? <AdminWallet data={adminData} text={text} /> : null}
+          </>
+        ) : null}
+        {activeAdminArea === "rewardsCms" ? <AdminRewardsCms authToken={authToken} text={text} /> : null}
+        {activeAdminArea === "usersAdmin" ? <AdminUsersAdmin authToken={authToken} text={text} /> : null}
+        {activeAdminArea === "campaignsCms" ? <AdminCampaignsCms authToken={authToken} text={text} /> : null}
+        {activeAdminArea === "gamesCms" ? <AdminGamesCms authToken={authToken} text={text} /> : null}
+      </div>
+    </section>
+  );
+}
+
+function AdminOverview({ data, text }: { data: ApiAdminEconomy; text: TextGetter }) {
+  const statCards = [
+    { label: text("admin.users"), value: formatter.format(data.summary.usersCount), icon: User },
+    { label: "Season Score", value: formatter.format(data.summary.totalSeasonScore), icon: Sparkles },
+    { label: "Market Coins", value: formatter.format(data.summary.totalMarketCoins), icon: Coins },
+    { label: text("admin.claims"), value: formatter.format(data.summary.rewardClaimsCount), icon: Gift }
+  ];
+
+  return (
+    <div className="admin-grid">
+      {statCards.map((card) => {
+        const Icon = card.icon;
+        return (
+          <article className="admin-stat-card" key={card.label}>
+            <span><Icon size={20} /></span>
+            <small>{card.label}</small>
+            <strong>{card.value}</strong>
+          </article>
+        );
+      })}
+      <AdminPanel title={text("admin.topUsers")}>
+        <AdminRows
+          rows={data.topUsers.map((user, index) => ({
+            left: `#${index + 1} ${user.displayName}`,
+            right: formatter.format(user.seasonScore),
+            sub: `${formatter.format(user.marketCoins)} Market Coins`
+          }))}
+        />
+      </AdminPanel>
+      <AdminPanel title={text("admin.recentUsers")}>
+        <AdminRows
+          rows={data.recentUsers.map((user) => ({
+            left: user.displayName,
+            right: user.role,
+            sub: `${formatter.format(user.seasonScore)} Season Score`
+          }))}
+        />
+      </AdminPanel>
+    </div>
+  );
+}
+
+function AdminUsers({ data, text }: { data: ApiAdminEconomy; text: TextGetter }) {
+  return (
+    <AdminPanel title={text("admin.users")}>
+      <AdminRows
+        rows={data.recentUsers.map((user) => ({
+          left: user.displayName,
+          right: `${formatter.format(user.marketCoins)} MC`,
+          sub: `${formatter.format(user.seasonScore)} Season Score • ${user.role}`
+        }))}
+      />
+    </AdminPanel>
+  );
+}
+
+function AdminRewards({ data, text }: { data: ApiAdminEconomy; text: TextGetter }) {
+  return (
+    <div className="admin-grid">
+      <article className="admin-stat-card">
+        <span><Gift size={20} /></span>
+        <small>{text("admin.activeRewards")}</small>
+        <strong>{formatter.format(data.summary.rewardsCount)}</strong>
+      </article>
+      <article className="admin-stat-card">
+        <span><CheckCircle2 size={20} /></span>
+        <small>{text("admin.claims")}</small>
+        <strong>{formatter.format(data.summary.rewardClaimsCount)}</strong>
+      </article>
+      <AdminPanel title={text("admin.recentClaims")}>
+        <AdminRows
+          rows={data.recentRewardClaims.map((claim) => ({
+            left: claim.reward.title,
+            right: claim.status,
+            sub: `${claim.user.displayName} • ${formatter.format(claim.pointsSpent)} Market Coins`
+          }))}
+        />
+      </AdminPanel>
+    </div>
+  );
+}
+
+function AdminWallet({ data, text }: { data: ApiAdminEconomy; text: TextGetter }) {
+  return (
+    <div className="admin-grid">
+      <AdminPanel title={text("admin.recentConversions")}>
+        <AdminRows
+          rows={data.recentConversions.map((conversion) => ({
+            left: conversion.user.displayName,
+            right: `+${formatter.format(conversion.marketCoinsAwarded)} MC`,
+            sub: `${conversion.seasonKey} • ${formatter.format(conversion.scoreConverted)} Season Score`
+          }))}
+        />
+      </AdminPanel>
+      <AdminPanel title={text("admin.coinLedger")}>
+        <AdminRows
+          rows={data.recentMarketCoinTransactions.map((transaction) => ({
+            left: transaction.user.displayName,
+            right: `${transaction.amount >= 0 ? "+" : "-"}${formatter.format(Math.abs(transaction.amount))}`,
+            sub: `${transaction.type}${transaction.source ? ` • ${transaction.source}` : ""}`
+          }))}
+        />
+      </AdminPanel>
+    </div>
+  );
+}
+
+const emptyAdminRewardForm: ApiAdminRewardPayload = {
+  active: true,
+  brandLogoUrl: "",
+  brandName: "",
+  category: "food",
+  description: "",
+  expiresAt: "",
+  imageUrl: "",
+  quantity: 50,
+  requiredPoints: 100,
+  slug: "",
+  title: ""
+};
+
+function slugifyReward(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function toAdminRewardPayload(reward: ApiReward): ApiAdminRewardPayload {
+  return {
+    active: reward.active ?? true,
+    brandLogoUrl: reward.brand.logoUrl ?? "",
+    brandName: reward.brand.name,
+    category: reward.category,
+    description: reward.description ?? "",
+    expiresAt: reward.expiresAt ? reward.expiresAt.slice(0, 10) : "",
+    imageUrl: reward.imageUrl ?? "",
+    quantity: reward.quantity,
+    requiredPoints: reward.requiredPoints,
+    slug: reward.slug,
+    title: reward.title
+  };
+}
+
+function AdminRewardsCms({ authToken, text }: { authToken: string; text: TextGetter }) {
+  const [rewardsList, setRewardsList] = useState<ApiReward[]>([]);
+  const [selectedRewardId, setSelectedRewardId] = useState<string | null>(null);
+  const [form, setForm] = useState<ApiAdminRewardPayload>(emptyAdminRewardForm);
+  const [loadingRewards, setLoadingRewards] = useState(true);
+  const [savingReward, setSavingReward] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const selectedReward = rewardsList.find((reward) => reward.id === selectedRewardId) ?? null;
+
+  const loadRewards = async () => {
+    if (!authToken) {
+      setLoadingRewards(false);
+      setMessage(text("admin.authRequired"));
+      return;
+    }
+    setLoadingRewards(true);
+    setMessage("");
+    try {
+      const payload = await playpointApi.getAdminRewards(authToken);
+      setRewardsList(payload);
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    } finally {
+      setLoadingRewards(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadRewards();
+  }, [authToken]);
+
+  const updateField = <Key extends keyof ApiAdminRewardPayload>(key: Key, value: ApiAdminRewardPayload[Key]) => {
+    setForm((currentForm) => ({
+      ...currentForm,
+      [key]: value,
+      slug: key === "title" && !selectedRewardId ? slugifyReward(String(value)) : currentForm.slug
+    }));
+  };
+
+  const resetForm = () => {
+    setSelectedRewardId(null);
+    setForm(emptyAdminRewardForm);
+    setMessage("");
+  };
+
+  const saveReward = async () => {
+    if (!authToken) {
+      setMessage(text("admin.authRequired"));
+      return;
+    }
+    const payload = {
+      ...form,
+      brandLogoUrl: form.brandLogoUrl || null,
+      description: form.description || null,
+      expiresAt: form.expiresAt || null,
+      imageUrl: form.imageUrl || null,
+      quantity: Number(form.quantity),
+      requiredPoints: Number(form.requiredPoints),
+      slug: slugifyReward(form.slug || form.title)
+    };
+    setSavingReward(true);
+    setMessage("");
+    try {
+      const savedReward = selectedRewardId
+        ? await playpointApi.updateAdminReward(authToken, selectedRewardId, payload)
+        : await playpointApi.createAdminReward(authToken, payload);
+      setRewardsList((currentRewards) => {
+        const exists = currentRewards.some((reward) => reward.id === savedReward.id);
+        return exists
+          ? currentRewards.map((reward) => (reward.id === savedReward.id ? savedReward : reward))
+          : [savedReward, ...currentRewards];
+      });
+      setSelectedRewardId(savedReward.id);
+      setForm(toAdminRewardPayload(savedReward));
+      setMessage(text("admin.rewardSaved"));
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    } finally {
+      setSavingReward(false);
+    }
+  };
+
+  return (
+    <div className="admin-cms-grid">
+      <AdminPanel title={text("admin.rewardList")}>
+        {loadingRewards ? (
+          <div className="admin-row empty">{text("loading.title")}</div>
+        ) : (
+          <div className="admin-reward-list">
+            {rewardsList.map((reward) => (
+              <button
+                className={selectedRewardId === reward.id ? "active" : ""}
+                key={reward.id}
+                type="button"
+                onClick={() => {
+                  setSelectedRewardId(reward.id);
+                  setForm(toAdminRewardPayload(reward));
+                  setMessage("");
+                }}
+              >
+                <span className="admin-reward-thumb">
+                  {reward.imageUrl ? <img src={reward.imageUrl} alt="" /> : <Gift size={18} />}
+                </span>
+                <span>
+                  <strong>{reward.title}</strong>
+                  <small>{reward.brand.name} • {formatter.format(reward.requiredPoints)} MC • {reward.claimedCount}/{reward.quantity}</small>
+                </span>
+                <em>{reward.active ? text("common.active") : text("admin.inactive")}</em>
+              </button>
+            ))}
+          </div>
+        )}
+      </AdminPanel>
+
+      <AdminPanel title={selectedReward ? text("admin.editReward") : text("admin.newReward")}>
+        <div className="admin-form">
+          <label>
+            <span>{text("admin.rewardTitle")}</span>
+            <input value={form.title} onChange={(event) => updateField("title", event.target.value)} />
+          </label>
+          <label>
+            <span>Slug</span>
+            <input value={form.slug} onChange={(event) => updateField("slug", slugifyReward(event.target.value))} />
+          </label>
+          <label>
+            <span>{text("admin.brandName")}</span>
+            <input value={form.brandName} onChange={(event) => updateField("brandName", event.target.value)} />
+          </label>
+          <label>
+            <span>{text("admin.category")}</span>
+            <select value={form.category} onChange={(event) => updateField("category", event.target.value as Reward["category"])}>
+              <option value="food">{text("rewardCategory.food")}</option>
+              <option value="leisure">{text("rewardCategory.leisure")}</option>
+              <option value="tech">{text("rewardCategory.tech")}</option>
+              <option value="gaming">{text("rewardCategory.gaming")}</option>
+            </select>
+          </label>
+          <label>
+            <span>{text("admin.priceMc")}</span>
+            <input min="0" type="number" value={form.requiredPoints} onChange={(event) => updateField("requiredPoints", Number(event.target.value))} />
+          </label>
+          <label>
+            <span>{text("admin.quantity")}</span>
+            <input min="0" type="number" value={form.quantity} onChange={(event) => updateField("quantity", Number(event.target.value))} />
+          </label>
+          <label className="admin-form-wide">
+            <span>{text("admin.imageUrl")}</span>
+            <input value={form.imageUrl ?? ""} onChange={(event) => updateField("imageUrl", event.target.value)} />
+          </label>
+          <label className="admin-form-wide">
+            <span>{text("admin.brandLogoUrl")}</span>
+            <input value={form.brandLogoUrl ?? ""} onChange={(event) => updateField("brandLogoUrl", event.target.value)} />
+          </label>
+          <label className="admin-form-wide">
+            <span>{text("admin.description")}</span>
+            <textarea value={form.description ?? ""} onChange={(event) => updateField("description", event.target.value)} />
+          </label>
+          <label className="admin-toggle-row">
+            <input checked={form.active} type="checkbox" onChange={(event) => updateField("active", event.target.checked)} />
+            <span>{text("admin.rewardActive")}</span>
+          </label>
+          {message ? <div className="admin-form-message">{message}</div> : null}
+          <div className="admin-form-actions">
+            <button type="button" onClick={resetForm}>{text("admin.newReward")}</button>
+            <button type="button" disabled={savingReward} onClick={saveReward}>
+              {savingReward ? text("loading.title") : text("admin.saveReward")}
+            </button>
+          </div>
+        </div>
+        {selectedReward?.auditLogs?.length ? (
+          <div className="admin-audit-section">
+            <h4>{text("admin.rewardAudit")}</h4>
+            <AdminRows
+              rows={selectedReward.auditLogs.map((log) => {
+                const changes = Object.entries(log.changes)
+                  .map(([field, value]) => {
+                    if (!value || typeof value !== "object" || !("from" in value) || !("to" in value)) return field;
+                    const typedValue = value as { from: unknown; to: unknown };
+                    return `${field}: ${String(typedValue.from)} -> ${String(typedValue.to)}`;
+                  })
+                  .join(" • ");
+                return {
+                  left: text("admin.rewardAudit"),
+                  right: formatAdminDate(log.createdAt),
+                  sub: changes || log.adminUserId
+                };
+              })}
+            />
+          </div>
+        ) : null}
+      </AdminPanel>
+    </div>
+  );
+}
+
+function formatAdminDate(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("ka-GE", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+    year: "2-digit"
+  }).format(new Date(value));
+}
+
+function AdminUsersAdmin({ authToken, text }: { authToken: string; text: TextGetter }) {
+  const [query, setQuery] = useState("");
+  const [users, setUsers] = useState<ApiAdminUserSummary[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ApiAdminUserDetail | null>(null);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [message, setMessage] = useState("");
+  const [adjustment, setAdjustment] = useState<ApiAdminAdjustmentPayload>({
+    amount: 10,
+    currency: "season_score",
+    note: ""
+  });
+
+  const loadUsers = async (searchQuery = query) => {
+    if (!authToken) {
+      setMessage(text("admin.authRequired"));
+      setLoadingUsers(false);
+      return;
+    }
+    setLoadingUsers(true);
+    setMessage("");
+    try {
+      const payload = await playpointApi.getAdminUsers(authToken, searchQuery);
+      setUsers(payload);
+      if (!selectedUserId && payload[0]) setSelectedUserId(payload[0].id);
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const loadDetail = async (userId: string) => {
+    if (!authToken) return;
+    setLoadingDetail(true);
+    setMessage("");
+    try {
+      const payload = await playpointApi.getAdminUser(authToken, userId);
+      setDetail(payload);
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadUsers("");
+  }, [authToken]);
+
+  useEffect(() => {
+    if (selectedUserId) void loadDetail(selectedUserId);
+  }, [selectedUserId, authToken]);
+
+  const updateSelectedUser = (user: ApiAdminUserSummary) => {
+    setUsers((currentUsers) => currentUsers.map((item) => (item.id === user.id ? user : item)));
+    setDetail((currentDetail) => (currentDetail ? { ...currentDetail, user: { ...currentDetail.user, ...user } } : currentDetail));
+  };
+
+  const changeRole = async (role: ApiAdminUserSummary["role"]) => {
+    if (!authToken || !detail) return;
+    setMessage("");
+    try {
+      const payload = await playpointApi.updateAdminUserRole(authToken, detail.user.id, role);
+      updateSelectedUser(payload.user);
+      await loadDetail(detail.user.id);
+      setMessage(text("admin.roleSaved"));
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    }
+  };
+
+  const submitAdjustment = async () => {
+    if (!authToken || !detail) return;
+    setMessage("");
+    try {
+      const payload = await playpointApi.createAdminUserAdjustment(authToken, detail.user.id, adjustment);
+      updateSelectedUser(payload.user);
+      await loadDetail(detail.user.id);
+      setAdjustment((currentAdjustment) => ({ ...currentAdjustment, note: "" }));
+      setMessage(text("admin.adjustmentSaved"));
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    }
+  };
+
+  return (
+    <div className="admin-users-grid">
+      <AdminPanel title={text("admin.userSearch")}>
+        <div className="admin-user-search">
+          <input
+            value={query}
+            placeholder={text("admin.userSearchPlaceholder")}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void loadUsers(query);
+            }}
+          />
+          <button type="button" onClick={() => void loadUsers(query)}>{text("admin.search")}</button>
+        </div>
+        {loadingUsers ? (
+          <div className="admin-row empty">{text("loading.title")}</div>
+        ) : (
+          <div className="admin-user-list">
+            {users.map((user) => (
+              <button
+                className={selectedUserId === user.id ? "active" : ""}
+                key={user.id}
+                type="button"
+                onClick={() => setSelectedUserId(user.id)}
+              >
+                <span>{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : <User size={18} />}</span>
+                <strong>{user.displayName}</strong>
+                <small>{user.phone ?? user.email ?? user.id}</small>
+                <em>{user.role}</em>
+              </button>
+            ))}
+          </div>
+        )}
+      </AdminPanel>
+
+      <div className="admin-user-detail-stack">
+        <AdminPanel title={text("admin.userDetail")}>
+          {loadingDetail ? (
+            <div className="admin-row empty">{text("loading.title")}</div>
+          ) : detail ? (
+            <div className="admin-user-detail">
+              <div className="admin-user-hero">
+                <span>{detail.user.avatarUrl ? <img src={detail.user.avatarUrl} alt="" /> : <User size={22} />}</span>
+                <div>
+                  <strong>{detail.user.displayName}</strong>
+                  <small>{detail.user.phone ?? "-"} • {detail.user.email ?? "-"}</small>
+                </div>
+                <select value={detail.user.role} onChange={(event) => void changeRole(event.target.value as ApiAdminUserSummary["role"])}>
+                  <option value="user">user</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
+              <div className="admin-user-stats">
+                <span><small>Season</small><strong>{formatter.format(detail.user.seasonScore)}</strong></span>
+                <span><small>Market Coins</small><strong>{formatter.format(detail.user.marketCoins)}</strong></span>
+                <span><small>XP</small><strong>{formatter.format(detail.user.totalXp)}</strong></span>
+                <span><small>Level</small><strong>{formatter.format(detail.user.level)}</strong></span>
+              </div>
+            </div>
+          ) : (
+            <div className="admin-row empty">{text("admin.noUserSelected")}</div>
+          )}
+        </AdminPanel>
+
+        {detail ? (
+          <AdminPanel title={text("admin.manualAdjustment")}>
+            <div className="admin-adjustment-form">
+              <select value={adjustment.currency} onChange={(event) => setAdjustment((current) => ({ ...current, currency: event.target.value as ApiAdminAdjustmentPayload["currency"] }))}>
+                <option value="season_score">Season Score</option>
+                <option value="market_coin">Market Coins</option>
+                <option value="xp">XP</option>
+              </select>
+              <input type="number" value={adjustment.amount} onChange={(event) => setAdjustment((current) => ({ ...current, amount: Number(event.target.value) }))} />
+              <input value={adjustment.note} placeholder={text("admin.adjustmentNote")} onChange={(event) => setAdjustment((current) => ({ ...current, note: event.target.value }))} />
+              <button type="button" onClick={() => void submitAdjustment()}>{text("admin.applyAdjustment")}</button>
+            </div>
+            {message ? <div className="admin-form-message">{message}</div> : null}
+          </AdminPanel>
+        ) : null}
+
+        {detail ? (
+          <div className="admin-history-grid">
+            <AdminPanel title={text("admin.scoreHistory")}>
+              <AdminRows rows={detail.user.scores.map((score) => ({
+                left: score.game.title,
+                right: `+${formatter.format(score.playPoints)}`,
+                sub: `${score.verificationStatus}${score.suspiciousReason ? ` • ${score.suspiciousReason}` : ""} • ${formatAdminDate(score.createdAt)}`
+              }))} />
+            </AdminPanel>
+            <AdminPanel title={text("admin.walletHistory")}>
+              <AdminRows rows={detail.user.marketCoinTransactions.map((item) => ({
+                left: item.type,
+                right: `${item.amount >= 0 ? "+" : "-"}${formatter.format(Math.abs(item.amount))}`,
+                sub: `${item.source ?? "-"} • ${formatAdminDate(item.createdAt)}`
+              }))} />
+            </AdminPanel>
+            <AdminPanel title={text("admin.suspiciousAttempts")}>
+              <AdminRows rows={detail.user.attempts.filter((attempt) => attempt.status !== "finished").map((attempt) => ({
+                left: attempt.game.title,
+                right: attempt.status,
+                sub: `${formatAdminDate(attempt.startedAt)}${attempt.finishedAt ? ` • ${formatAdminDate(attempt.finishedAt)}` : ""}`
+              }))} />
+            </AdminPanel>
+            <AdminPanel title={text("admin.auditLog")}>
+              <AdminRows rows={detail.auditLogs.map((log) => ({
+                left: log.action,
+                right: formatAdminDate(log.createdAt),
+                sub: JSON.stringify(log.metadata ?? {})
+              }))} />
+            </AdminPanel>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+const emptyCampaignForm: ApiAdminCampaignPayload = {
+  brandLogoUrl: "",
+  brandName: "",
+  endsAt: "",
+  gameIds: [],
+  rewardIds: [],
+  rulesText: "",
+  startsAt: "",
+  status: "draft",
+  title: ""
+};
+
+function toDateTimeInputValue(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function toCampaignPayload(campaign: ApiAdminCampaign): ApiAdminCampaignPayload {
+  return {
+    brandLogoUrl: campaign.brand.logoUrl ?? "",
+    brandName: campaign.brand.name,
+    endsAt: toDateTimeInputValue(campaign.endsAt),
+    gameIds: campaign.games.map((item) => item.game.id),
+    rewardIds: campaign.rewards.map((item) => item.reward.id),
+    rulesText: campaign.rulesText ?? "",
+    startsAt: toDateTimeInputValue(campaign.startsAt),
+    status: campaign.status,
+    title: campaign.title
+  };
+}
+
+function AdminCampaignsCms({ authToken, text }: { authToken: string; text: TextGetter }) {
+  const [campaigns, setCampaigns] = useState<ApiAdminCampaign[]>([]);
+  const [options, setOptions] = useState<ApiAdminCampaignOptions>({ games: [], rewards: [] });
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [form, setForm] = useState<ApiAdminCampaignPayload>(emptyCampaignForm);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(true);
+  const [savingCampaign, setSavingCampaign] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? null;
+
+  const loadCampaigns = async () => {
+    if (!authToken) {
+      setLoadingCampaigns(false);
+      setMessage(text("admin.authRequired"));
+      return;
+    }
+    setLoadingCampaigns(true);
+    setMessage("");
+    try {
+      const [campaignPayload, optionsPayload] = await Promise.all([
+        playpointApi.getAdminCampaigns(authToken),
+        playpointApi.getAdminCampaignOptions(authToken)
+      ]);
+      setCampaigns(campaignPayload);
+      setOptions(optionsPayload);
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    } finally {
+      setLoadingCampaigns(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCampaigns();
+  }, [authToken]);
+
+  const updateCampaignField = <Key extends keyof ApiAdminCampaignPayload>(key: Key, value: ApiAdminCampaignPayload[Key]) => {
+    setForm((currentForm) => ({ ...currentForm, [key]: value }));
+  };
+
+  const toggleId = (key: "gameIds" | "rewardIds", id: string) => {
+    setForm((currentForm) => {
+      const exists = currentForm[key].includes(id);
+      return {
+        ...currentForm,
+        [key]: exists ? currentForm[key].filter((itemId) => itemId !== id) : [...currentForm[key], id]
+      };
+    });
+  };
+
+  const resetCampaignForm = () => {
+    setSelectedCampaignId(null);
+    setForm(emptyCampaignForm);
+    setMessage("");
+  };
+
+  const saveCampaign = async () => {
+    if (!authToken) {
+      setMessage(text("admin.authRequired"));
+      return;
+    }
+    const payload = {
+      ...form,
+      brandLogoUrl: form.brandLogoUrl || null,
+      rulesText: form.rulesText || null
+    };
+    setSavingCampaign(true);
+    setMessage("");
+    try {
+      const savedCampaign = selectedCampaignId
+        ? await playpointApi.updateAdminCampaign(authToken, selectedCampaignId, payload)
+        : await playpointApi.createAdminCampaign(authToken, payload);
+      setCampaigns((currentCampaigns) => {
+        const exists = currentCampaigns.some((campaign) => campaign.id === savedCampaign.id);
+        return exists
+          ? currentCampaigns.map((campaign) => (campaign.id === savedCampaign.id ? savedCampaign : campaign))
+          : [savedCampaign, ...currentCampaigns];
+      });
+      setSelectedCampaignId(savedCampaign.id);
+      setForm(toCampaignPayload(savedCampaign));
+      setMessage(text("admin.campaignSaved"));
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    } finally {
+      setSavingCampaign(false);
+    }
+  };
+
+  return (
+    <div className="admin-cms-grid">
+      <AdminPanel title={text("admin.campaignList")}>
+        {loadingCampaigns ? (
+          <div className="admin-row empty">{text("loading.title")}</div>
+        ) : (
+          <div className="admin-campaign-list">
+            {campaigns.map((campaign) => (
+              <button
+                className={selectedCampaignId === campaign.id ? "active" : ""}
+                key={campaign.id}
+                type="button"
+                onClick={() => {
+                  setSelectedCampaignId(campaign.id);
+                  setForm(toCampaignPayload(campaign));
+                  setMessage("");
+                }}
+              >
+                <strong>{campaign.title}</strong>
+                <small>{campaign.brand.name} • {formatAdminDate(campaign.startsAt)} - {formatAdminDate(campaign.endsAt)}</small>
+                <em>{campaign.status}</em>
+              </button>
+            ))}
+          </div>
+        )}
+      </AdminPanel>
+
+      <AdminPanel title={selectedCampaign ? text("admin.editCampaign") : text("admin.newCampaign")}>
+        <div className="admin-form">
+          <label>
+            <span>{text("admin.campaignTitle")}</span>
+            <input value={form.title} onChange={(event) => updateCampaignField("title", event.target.value)} />
+          </label>
+          <label>
+            <span>{text("admin.brandName")}</span>
+            <input value={form.brandName} onChange={(event) => updateCampaignField("brandName", event.target.value)} />
+          </label>
+          <label>
+            <span>{text("admin.startsAt")}</span>
+            <input type="datetime-local" value={form.startsAt} onChange={(event) => updateCampaignField("startsAt", event.target.value)} />
+          </label>
+          <label>
+            <span>{text("admin.endsAt")}</span>
+            <input type="datetime-local" value={form.endsAt} onChange={(event) => updateCampaignField("endsAt", event.target.value)} />
+          </label>
+          <label>
+            <span>{text("admin.status")}</span>
+            <select value={form.status} onChange={(event) => updateCampaignField("status", event.target.value as ApiAdminCampaignPayload["status"])}>
+              <option value="draft">draft</option>
+              <option value="active">active</option>
+              <option value="paused">paused</option>
+              <option value="completed">completed</option>
+            </select>
+          </label>
+          <label>
+            <span>{text("admin.brandLogoUrl")}</span>
+            <input value={form.brandLogoUrl ?? ""} onChange={(event) => updateCampaignField("brandLogoUrl", event.target.value)} />
+          </label>
+          <label className="admin-form-wide">
+            <span>{text("admin.campaignRules")}</span>
+            <textarea value={form.rulesText ?? ""} onChange={(event) => updateCampaignField("rulesText", event.target.value)} />
+          </label>
+          <div className="admin-checklist">
+            <strong>{text("admin.campaignGames")}</strong>
+            {options.games.map((game) => (
+              <label key={game.id}>
+                <input checked={form.gameIds.includes(game.id)} type="checkbox" onChange={() => toggleId("gameIds", game.id)} />
+                <span>{game.title}{game.active ? "" : ` • ${text("admin.inactive")}`}</span>
+              </label>
+            ))}
+          </div>
+          <div className="admin-checklist">
+            <strong>{text("admin.campaignRewards")}</strong>
+            {options.rewards.map((reward) => (
+              <label key={reward.id}>
+                <input checked={form.rewardIds.includes(reward.id)} type="checkbox" onChange={() => toggleId("rewardIds", reward.id)} />
+                <span>{reward.title} • {reward.brand.name}{reward.active ? "" : ` • ${text("admin.inactive")}`}</span>
+              </label>
+            ))}
+          </div>
+          {message ? <div className="admin-form-message">{message}</div> : null}
+          <div className="admin-form-actions">
+            <button type="button" onClick={resetCampaignForm}>{text("admin.newCampaign")}</button>
+            <button type="button" disabled={savingCampaign} onClick={() => void saveCampaign()}>
+              {savingCampaign ? text("loading.title") : text("admin.saveCampaign")}
+            </button>
+          </div>
+        </div>
+      </AdminPanel>
+    </div>
+  );
+}
+
+const emptyGameForm: ApiAdminGamePayload = {
+  active: true,
+  comingSoon: false,
+  dailyAttemptLimit: pointRules.dailyAttemptsPerGame,
+  description: "",
+  iconUrl: "",
+  pointRatio: pointRules.scoreToPointRatio,
+  scoringRule: "",
+  sortOrder: 0,
+  title: ""
+};
+
+function toGamePayload(game: ApiAdminGame): ApiAdminGamePayload {
+  return {
+    active: game.active,
+    comingSoon: game.comingSoon,
+    dailyAttemptLimit: game.dailyAttemptLimit,
+    description: game.description ?? "",
+    iconUrl: game.iconUrl ?? "",
+    pointRatio: game.pointRatio ?? pointRules.scoreToPointRatio,
+    scoringRule: game.scoringRule ? JSON.stringify(game.scoringRule, null, 2) : "",
+    sortOrder: game.sortOrder,
+    title: game.title
+  };
+}
+
+function AdminGamesCms({ authToken, text }: { authToken: string; text: TextGetter }) {
+  const [gamesList, setGamesList] = useState<ApiAdminGame[]>([]);
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [form, setForm] = useState<ApiAdminGamePayload>(emptyGameForm);
+  const [loadingGames, setLoadingGames] = useState(true);
+  const [savingGame, setSavingGame] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const selectedGame = gamesList.find((game) => game.id === selectedGameId) ?? null;
+
+  const loadGames = async () => {
+    if (!authToken) {
+      setLoadingGames(false);
+      setMessage(text("admin.authRequired"));
+      return;
+    }
+    setLoadingGames(true);
+    setMessage("");
+    try {
+      const payload = await playpointApi.getAdminGames(authToken);
+      setGamesList(payload);
+      if (!selectedGameId && payload[0]) {
+        setSelectedGameId(payload[0].id);
+        setForm(toGamePayload(payload[0]));
+      }
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    } finally {
+      setLoadingGames(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadGames();
+  }, [authToken]);
+
+  const updateGameField = <Key extends keyof ApiAdminGamePayload>(key: Key, value: ApiAdminGamePayload[Key]) => {
+    setForm((currentForm) => ({ ...currentForm, [key]: value }));
+  };
+
+  const saveGame = async () => {
+    if (!authToken || !selectedGameId) return;
+    setSavingGame(true);
+    setMessage("");
+    try {
+      const savedGame = await playpointApi.updateAdminGame(authToken, selectedGameId, {
+        ...form,
+        description: form.description || null,
+        iconUrl: form.iconUrl || null,
+        pointRatio: form.pointRatio ?? null,
+        scoringRule: form.scoringRule || null,
+        dailyAttemptLimit: Number(form.dailyAttemptLimit),
+        sortOrder: Number(form.sortOrder)
+      });
+      setGamesList((currentGames) => currentGames.map((game) => (game.id === savedGame.id ? savedGame : game)));
+      setForm(toGamePayload(savedGame));
+      setMessage(text("admin.gameSaved"));
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    } finally {
+      setSavingGame(false);
+    }
+  };
+
+  return (
+    <div className="admin-cms-grid">
+      <AdminPanel title={text("admin.gameList")}>
+        {loadingGames ? (
+          <div className="admin-row empty">{text("loading.title")}</div>
+        ) : (
+          <div className="admin-campaign-list">
+            {gamesList.map((game) => (
+              <button
+                className={selectedGameId === game.id ? "active" : ""}
+                key={game.id}
+                type="button"
+                onClick={() => {
+                  setSelectedGameId(game.id);
+                  setForm(toGamePayload(game));
+                  setMessage("");
+                }}
+              >
+                <strong>{game.title}</strong>
+                <small>{game.slug} • {game.dailyAttemptLimit} attempts/day • #{game.sortOrder}</small>
+                <em>{game.comingSoon ? text("common.soon") : game.active ? text("common.active") : text("admin.inactive")}</em>
+              </button>
+            ))}
+          </div>
+        )}
+      </AdminPanel>
+
+      <AdminPanel title={selectedGame ? selectedGame.title : text("admin.cmsGames")}>
+        {selectedGame ? (
+          <div className="admin-form">
+            <label>
+              <span>{text("admin.gameTitle")}</span>
+              <input value={form.title} onChange={(event) => updateGameField("title", event.target.value)} />
+            </label>
+            <label>
+              <span>{text("admin.sortOrder")}</span>
+              <input min="0" type="number" value={form.sortOrder} onChange={(event) => updateGameField("sortOrder", Number(event.target.value))} />
+            </label>
+            <label>
+              <span>{text("admin.dailyAttempts")}</span>
+              <input min="0" type="number" value={form.dailyAttemptLimit} onChange={(event) => updateGameField("dailyAttemptLimit", Number(event.target.value))} />
+            </label>
+            <label>
+              <span>{text("admin.pointRatio")}</span>
+              <input min="0" step="0.01" type="number" value={form.pointRatio ?? ""} onChange={(event) => updateGameField("pointRatio", Number(event.target.value))} />
+            </label>
+            <label className="admin-form-wide">
+              <span>{text("admin.iconUrl")}</span>
+              <input value={form.iconUrl ?? ""} onChange={(event) => updateGameField("iconUrl", event.target.value)} />
+            </label>
+            <label className="admin-form-wide">
+              <span>{text("admin.description")}</span>
+              <textarea value={form.description ?? ""} onChange={(event) => updateGameField("description", event.target.value)} />
+            </label>
+            <label className="admin-form-wide">
+              <span>{text("admin.scoringRule")}</span>
+              <textarea value={form.scoringRule ?? ""} onChange={(event) => updateGameField("scoringRule", event.target.value)} />
+            </label>
+            <label className="admin-toggle-row">
+              <input checked={form.active} type="checkbox" onChange={(event) => updateGameField("active", event.target.checked)} />
+              <span>{text("admin.gameActive")}</span>
+            </label>
+            <label className="admin-toggle-row">
+              <input checked={form.comingSoon} type="checkbox" onChange={(event) => updateGameField("comingSoon", event.target.checked)} />
+              <span>{text("admin.gameComingSoon")}</span>
+            </label>
+            {message ? <div className="admin-form-message">{message}</div> : null}
+            <div className="admin-form-actions">
+              <button type="button" onClick={() => selectedGame && setForm(toGamePayload(selectedGame))}>{text("admin.reset")}</button>
+              <button type="button" disabled={savingGame} onClick={() => void saveGame()}>
+                {savingGame ? text("loading.title") : text("admin.saveGame")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="admin-row empty">{text("admin.noGameSelected")}</div>
+        )}
+      </AdminPanel>
+    </div>
+  );
+}
+
+function AdminPanel({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <article className="admin-panel">
+      <h3>{title}</h3>
+      {children}
+    </article>
+  );
+}
+
+function AdminRows({ rows }: { rows: Array<{ left: string; right: string; sub: string }> }) {
+  if (!rows.length) return <div className="admin-row empty">No data</div>;
+
+  return (
+    <div className="admin-rows">
+      {rows.map((row, index) => (
+        <div className="admin-row" key={`${row.left}-${row.right}-${index}`}>
+          <div>
+            <strong>{row.left}</strong>
+            <span>{row.sub}</span>
+          </div>
+          <em>{row.right}</em>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AllGamesPage({
   attemptsLeftByGame,
+  gameCatalog,
   text,
   onSelectGame
 }: {
   attemptsLeftByGame: AttemptsLeftByGame;
+  gameCatalog: CatalogGame[];
   text: TextGetter;
   onSelectGame: (gameId: GameId) => void;
 }) {
-  const playableGames = games.filter((game) => !comingSoonGameIds.includes(game.id));
-  const comingSoonGames = games.filter((game) => comingSoonGameIds.includes(game.id));
+  const playableGames = gameCatalog.filter((game) => !game.comingSoon);
+  const comingSoonGames = gameCatalog.filter((game) => game.comingSoon);
 
   return (
     <section className="all-games-page">
@@ -2217,7 +3427,7 @@ function RewardsPage({
   rewardEngagementIds,
   rewards,
   text,
-  userPoints,
+  userCoins,
   onCollectRewardBonus,
   onClaimReward
 }: {
@@ -2225,7 +3435,7 @@ function RewardsPage({
   rewardEngagementIds: Set<string>;
   rewards: Reward[];
   text: TextGetter;
-  userPoints: number;
+  userCoins: number;
   onCollectRewardBonus: (reward: Reward) => Promise<Awaited<ReturnType<typeof playpointApi.engageReward>> | null>;
   onClaimReward: (reward: Reward) => Promise<boolean>;
 }) {
@@ -2241,7 +3451,7 @@ function RewardsPage({
     ? purchasedRewards.some((reward) => reward.id === selectedReward.id)
     : false;
   const selectedOutOfStock = selectedReward?.remainingQuantity === 0;
-  const canClaimSelected = selectedReward ? userPoints >= selectedReward.points && !alreadyPurchased && !selectedOutOfStock : false;
+  const canClaimSelected = selectedReward ? userCoins >= selectedReward.points && !alreadyPurchased && !selectedOutOfStock : false;
 
   return (
     <section className="section">
@@ -2255,7 +3465,7 @@ function RewardsPage({
         {filteredRewards.map((reward) => {
           const rewardOwned = purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id);
           const rewardOutOfStock = reward.remainingQuantity === 0;
-          const rewardAffordable = userPoints >= reward.points;
+          const rewardAffordable = userCoins >= reward.points;
           const rewardBonusCollected = rewardEngagementIds.has(reward.id) || flippedRewardIds.has(reward.id);
           const rewardBonusCollecting = collectingRewardIds.has(reward.id);
           const revealResult = rewardRevealResults.get(reward.id);
@@ -2329,7 +3539,7 @@ function RewardsPage({
             </div>
             <h3>{reward.title}</h3>
             <p>{reward.brand}</p>
-            <strong><PointsLabel value={reward.points} /></strong>
+            <strong><MarketCoinLabel value={reward.points} /></strong>
             <button
               type="button"
               disabled={rewardOwned || rewardOutOfStock || !rewardAffordable}
@@ -2358,10 +3568,10 @@ function RewardsPage({
             </div>
             <h2 id="claim-modal-title">{text("rewards.confirmTitle")}</h2>
             <p>
-              {selectedReward.title} {text("rewards.confirmCost")} <strong><PointsLabel value={selectedReward.points} /></strong>.
+              {selectedReward.title} {text("rewards.confirmCost")} <strong><MarketCoinLabel value={selectedReward.points} /></strong>.
             </p>
             {alreadyPurchased ? <span className="claim-warning">{text("rewards.alreadyPurchased")}</span> : null}
-            {!alreadyPurchased && userPoints < selectedReward.points ? (
+            {!alreadyPurchased && userCoins < selectedReward.points ? (
               <span className="claim-warning">{text("rewards.notEnough")}</span>
             ) : null}
             {selectedOutOfStock ? <span className="claim-warning">This reward is out of stock</span> : null}
@@ -2443,6 +3653,46 @@ function DailyBonusModal({
   );
 }
 
+function SeasonConversionModal({
+  conversion,
+  text,
+  onClose
+}: {
+  conversion: ApiSeasonConversionNotice;
+  text: TextGetter;
+  onClose: () => void;
+}) {
+  return (
+    <div className="daily-bonus-backdrop" role="presentation">
+      <section className="season-conversion-modal" role="dialog" aria-modal="true" aria-labelledby="season-conversion-title">
+        <button aria-label="Close" className="modal-close-button" type="button" onClick={onClose}>
+          <X size={18} />
+        </button>
+        <div className="season-conversion-icon">
+          <CircleDollarSign size={34} />
+        </div>
+        <h2 id="season-conversion-title">{text("seasonConversion.title")}</h2>
+        <p>
+          {conversion.seasonKey} {text("seasonConversion.text")}
+        </p>
+        <div className="season-conversion-summary">
+          <span>
+            <PointsLabel value={conversion.scoreConverted} />
+            <small>{text("seasonConversion.converted")}</small>
+          </span>
+          <span>
+            <MarketCoinLabel value={conversion.marketCoinsAwarded} prefix="+" />
+            <small>{text("seasonConversion.awarded")}</small>
+          </span>
+        </div>
+        <button className="primary-action" type="button" onClick={onClose}>
+          {text("common.continue")}
+        </button>
+      </section>
+    </div>
+  );
+}
+
 function ProfilePage({
   dailyLogin,
   darkMode,
@@ -2456,6 +3706,7 @@ function ProfilePage({
   setLanguage,
   text,
   userCoins,
+  expiringMarketCoins,
   userBirthDate,
   userPasswordSetAt,
   userAvatarUrl,
@@ -2468,6 +3719,7 @@ function ProfilePage({
   userReferralCode,
   gamesPlayed,
   gameHistory,
+  walletHistory,
   lastGameResult,
   onNavigate,
   onLogout
@@ -2484,6 +3736,7 @@ function ProfilePage({
   setLanguage: (value: Language) => void;
   text: TextGetter;
   userCoins: number;
+  expiringMarketCoins: number;
   userBirthDate: string | null;
   userPasswordSetAt: string | null;
   userAvatarUrl: string | null;
@@ -2496,6 +3749,7 @@ function ProfilePage({
   userReferralCode: string | null;
   gamesPlayed: number;
   gameHistory: GameHistoryItem[];
+  walletHistory: ApiWalletHistoryItem[];
   lastGameResult: GameResult;
   onNavigate: (route: Route) => void;
   onLogout: () => void;
@@ -2526,6 +3780,7 @@ function ProfilePage({
     tone: "positive" as const
   }));
   const visibleHistoryItems = showFullHistory ? historyItems : historyItems.slice(0, 3);
+  const visibleWalletHistory = walletHistory.slice(0, 5);
   const emailIsVerified = Boolean(userEmailVerifiedAt);
   const profileCompletionProgress =
     profileCompletion ??
@@ -2657,6 +3912,29 @@ function ProfilePage({
           </div>
           <div className="balance-orb" />
         </article>
+      </section>
+
+      <section className="wallet-history-card">
+        <div className="profile-section-title">
+          <h3>{text("profile.walletHistory")}</h3>
+          {expiringMarketCoins > 0 ? (
+            <span className="wallet-expiry-pill">
+              {formatter.format(expiringMarketCoins)} {text("profile.expiringSoon")}
+            </span>
+          ) : null}
+        </div>
+        <div className="wallet-history-list">
+          {visibleWalletHistory.length > 0 ? (
+            visibleWalletHistory.map((item) => (
+              <WalletHistoryItem item={item} key={item.id} language={language} text={text} />
+            ))
+          ) : (
+            <div className="profile-empty-state">
+              <CircleDollarSign size={22} />
+              <span>{text("profile.emptyWalletHistory")}</span>
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="daily-login-card">
@@ -3147,6 +4425,83 @@ function ProfileRewardItem({
   );
 }
 
+function getWalletHistoryTitle(item: ApiWalletHistoryItem, text: TextGetter) {
+  if (item.type === "game_score") return item.source || text("profile.walletGameScore");
+  if (item.type === "earned_conversion") return text("profile.walletConversion");
+  if (item.type === "spent_reward") return text("profile.walletRewardSpend");
+  if (item.type === "expired") return text("profile.walletExpired");
+
+  switch (item.source) {
+    case "daily_login":
+      return text("profile.walletDailyLogin");
+    case "email_verification":
+      return text("profile.walletEmail");
+    case "phone_verification":
+      return text("profile.walletPhone");
+    case "profile_completion":
+      return text("profile.walletProfileCompletion");
+    case "referral_signup":
+      return text("profile.walletReferralSignup");
+    case "referral_invite":
+      return text("profile.walletReferralInvite");
+    case "registration":
+      return text("profile.walletRegistration");
+    case "reward_engagement":
+      return text("profile.walletRewardEngagement");
+    case "level_up":
+      return text("profile.walletLevelUp");
+    default:
+      return text("profile.walletBonus");
+  }
+}
+
+function WalletHistoryItem({
+  item,
+  language,
+  text
+}: {
+  item: ApiWalletHistoryItem;
+  language: Language;
+  text: TextGetter;
+}) {
+  const dateLabel = new Intl.DateTimeFormat(language === "ka" ? "ka-GE" : "en-US", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short"
+  }).format(new Date(item.createdAt));
+  const expiryLabel = item.expiresAt
+    ? new Intl.DateTimeFormat(language === "ka" ? "ka-GE" : "en-US", {
+        day: "2-digit",
+        month: "short"
+      }).format(new Date(item.expiresAt))
+    : null;
+  const positive = item.amount >= 0;
+  const Icon = item.currency === "market_coin" ? Coins : Sparkles;
+
+  return (
+    <article className={`wallet-history-item ${item.currency} ${positive ? "positive" : "negative"}`}>
+      <div className="wallet-history-icon">
+        <Icon size={18} />
+      </div>
+      <div>
+        <h4>{getWalletHistoryTitle(item, text)}</h4>
+        <p>
+          {dateLabel}
+          {expiryLabel ? ` • ${text("profile.expires")} ${expiryLabel}` : ""}
+        </p>
+      </div>
+      <strong>
+        {item.currency === "market_coin" ? (
+          <MarketCoinLabel value={Math.abs(item.amount)} prefix={positive ? "+" : "-"} />
+        ) : (
+          <PointsLabel value={Math.abs(item.amount)} prefix={positive ? "+" : "-"} />
+        )}
+      </strong>
+    </article>
+  );
+}
+
 function HistoryItem({
   icon,
   title,
@@ -3256,14 +4611,14 @@ function RewardList({
   purchasedRewards,
   rewards,
   text,
-  userPoints,
+  userCoins,
   onClaimReward,
   limit = rewards.length
 }: {
   purchasedRewards: Reward[];
   rewards: Reward[];
   text: TextGetter;
-  userPoints: number;
+  userCoins: number;
   onClaimReward: (reward: Reward) => Promise<boolean>;
   limit?: number;
 }) {
@@ -3274,7 +4629,7 @@ function RewardList({
       {rewards.slice(0, limit).map((reward) => {
         const rewardOwned = purchasedRewards.some((purchasedReward) => purchasedReward.id === reward.id);
         const rewardOutOfStock = reward.remainingQuantity === 0;
-        const rewardAffordable = userPoints >= reward.points;
+        const rewardAffordable = userCoins >= reward.points;
         const disabled = rewardOwned || rewardOutOfStock || !rewardAffordable || claimingRewardId === reward.id;
 
         return (
@@ -3286,7 +4641,7 @@ function RewardList({
             <b>{reward.title}</b>
             <small>
               {reward.brand}
-              <em><PointsLabel value={reward.points} /></em>
+              <em><MarketCoinLabel value={reward.points} /></em>
             </small>
           </span>
           <button

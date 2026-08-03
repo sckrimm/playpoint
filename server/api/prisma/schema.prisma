@@ -74,6 +74,17 @@ enum PointBonusReason {
   reward_engagement
 }
 
+enum MarketCoinTransactionType {
+  earned_conversion
+  spent_reward
+  expired
+}
+
+enum AdminAuditAction {
+  role_change
+  manual_adjustment
+}
+
 model User {
   id             String          @id @default(cuid())
   phone          String?         @unique
@@ -89,10 +100,13 @@ model User {
   referralCode   String?         @unique
   referredById   String?
   totalPoints    Int             @default(0)
+  seasonScore    Int             @default(0)
+  lifetimeScore  Int             @default(0)
   level          Int             @default(1)
   xp             Int             @default(0)
   totalXp        Int             @default(0)
   coins          Int             @default(14)
+  marketCoins    Int             @default(0)
   role           UserRole        @default(user)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -102,6 +116,8 @@ model User {
   attempts       GameAttempt[]
   scores         Score[]
   pointBonuses   PointBonus[]
+  seasonConversions SeasonConversion[]
+  marketCoinTransactions MarketCoinTransaction[]
   rewardClaims   RewardClaim[]
   analyticsEvents AnalyticsEvent[]
   referredBy     User?           @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
@@ -140,6 +156,40 @@ model PointBonus {
   @@index([userId, awardedAt])
 }
 
+model SeasonConversion {
+  id                 String   @id @default(cuid())
+  seasonKey          String
+  seasonScoreBefore  Int
+  scoreConverted     Int
+  marketCoinsAwarded Int
+  conversionRate     Int
+  scoreCap           Int
+  convertedAt        DateTime @default(now())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, seasonKey])
+  @@index([seasonKey, convertedAt])
+  @@index([userId, convertedAt])
+}
+
+model MarketCoinTransaction {
+  id           String                    @id @default(cuid())
+  type         MarketCoinTransactionType
+  amount       Int
+  remainingAmount Int                    @default(0)
+  source       String?
+  referenceId  String?
+  expiresAt    DateTime?
+  createdAt    DateTime                  @default(now())
+  userId       String
+  user         User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([userId, type, createdAt])
+  @@index([referenceId])
+}
+
 model OtpCode {
   id        String     @id @default(cuid())
   phone     String?
@@ -176,13 +226,16 @@ model Game {
   iconUrl           String?
   iframeUrl         String?
   active            Boolean       @default(true)
+  comingSoon        Boolean       @default(false)
   sortOrder         Int           @default(0)
   dailyAttemptLimit Int           @default(3)
+  pointRatio        Float?
   scoringRule       Json?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   attempts          GameAttempt[]
   scores            Score[]
+  campaigns         CampaignGame[]
 
   @@index([active, sortOrder])
 }
@@ -229,6 +282,19 @@ model Score {
   @@index([verificationStatus])
 }
 
+model AdminAuditLog {
+  id             String           @id @default(cuid())
+  action         AdminAuditAction
+  adminUserId    String
+  targetUserId   String
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  @@index([targetUserId, createdAt])
+  @@index([adminUserId, createdAt])
+  @@index([action, createdAt])
+}
+
 model Brand {
   id            String     @id @default(cuid())
   name          String     @unique
@@ -247,18 +313,45 @@ model Brand {
 }
 
 model Campaign {
-  id        String         @id @default(cuid())
+  id        String           @id @default(cuid())
   title     String
-  status    CampaignStatus @default(draft)
+  status    CampaignStatus   @default(draft)
+  rulesText String?
   startsAt  DateTime
   endsAt    DateTime
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
   brandId   String
-  brand     Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  brand     Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
   banners   Banner[]
+  games     CampaignGame[]
+  rewards   CampaignReward[]
 
   @@index([status, startsAt, endsAt])
+}
+
+model CampaignGame {
+  id         String   @id @default(cuid())
+  campaignId String
+  gameId     String
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  game       Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, gameId])
+  @@index([gameId])
+}
+
+model CampaignReward {
+  id         String   @id @default(cuid())
+  campaignId String
+  rewardId   String
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  reward     Reward   @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, rewardId])
+  @@index([rewardId])
 }
 
 model Banner {
@@ -299,9 +392,23 @@ model Reward {
   brandId        String
   brand          Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
   claims         RewardClaim[]
+  campaigns      CampaignReward[]
+  auditLogs      RewardAuditLog[]
 
   @@index([active, requiredPoints])
   @@index([brandId])
+}
+
+model RewardAuditLog {
+  id           String   @id @default(cuid())
+  rewardId     String
+  adminUserId  String
+  changes      Json
+  createdAt    DateTime @default(now())
+  reward       Reward   @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@index([rewardId, createdAt])
+  @@index([adminUserId, createdAt])
 }
 
 model RewardClaim {

@@ -49,6 +49,9 @@ export const pointRules = {
   firstLevelXp: 20,
   firstLevelBonus: 100,
   dailyAttemptsPerGame: 3,
+  marketCoinExpiryDays: 90,
+  monthlySeasonScoreCap: 10000,
+  seasonScoreToMarketCoinRatio: 10,
   scoreToPointRatio: 0.01
 } as const;
 

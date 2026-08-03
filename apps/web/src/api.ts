@@ -17,18 +17,82 @@ export type ApiUser = {
   passwordSetAt: string | null;
   referralCode: string | null;
   referredById: string | null;
+  role: "admin" | "user";
+  lifetimeScore: number;
+  marketCoins: number;
+  seasonScore: number;
   totalPoints: number;
   totalXp: number;
   xp: number;
+};
+
+export type ApiAdminEconomy = {
+  recentConversions: Array<{
+    id: string;
+    convertedAt: string;
+    marketCoinsAwarded: number;
+    scoreConverted: number;
+    seasonKey: string;
+    seasonScoreBefore: number;
+    user: { displayName: string; id: string };
+  }>;
+  recentMarketCoinTransactions: Array<{
+    id: string;
+    amount: number;
+    createdAt: string;
+    expiresAt: string | null;
+    remainingAmount: number;
+    source: string | null;
+    type: "earned_conversion" | "expired" | "spent_reward";
+    user: { displayName: string; id: string };
+  }>;
+  recentRewardClaims: Array<{
+    id: string;
+    createdAt: string;
+    pointsSpent: number;
+    status: string;
+    reward: { title: string };
+    user: { displayName: string; id: string };
+  }>;
+  recentUsers: Array<{
+    createdAt: string;
+    displayName: string;
+    id: string;
+    marketCoins: number;
+    role: "admin" | "user";
+    seasonScore: number;
+  }>;
+  summary: {
+    rewardClaimsCount: number;
+    rewardsCount: number;
+    totalGameScore: number;
+    totalLifetimeScore: number;
+    totalMarketCoins: number;
+    totalMarketCoinsEarned: number;
+    totalMarketCoinsExpired: number;
+    totalMarketCoinsSpent: number;
+    totalSeasonScore: number;
+    totalXp: number;
+    usersCount: number;
+  };
+  topUsers: Array<{
+    displayName: string;
+    id: string;
+    marketCoins: number;
+    seasonScore: number;
+  }>;
 };
 
 export type ApiReward = {
   id: string;
   slug: string;
   title: string;
+  description?: string | null;
   imageUrl: string | null;
   category: Reward["category"];
+  active?: boolean;
   claimedCount: number;
+  expiresAt?: string | null;
   quantity: number;
   requiredPoints: number;
   brand: {
@@ -36,6 +100,193 @@ export type ApiReward = {
     logoUrl: string | null;
     name: string;
   };
+  auditLogs?: Array<{
+    adminUserId: string;
+    changes: Record<string, unknown>;
+    createdAt: string;
+    id: string;
+  }>;
+};
+
+export type ApiAdminRewardPayload = {
+  active: boolean;
+  brandLogoUrl?: string | null;
+  brandName: string;
+  category: Reward["category"];
+  description?: string | null;
+  expiresAt?: string | null;
+  imageUrl?: string | null;
+  quantity: number;
+  requiredPoints: number;
+  slug: string;
+  title: string;
+};
+
+export type ApiAdminUserSummary = Pick<
+  ApiUser,
+  | "avatarUrl"
+  | "displayName"
+  | "email"
+  | "emailVerifiedAt"
+  | "id"
+  | "level"
+  | "marketCoins"
+  | "phone"
+  | "phoneVerifiedAt"
+  | "role"
+  | "seasonScore"
+  | "totalXp"
+  | "xp"
+> & {
+  createdAt: string;
+};
+
+export type ApiAdminUserDetail = {
+  auditLogs: Array<{
+    action: "manual_adjustment" | "role_change";
+    adminUserId: string;
+    createdAt: string;
+    id: string;
+    metadata: Record<string, unknown> | null;
+    targetUserId: string;
+  }>;
+  user: ApiAdminUserSummary & {
+    birthDate: string | null;
+    interests: string[];
+    lifetimeScore: number;
+    referralCode: string | null;
+    referredById: string | null;
+    totalPoints: number;
+    attempts: Array<{
+      id: string;
+      status: "started" | "finished" | "abandoned" | "rejected";
+      startedAt: string;
+      finishedAt: string | null;
+      game: { slug: string; title: string };
+    }>;
+    marketCoinTransactions: Array<{
+      id: string;
+      amount: number;
+      createdAt: string;
+      source: string | null;
+      type: "earned_conversion" | "expired" | "spent_reward";
+    }>;
+    pointBonuses: Array<{
+      id: string;
+      awardedAt: string;
+      points: number;
+      reason: string;
+    }>;
+    rewardClaims: Array<{
+      id: string;
+      createdAt: string;
+      pointsSpent: number;
+      status: string;
+      reward: { title: string };
+    }>;
+    scores: Array<{
+      id: string;
+      createdAt: string;
+      playPoints: number;
+      rawScore: number;
+      suspiciousReason: string | null;
+      verificationStatus: "pending" | "verified" | "suspicious";
+      game: { slug: string; title: string };
+    }>;
+  };
+};
+
+export type ApiAdminAdjustmentPayload = {
+  amount: number;
+  currency: "market_coin" | "season_score" | "xp";
+  note: string;
+};
+
+export type ApiAdminCampaign = {
+  id: string;
+  title: string;
+  status: "active" | "completed" | "draft" | "paused";
+  rulesText: string | null;
+  startsAt: string;
+  endsAt: string;
+  createdAt: string;
+  updatedAt: string;
+  brand: {
+    id: string;
+    logoUrl: string | null;
+    name: string;
+  };
+  games: Array<{
+    game: {
+      id: string;
+      slug: string;
+      title: string;
+    };
+  }>;
+  rewards: Array<{
+    reward: {
+      id: string;
+      slug: string;
+      title: string;
+    };
+  }>;
+};
+
+export type ApiAdminCampaignOptions = {
+  games: Array<{
+    active: boolean;
+    id: string;
+    slug: string;
+    title: string;
+  }>;
+  rewards: Array<{
+    active: boolean;
+    brand: { name: string };
+    id: string;
+    slug: string;
+    title: string;
+  }>;
+};
+
+export type ApiAdminCampaignPayload = {
+  brandLogoUrl?: string | null;
+  brandName: string;
+  endsAt: string;
+  gameIds: string[];
+  rewardIds: string[];
+  rulesText?: string | null;
+  startsAt: string;
+  status: ApiAdminCampaign["status"];
+  title: string;
+};
+
+export type ApiAdminGame = {
+  active: boolean;
+  comingSoon: boolean;
+  dailyAttemptLimit: number;
+  description: string | null;
+  iconUrl: string | null;
+  id: string;
+  pointRatio: number | null;
+  scoringRule: unknown;
+  slug: string;
+  sortOrder: number;
+  title: string;
+  updatedAt: string;
+};
+
+export type ApiGameCatalogItem = ApiAdminGame;
+
+export type ApiAdminGamePayload = {
+  active: boolean;
+  comingSoon: boolean;
+  dailyAttemptLimit: number;
+  description?: string | null;
+  iconUrl?: string | null;
+  pointRatio?: number | null;
+  scoringRule?: string | null;
+  sortOrder: number;
+  title: string;
 };
 
 export type ApiRewardClaim = {
@@ -93,6 +344,25 @@ export type ApiProfileCompletion = {
   }>;
 };
 
+export type ApiWalletHistoryItem = {
+  id: string;
+  amount: number;
+  createdAt: string;
+  currency: "market_coin" | "season_score";
+  expiresAt: string | null;
+  source: string | null;
+  type: "earned_conversion" | "expired" | "game_score" | "point_bonus" | "spent_reward";
+};
+
+export type ApiSeasonConversionNotice = {
+  id: string;
+  convertedAt: string;
+  marketCoinsAwarded: number;
+  scoreConverted: number;
+  seasonKey: string;
+  seasonScoreBefore: number;
+};
+
 export type ApiAuthPayload = {
   dailyLogin?: {
     awardedToday: boolean;
@@ -132,6 +402,11 @@ export type ApiMe = {
     weeklyRank: number | null;
   };
   rewardClaims: ApiRewardClaim[];
+  wallet: {
+    expiringMarketCoins: number;
+    history: ApiWalletHistoryItem[];
+    latestConversion: ApiSeasonConversionNotice | null;
+  };
 };
 
 export type GameAttemptStart = {
@@ -274,6 +549,79 @@ export const playpointApi = {
   getMe(token: string) {
     return apiFetch<ApiMe>("/me", { token });
   },
+  getGames() {
+    return apiFetch<ApiGameCatalogItem[]>("/games");
+  },
+  getAdminEconomy(token: string) {
+    return apiFetch<ApiAdminEconomy>("/admin/economy", { token });
+  },
+  getAdminRewards(token: string) {
+    return apiFetch<ApiReward[]>("/admin/rewards", { token });
+  },
+  createAdminReward(token: string, reward: ApiAdminRewardPayload) {
+    return apiFetch<ApiReward>("/admin/rewards", {
+      method: "POST",
+      token,
+      body: JSON.stringify(reward)
+    });
+  },
+  updateAdminReward(token: string, rewardId: string, reward: ApiAdminRewardPayload) {
+    return apiFetch<ApiReward>(`/admin/rewards/${rewardId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(reward)
+    });
+  },
+  getAdminUsers(token: string, query = "") {
+    return apiFetch<ApiAdminUserSummary[]>(`/admin/users${query ? `?q=${encodeURIComponent(query)}` : ""}`, { token });
+  },
+  getAdminUser(token: string, userId: string) {
+    return apiFetch<ApiAdminUserDetail>(`/admin/users/${userId}`, { token });
+  },
+  updateAdminUserRole(token: string, userId: string, role: ApiUser["role"]) {
+    return apiFetch<{ user: ApiAdminUserSummary }>(`/admin/users/${userId}/role`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ role })
+    });
+  },
+  createAdminUserAdjustment(token: string, userId: string, adjustment: ApiAdminAdjustmentPayload) {
+    return apiFetch<{ user: ApiAdminUserSummary }>(`/admin/users/${userId}/adjustments`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(adjustment)
+    });
+  },
+  getAdminCampaigns(token: string) {
+    return apiFetch<ApiAdminCampaign[]>("/admin/campaigns", { token });
+  },
+  getAdminCampaignOptions(token: string) {
+    return apiFetch<ApiAdminCampaignOptions>("/admin/campaigns/options", { token });
+  },
+  createAdminCampaign(token: string, campaign: ApiAdminCampaignPayload) {
+    return apiFetch<ApiAdminCampaign>("/admin/campaigns", {
+      method: "POST",
+      token,
+      body: JSON.stringify(campaign)
+    });
+  },
+  updateAdminCampaign(token: string, campaignId: string, campaign: ApiAdminCampaignPayload) {
+    return apiFetch<ApiAdminCampaign>(`/admin/campaigns/${campaignId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(campaign)
+    });
+  },
+  getAdminGames(token: string) {
+    return apiFetch<ApiAdminGame[]>("/admin/games", { token });
+  },
+  updateAdminGame(token: string, gameId: string, game: ApiAdminGamePayload) {
+    return apiFetch<ApiAdminGame>(`/admin/games/${gameId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(game)
+    });
+  },
   updateMe(
     token: string,
     profile: {
@@ -309,7 +657,7 @@ export const playpointApi = {
       levelProgress: ApiLevelProgress;
       rank: { daily: number | null; weekly: number | null };
       score: GameResult & { rawScore: number; playPoints: number };
-      user: Pick<ApiUser, "coins" | "displayName" | "id" | "level" | "totalPoints" | "totalXp" | "xp">;
+      user: Pick<ApiUser, "coins" | "displayName" | "id" | "level" | "lifetimeScore" | "marketCoins" | "seasonScore" | "totalPoints" | "totalXp" | "xp">;
     }>(`/games/${gameId}/finish`, {
       method: "POST",
       token,
@@ -328,7 +676,7 @@ export const playpointApi = {
   claimReward(token: string, rewardId: string) {
     return apiFetch<{
       claim: ApiRewardClaim;
-      user: Pick<ApiUser, "coins" | "displayName" | "id" | "totalPoints">;
+      user: Pick<ApiUser, "coins" | "displayName" | "id" | "lifetimeScore" | "marketCoins" | "seasonScore" | "totalPoints">;
     }>(`/rewards/${rewardId}/claim`, {
       method: "POST",
       token
@@ -340,7 +688,7 @@ export const playpointApi = {
       levelProgress: ApiLevelProgress | null;
       points: number;
       rewardId: string;
-      user: Pick<ApiUser, "coins" | "displayName" | "id" | "level" | "totalPoints" | "totalXp" | "xp">;
+      user: Pick<ApiUser, "coins" | "displayName" | "id" | "level" | "lifetimeScore" | "marketCoins" | "seasonScore" | "totalPoints" | "totalXp" | "xp">;
       won: boolean;
     }>(`/rewards/${rewardId}/engage`, {
       method: "POST",

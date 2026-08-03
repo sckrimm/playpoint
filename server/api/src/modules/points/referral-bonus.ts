@@ -42,6 +42,12 @@ async function awardReferralPoints(
     data: {
       totalPoints: {
         increment: points
+      },
+      seasonScore: {
+        increment: points
+      },
+      lifetimeScore: {
+        increment: points
       }
     }
   });

@@ -49,9 +49,15 @@ function bonusDateKey(date = new Date()) {
   return date.toLocaleDateString("en-CA", { timeZone: "Asia/Tbilisi" });
 }
 
+function addDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setUTCDate(nextDate.getUTCDate() + days);
+  return nextDate;
+}
+
 async function getRank(userId: string) {
   const rankedUsers = await prisma.user.findMany({
-    orderBy: [{ totalPoints: "desc" }, { createdAt: "asc" }],
+    orderBy: [{ seasonScore: "desc" }, { createdAt: "asc" }],
     select: { id: true },
     take: 1000
   });
@@ -75,7 +81,11 @@ async function getMePayload(userId: string) {
     rewards,
     attemptsToday,
     dailyLogin,
-    referralCount
+    referralCount,
+    pointBonuses,
+    marketCoinTransactions,
+    expiringMarketCoinLots,
+    latestSeasonConversion
   ] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -90,6 +100,8 @@ async function getMePayload(userId: string) {
         id: true,
         interests: true,
         level: true,
+        lifetimeScore: true,
+        marketCoins: true,
         phone: true,
         phoneVerifiedAt: true,
         passwordSetAt: true,
@@ -97,6 +109,7 @@ async function getMePayload(userId: string) {
         referredById: true,
         role: true,
         totalPoints: true,
+        seasonScore: true,
         totalXp: true,
         updatedAt: true,
         xp: true
@@ -190,10 +203,69 @@ async function getMePayload(userId: string) {
       where: {
         referredById: userId
       }
+    }),
+    prisma.pointBonus.findMany({
+      where: { userId },
+      orderBy: { awardedAt: "desc" },
+      take: 20
+    }),
+    prisma.marketCoinTransaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 20
+    }),
+    prisma.marketCoinTransaction.findMany({
+      where: {
+        expiresAt: {
+          lte: addDays(new Date(), 14),
+          gt: new Date()
+        },
+        remainingAmount: {
+          gt: 0
+        },
+        type: "earned_conversion",
+        userId
+      },
+      orderBy: { expiresAt: "asc" }
+    }),
+    prisma.seasonConversion.findFirst({
+      where: { userId },
+      orderBy: { convertedAt: "desc" }
     })
   ]);
   const attemptsByGameId = new Map(attemptsToday.map((attempt) => [attempt.gameId, attempt._count.gameId]));
   const rewardSlugById = new Map(rewards.map((reward) => [reward.id, reward.slug]));
+  const walletHistory = [
+    ...gameHistory.map((score) => ({
+      id: `score:${score.id}`,
+      amount: score.playPoints,
+      createdAt: score.createdAt,
+      currency: "season_score" as const,
+      expiresAt: null,
+      source: score.game.title,
+      type: "game_score" as const
+    })),
+    ...pointBonuses.map((bonus) => ({
+      id: `bonus:${bonus.id}`,
+      amount: bonus.points,
+      createdAt: bonus.awardedAt,
+      currency: "season_score" as const,
+      expiresAt: null,
+      source: bonus.reason,
+      type: "point_bonus" as const
+    })),
+    ...marketCoinTransactions.map((transaction) => ({
+      id: `market-coin:${transaction.id}`,
+      amount: transaction.amount,
+      createdAt: transaction.createdAt,
+      currency: "market_coin" as const,
+      expiresAt: transaction.expiresAt,
+      source: transaction.source,
+      type: transaction.type
+    }))
+  ]
+    .sort((firstItem, secondItem) => secondItem.createdAt.getTime() - firstItem.createdAt.getTime())
+    .slice(0, 30);
 
   return {
     user,
@@ -228,6 +300,20 @@ async function getMePayload(userId: string) {
         .filter((rewardKey) => rewards.some((reward) => reward.slug === rewardKey)),
       gamesPlayed,
       weeklyRank
+    },
+    wallet: {
+      expiringMarketCoins: expiringMarketCoinLots.reduce((total, lot) => total + lot.remainingAmount, 0),
+      history: walletHistory,
+      latestConversion: latestSeasonConversion
+        ? {
+            id: latestSeasonConversion.id,
+            convertedAt: latestSeasonConversion.convertedAt,
+            marketCoinsAwarded: latestSeasonConversion.marketCoinsAwarded,
+            scoreConverted: latestSeasonConversion.scoreConverted,
+            seasonKey: latestSeasonConversion.seasonKey,
+            seasonScoreBefore: latestSeasonConversion.seasonScoreBefore
+          }
+        : null
     },
     rewardClaims
   };

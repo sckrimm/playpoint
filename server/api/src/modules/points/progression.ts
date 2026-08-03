@@ -72,6 +72,12 @@ export async function grantXpForPointAward(
       totalPoints: {
         increment: levelBonusTotal
       },
+      seasonScore: {
+        increment: levelBonusTotal
+      },
+      lifetimeScore: {
+        increment: levelBonusTotal
+      },
       totalXp: {
         increment: pointRules.xpPerPointAward
       },

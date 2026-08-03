@@ -127,6 +127,12 @@ export async function awardProfileCompletionBonusIfReady(
     data: {
       totalPoints: {
         increment: pointRules.profileCompletionBonus
+      },
+      seasonScore: {
+        increment: pointRules.profileCompletionBonus
+      },
+      lifetimeScore: {
+        increment: pointRules.profileCompletionBonus
       }
     }
   });

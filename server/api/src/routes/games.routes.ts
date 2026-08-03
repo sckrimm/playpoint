@@ -144,7 +144,7 @@ export function registerGameRoutes(app: FastifyInstance) {
       where: { slug: params.data.gameId }
     });
 
-    if (!game || !game.active) {
+    if (!game || !game.active || game.comingSoon) {
       return reply.code(404).send({ message: "Game not found or inactive" });
     }
 
@@ -253,6 +253,12 @@ export function registerGameRoutes(app: FastifyInstance) {
         data: {
           totalPoints: {
             increment: playPoints
+          },
+          seasonScore: {
+            increment: playPoints
+          },
+          lifetimeScore: {
+            increment: playPoints
           }
         }
       });
@@ -262,6 +268,9 @@ export function registerGameRoutes(app: FastifyInstance) {
         displayName: xpResult.user.displayName,
         id: xpResult.user.id,
         level: xpResult.user.level,
+        lifetimeScore: xpResult.user.lifetimeScore,
+        marketCoins: xpResult.user.marketCoins,
+        seasonScore: xpResult.user.seasonScore,
         totalPoints: xpResult.user.totalPoints,
         totalXp: xpResult.user.totalXp,
         xp: xpResult.user.xp

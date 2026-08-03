@@ -3,6 +3,7 @@ import { pointRules } from "@playpoint/shared";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
 import { requireSession } from "../modules/auth/auth.helpers";
+import { spendMarketCoins } from "../modules/points/market-coins";
 import { grantXpForPointAward } from "../modules/points/progression";
 
 const rewardParamsSchema = z.object({
@@ -81,6 +82,9 @@ export function registerRewardRoutes(app: FastifyInstance) {
             displayName: true,
             id: true,
             level: true,
+            lifetimeScore: true,
+            marketCoins: true,
+            seasonScore: true,
             totalPoints: true,
             totalXp: true,
             xp: true
@@ -110,6 +114,12 @@ export function registerRewardRoutes(app: FastifyInstance) {
         data: {
           totalPoints: {
             increment: pointRules.rewardEngagementBonus
+          },
+          seasonScore: {
+            increment: pointRules.rewardEngagementBonus
+          },
+          lifetimeScore: {
+            increment: pointRules.rewardEngagementBonus
           }
         }
       });
@@ -127,6 +137,9 @@ export function registerRewardRoutes(app: FastifyInstance) {
           displayName: xpResult.user.displayName,
           id: xpResult.user.id,
           level: xpResult.user.level,
+          lifetimeScore: xpResult.user.lifetimeScore,
+          marketCoins: xpResult.user.marketCoins,
+          seasonScore: xpResult.user.seasonScore,
           totalPoints: xpResult.user.totalPoints,
           totalXp: xpResult.user.totalXp,
           xp: xpResult.user.xp
@@ -187,14 +200,14 @@ export function registerRewardRoutes(app: FastifyInstance) {
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: auth.session.userId },
       select: {
-        totalPoints: true
+        marketCoins: true
       }
     });
 
-    if (user.totalPoints < reward.requiredPoints) {
+    if (user.marketCoins < reward.requiredPoints) {
       return reply.code(402).send({
-        currentPoints: user.totalPoints,
-        message: "Not enough points",
+        currentPoints: user.marketCoins,
+        message: "Not enough Market Coins",
         requiredPoints: reward.requiredPoints
       });
     }
@@ -223,12 +236,12 @@ export function registerRewardRoutes(app: FastifyInstance) {
       const updatedUser = await tx.user.updateMany({
         where: {
           id: auth.session.userId,
-          totalPoints: {
+          marketCoins: {
             gte: reward.requiredPoints
           }
         },
         data: {
-          totalPoints: {
+          marketCoins: {
             decrement: reward.requiredPoints
           }
         }
@@ -260,12 +273,20 @@ export function registerRewardRoutes(app: FastifyInstance) {
         }
       });
 
+      await spendMarketCoins(tx, auth.session.userId, reward.requiredPoints, {
+        referenceId: claim.id,
+        source: `reward_claim:${reward.id}`
+      });
+
       const refreshedUser = await tx.user.findUniqueOrThrow({
         where: { id: auth.session.userId },
         select: {
           coins: true,
           displayName: true,
           id: true,
+          lifetimeScore: true,
+          marketCoins: true,
+          seasonScore: true,
           totalPoints: true
         }
       });
@@ -282,7 +303,7 @@ export function registerRewardRoutes(app: FastifyInstance) {
     }
 
     if (result === "NOT_ENOUGH_POINTS") {
-      return reply.code(402).send({ message: "Not enough points" });
+      return reply.code(402).send({ message: "Not enough Market Coins" });
     }
 
     return result;

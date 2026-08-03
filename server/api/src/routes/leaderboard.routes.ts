@@ -3,12 +3,13 @@ import { prisma } from "../db/prisma";
 
 async function getLeaderboard() {
   const users = await prisma.user.findMany({
-    orderBy: [{ totalPoints: "desc" }, { createdAt: "asc" }],
+    orderBy: [{ seasonScore: "desc" }, { createdAt: "asc" }],
     select: {
       avatarUrl: true,
       createdAt: true,
       displayName: true,
       id: true,
+      seasonScore: true,
       totalPoints: true
     },
     take: 100
@@ -19,9 +20,9 @@ async function getLeaderboard() {
       avatarUrl: user.avatarUrl,
       createdAt: user.createdAt,
       gameSlug: "bonus",
-      gameTitle: "Total points",
-      playPoints: user.totalPoints,
-      rawScore: user.totalPoints,
+      gameTitle: "Season Score",
+      playPoints: user.seasonScore,
+      rawScore: user.seasonScore,
       userId: user.id,
       userName: user.displayName
     }));

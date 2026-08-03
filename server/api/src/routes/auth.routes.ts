@@ -164,6 +164,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
               phoneVerifiedAt: new Date(),
               displayName: parsed.data.displayName ?? defaultDisplayName(phone),
               totalPoints: pointRules.registrationBonus,
+              seasonScore: pointRules.registrationBonus,
+              lifetimeScore: pointRules.registrationBonus,
               coins: 14
             }
           });
@@ -276,6 +278,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
               email: identity.emailVerified ? identity.email : null,
               emailVerifiedAt: identity.emailVerified ? new Date() : null,
               totalPoints: pointRules.registrationBonus,
+              seasonScore: pointRules.registrationBonus,
+              lifetimeScore: pointRules.registrationBonus,
               coins: 14
             }
           });
@@ -498,6 +502,12 @@ export function registerAuthRoutes(app: FastifyInstance) {
           where: { id: user.id },
           data: {
             totalPoints: {
+              increment: pointRules.emailVerificationBonus
+            },
+            seasonScore: {
+              increment: pointRules.emailVerificationBonus
+            },
+            lifetimeScore: {
               increment: pointRules.emailVerificationBonus
             }
           }

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "market-coins:expire": "tsx src/scripts/expire-market-coins.ts",
     "start": "tsx src/main.ts",
+    "season:convert": "tsx src/scripts/convert-season.ts",
     "typecheck": "tsc -b --pretty",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

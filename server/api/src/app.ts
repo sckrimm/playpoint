@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { env } from "./env";
 import { prisma } from "./db/prisma";
+import { registerAdminRoutes } from "./routes/admin.routes";
 import { registerAuthRoutes } from "./routes/auth.routes";
 import { registerGameRoutes } from "./routes/games.routes";
 import { registerHealthRoutes } from "./routes/health.routes";
@@ -29,6 +30,7 @@ export function buildApp() {
   registerGameRoutes(app);
   registerRewardRoutes(app);
   registerLeaderboardRoutes(app);
+  registerAdminRoutes(app);
 
   app.addHook("onClose", async () => {
     await prisma.$disconnect();

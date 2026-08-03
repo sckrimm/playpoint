@@ -18,6 +18,8 @@
 
     "api:dev": "npm run dev -w @playpoint/api",
     "api:build": "npm run build -w @playpoint/api",
+    "api:market-coins:expire": "npm run market-coins:expire -w @playpoint/api",
+    "api:season:convert": "npm run season:convert -w @playpoint/api",
     "api:start": "npm run start -w @playpoint/api",
     "api:typecheck": "npm run typecheck -w @playpoint/api",
     "api:generate": "npm exec --workspace=@playpoint/api -- prisma generate",
