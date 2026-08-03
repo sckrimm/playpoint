@@ -6746,9 +6746,10 @@ h3 {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    width: min(100%, 620px);
     min-height: 0;
     max-height: none;
-    margin: 0 0 18px;
+    margin: 0 auto 18px;
     padding: 10px;
     border: 1px solid rgb(216 198 242 / 32%);
     border-radius: 8px;
@@ -6766,7 +6767,7 @@ h3 {
     width: auto;
     justify-content: flex-start;
     padding: 8px 6px;
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .desktop-nav {
@@ -6787,7 +6788,7 @@ h3 {
     gap: 6px;
     min-height: 38px;
     width: auto;
-    padding: 8px 10px;
+    padding: 8px 9px;
     border: 0;
     border-radius: 8px;
     color: #6e607a;
@@ -6814,6 +6815,7 @@ h3 {
   .topbar-wallet .coin-pill,
   .topbar-wallet .points-pill {
     width: auto;
+    min-width: 68px;
     min-height: 40px;
   }
 

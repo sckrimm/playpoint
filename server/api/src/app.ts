@@ -32,6 +32,19 @@ export function buildApp() {
   registerLeaderboardRoutes(app);
   registerAdminRoutes(app);
 
+  app.setErrorHandler((error, request, reply) => {
+    request.log.error(error);
+    const message =
+      error.message.includes("does not exist in the current database") ||
+      error.message.includes("Invalid `prisma.")
+        ? "Database schema is not synced. Run Prisma db push and restart the API."
+        : env.NODE_ENV === "production"
+          ? "Internal server error"
+          : error.message;
+
+    return reply.code(500).send({ message });
+  });
+
   app.addHook("onClose", async () => {
     await prisma.$disconnect();
   });
