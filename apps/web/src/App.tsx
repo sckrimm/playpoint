@@ -1994,7 +1994,7 @@ function AdminPage({ authToken, text }: { authToken: string; text: TextGetter })
   const [adminData, setAdminData] = useState<ApiAdminEconomy | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const effectiveAdminToken = adminToken || authToken;
+  const effectiveAdminToken = adminToken;
 
   useEffect(() => {
     let ignore = false;
