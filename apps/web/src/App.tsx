@@ -2252,17 +2252,20 @@ function AdminUsers({ data, text }: { data: ApiAdminEconomy; text: TextGetter })
 function AdminRewards({ data, text }: { data: ApiAdminEconomy; text: TextGetter }) {
   return (
     <div className="admin-grid">
-      <article className="admin-stat-card">
-        <span><Gift size={20} /></span>
-        <small>{text("admin.activeRewards")}</small>
-        <strong>{formatter.format(data.summary.rewardsCount)}</strong>
-      </article>
-      <article className="admin-stat-card">
-        <span><CheckCircle2 size={20} /></span>
-        <small>{text("admin.claims")}</small>
-        <strong>{formatter.format(data.summary.rewardClaimsCount)}</strong>
-      </article>
-      <AdminPanel title={text("admin.recentClaims")}>
+      <article className="admin-panel admin-rewards-panel">
+        <div className="admin-compact-stats">
+          <div>
+            <span><Gift size={17} /></span>
+            <small>{text("admin.activeRewards")}</small>
+            <strong>{formatter.format(data.summary.rewardsCount)}</strong>
+          </div>
+          <div>
+            <span><CheckCircle2 size={17} /></span>
+            <small>{text("admin.claims")}</small>
+            <strong>{formatter.format(data.summary.rewardClaimsCount)}</strong>
+          </div>
+        </div>
+        <h3>{text("admin.recentClaims")}</h3>
         <AdminRows
           rows={data.recentRewardClaims.map((claim) => ({
             left: claim.reward.title,
@@ -2270,7 +2273,7 @@ function AdminRewards({ data, text }: { data: ApiAdminEconomy; text: TextGetter 
             sub: `${claim.user.displayName} • ${formatter.format(claim.pointsSpent)} Market Coins`
           }))}
         />
-      </AdminPanel>
+      </article>
     </div>
   );
 }

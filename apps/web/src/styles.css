@@ -4619,7 +4619,7 @@ h3 {
 .admin-header-progress,
 .admin-analytics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(112px, 1fr));
+  grid-template-columns: repeat(4, minmax(136px, 1fr));
   gap: 14px;
 }
 
@@ -4639,8 +4639,8 @@ h3 {
 .admin-header-progress button span,
 .admin-analytics-item span {
   display: grid;
-  width: 92px;
-  height: 92px;
+  width: 122px;
+  height: 122px;
   place-items: center;
   border: 5px solid transparent;
   border-radius: 999px;
@@ -4661,15 +4661,15 @@ h3 {
 
 .admin-analytics-item span strong {
   color: inherit;
-  font-size: 18px;
+  font-size: 22px;
 }
 
 .admin-header-progress button small,
 .admin-analytics-item small {
-  max-width: 104px;
+  max-width: 136px;
   overflow: hidden;
   color: inherit;
-  font-size: 11px;
+  font-size: 13px;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4795,6 +4795,50 @@ h3 {
   font-weight: 1000;
 }
 
+.admin-compact-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.admin-compact-stats div {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #fbf8ff;
+}
+
+.admin-compact-stats span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 8px;
+  color: #6417d8;
+  background: rgb(100 23 216 / 10%);
+}
+
+.admin-compact-stats small {
+  min-width: 0;
+  overflow: hidden;
+  color: #6e607a;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-compact-stats strong {
+  color: #1f1730;
+  font-size: 22px;
+  font-weight: 1000;
+}
+
 .admin-panel {
   grid-column: span 2;
   min-width: 0;
@@ -4805,6 +4849,10 @@ h3 {
   margin: 0 0 12px;
   color: #1f1730;
   font-size: 16px;
+}
+
+.admin-rewards-panel h3 {
+  margin-top: 0;
 }
 
 .admin-rows {
@@ -6007,6 +6055,7 @@ h3 {
 .dark-mode .admin-subnav > span,
 .dark-mode .admin-row span,
 .dark-mode .admin-stat-card small,
+.dark-mode .admin-compact-stats small,
 .dark-mode .mini-stat-card p {
   color: rgb(248 242 255 / 68%);
 }
@@ -6030,6 +6079,7 @@ h3 {
 .dark-mode .admin-sidebar,
 .dark-mode .admin-stat-card,
 .dark-mode .admin-panel,
+.dark-mode .admin-compact-stats div,
 .dark-mode .admin-empty,
 .dark-mode .edit-profile-header,
 .dark-mode .edit-profile-screen,
@@ -6054,6 +6104,11 @@ h3 {
 
 .dark-mode .admin-tabs {
   background: rgb(255 255 255 / 8%);
+}
+
+.dark-mode .admin-compact-stats span {
+  color: #ffffff;
+  background: rgb(100 23 216 / 32%);
 }
 
 .dark-mode .admin-header-progress button span,
@@ -6472,12 +6527,12 @@ h3 {
 
   .admin-header-progress,
   .admin-analytics {
-    grid-template-columns: repeat(2, minmax(112px, 1fr));
+    grid-template-columns: repeat(2, minmax(136px, 1fr));
     justify-content: start;
   }
 
   .admin-empty.admin-analytics {
-    grid-template-columns: repeat(2, minmax(112px, 1fr));
+    grid-template-columns: repeat(2, minmax(136px, 1fr));
   }
 
   .admin-header h2 {
