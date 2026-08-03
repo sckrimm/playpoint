@@ -106,6 +106,7 @@ type Route =
   | "admin";
 
 const tokenStorageKey = "playpoint.authToken";
+const adminTokenStorageKey = "playpoint.adminToken";
 const referralStorageKey = "playpoint.referralCode";
 const conversionNoticeStorageKey = "playpoint.seenSeasonConversionIds";
 const appleClientId = import.meta.env.VITE_APPLE_CLIENT_ID ?? "";
@@ -1933,25 +1934,80 @@ function GameCard({
   );
 }
 
+function AdminLogin({ text, onLogin }: { text: TextGetter; onLogin: (token: string) => void }) {
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    setLoading(true);
+    setMessage("");
+    try {
+      const payload = await playpointApi.loginAdmin(username, password);
+      onLogin(payload.token);
+    } catch (error: unknown) {
+      setMessage(getApiErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section className="admin-login-screen">
+      <div className="admin-login-card">
+        <span className="admin-brand-mark">
+          <Sparkles size={18} />
+          {text("admin.kicker")}
+        </span>
+        <h1>{text("admin.loginTitle")}</h1>
+        <p>{text("admin.loginText")}</p>
+        <label>
+          <span>{text("admin.username")}</span>
+          <input value={username} autoComplete="username" onChange={(event) => setUsername(event.target.value)} />
+        </label>
+        <label>
+          <span>{text("admin.password")}</span>
+          <input
+            value={password}
+            autoComplete="current-password"
+            type="password"
+            onChange={(event) => setPassword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void submit();
+            }}
+          />
+        </label>
+        {message ? <div className="admin-form-message">{message}</div> : null}
+        <button type="button" disabled={loading || !username.trim() || !password.trim()} onClick={() => void submit()}>
+          {loading ? text("loading.title") : text("admin.loginAction")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function AdminPage({ authToken, text }: { authToken: string; text: TextGetter }) {
   const [activeAdminArea, setActiveAdminArea] = useState<"campaignsCms" | "economy" | "gamesCms" | "rewardsCms" | "usersAdmin">("economy");
   const [activeSection, setActiveSection] = useState<"overview" | "users" | "rewards" | "wallet">("overview");
+  const [adminToken, setAdminToken] = useState(() => window.localStorage.getItem(adminTokenStorageKey) ?? "");
   const [adminData, setAdminData] = useState<ApiAdminEconomy | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const effectiveAdminToken = adminToken || authToken;
 
   useEffect(() => {
     let ignore = false;
     setLoading(true);
     setErrorMessage("");
-    if (!authToken) {
+    if (!effectiveAdminToken) {
       setLoading(false);
       setErrorMessage(text("admin.authRequired"));
       return () => {
         ignore = true;
       };
     }
-    playpointApi.getAdminEconomy(authToken)
+    playpointApi.getAdminEconomy(effectiveAdminToken)
       .then((payload) => {
         if (!ignore) setAdminData(payload);
       })
@@ -1965,7 +2021,7 @@ function AdminPage({ authToken, text }: { authToken: string; text: TextGetter })
     return () => {
       ignore = true;
     };
-  }, [authToken]);
+  }, [effectiveAdminToken]);
 
   const sections = [
     { id: "overview" as const, label: text("admin.overview"), icon: BarChart3 },
@@ -1999,6 +2055,19 @@ function AdminPage({ authToken, text }: { authToken: string; text: TextGetter })
       icon: Star
     }
   ];
+
+  if (!effectiveAdminToken) {
+    return (
+      <AdminLogin
+        text={text}
+        onLogin={(token) => {
+          window.localStorage.setItem(adminTokenStorageKey, token);
+          setAdminToken(token);
+          setErrorMessage("");
+        }}
+      />
+    );
+  }
 
   return (
     <section className="admin-screen">
@@ -2055,9 +2124,16 @@ function AdminPage({ authToken, text }: { authToken: string; text: TextGetter })
             {text("admin.cmsSettings")}
           </button>
         </nav>
-        <button type="button" onClick={() => window.location.reload()}>
+        <button
+          type="button"
+          onClick={() => {
+            window.localStorage.removeItem(adminTokenStorageKey);
+            setAdminToken("");
+            setAdminData(null);
+          }}
+        >
           <RotateCcw size={16} />
-          {text("admin.refresh")}
+          {text("admin.logout")}
         </button>
       </aside>
       <div className="admin-main">
@@ -2108,10 +2184,10 @@ function AdminPage({ authToken, text }: { authToken: string; text: TextGetter })
             {activeSection === "wallet" ? <AdminWallet data={adminData} text={text} /> : null}
           </>
         ) : null}
-        {activeAdminArea === "rewardsCms" ? <AdminRewardsCms authToken={authToken} text={text} /> : null}
-        {activeAdminArea === "usersAdmin" ? <AdminUsersAdmin authToken={authToken} text={text} /> : null}
-        {activeAdminArea === "campaignsCms" ? <AdminCampaignsCms authToken={authToken} text={text} /> : null}
-        {activeAdminArea === "gamesCms" ? <AdminGamesCms authToken={authToken} text={text} /> : null}
+        {activeAdminArea === "rewardsCms" ? <AdminRewardsCms authToken={effectiveAdminToken} text={text} /> : null}
+        {activeAdminArea === "usersAdmin" ? <AdminUsersAdmin authToken={effectiveAdminToken} text={text} /> : null}
+        {activeAdminArea === "campaignsCms" ? <AdminCampaignsCms authToken={effectiveAdminToken} text={text} /> : null}
+        {activeAdminArea === "gamesCms" ? <AdminGamesCms authToken={effectiveAdminToken} text={text} /> : null}
       </div>
     </section>
   );

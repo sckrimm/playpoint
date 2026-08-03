@@ -1,8 +1,37 @@
+import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
-import { requireSession } from "../modules/auth/auth.helpers";
+import { env } from "../env";
+import { isHashMatch, readBearerToken, requireSession } from "../modules/auth/auth.helpers";
+
+const staticAdminUserId = "static-admin";
+
+const adminLoginSchema = z.object({
+  password: z.string().min(1),
+  username: z.string().min(1)
+});
+
+function signAdminToken(expiresAt: number) {
+  return crypto
+    .createHmac("sha256", env.JWT_SECRET)
+    .update(`admin:${expiresAt}`)
+    .digest("base64url");
+}
+
+function createAdminToken() {
+  const expiresAt = Date.now() + 1000 * 60 * 60 * 24 * 7;
+  return `admin:${expiresAt}:${signAdminToken(expiresAt)}`;
+}
+
+function verifyAdminToken(token: string | null) {
+  if (!token?.startsWith("admin:")) return false;
+  const [, expiresAtRaw, signature] = token.split(":");
+  const expiresAt = Number(expiresAtRaw);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || !signature) return false;
+  return isHashMatch(signAdminToken(expiresAt), signature);
+}
 
 const rewardAdminPayloadSchema = z.object({
   active: z.boolean().optional(),
@@ -74,6 +103,17 @@ const gameAdminParamsSchema = z.object({
 });
 
 async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {
+  const token = readBearerToken(request);
+  if (verifyAdminToken(token)) {
+    return {
+      session: {
+        userId: staticAdminUserId,
+        user: { role: "admin" as const }
+      },
+      token: token ?? ""
+    };
+  }
+
   const auth = await requireSession(request, reply);
   if (!auth) return null;
   if (auth.session.user.role !== "admin") {
@@ -167,6 +207,22 @@ function selectAdminGame() {
 }
 
 export function registerAdminRoutes(app: FastifyInstance) {
+  app.post("/admin/login", async (request, reply) => {
+    const parsed = adminLoginSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ message: "Invalid admin login payload", issues: parsed.error.issues });
+
+    const usernameOk = isHashMatch(parsed.data.username, env.ADMIN_USERNAME);
+    const passwordOk = isHashMatch(parsed.data.password, env.ADMIN_PASSWORD);
+    if (!usernameOk || !passwordOk) {
+      return reply.code(401).send({ message: "Invalid admin credentials" });
+    }
+
+    return {
+      ok: true,
+      token: createAdminToken()
+    };
+  });
+
   app.get("/admin/economy", async (request, reply) => {
     const auth = await requireAdmin(request, reply);
     if (!auth) return;

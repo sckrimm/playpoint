@@ -27,6 +27,8 @@ loadLocalEnv();
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1).default("postgresql://playpoint:playpoint@localhost:5432/playpoint"),
+  ADMIN_PASSWORD: z.string().min(1).default("imerlishvili1"),
+  ADMIN_USERNAME: z.string().min(1).default("admin"),
   APPLE_CLIENT_ID: z.string().default(""),
   GOOGLE_CLIENT_ID: z.string().default(""),
   JWT_SECRET: z.string().min(12).default("dev-secret-change-me"),

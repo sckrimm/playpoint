@@ -552,6 +552,12 @@ export const playpointApi = {
   getGames() {
     return apiFetch<ApiGameCatalogItem[]>("/games");
   },
+  loginAdmin(username: string, password: string) {
+    return apiFetch<{ ok: true; token: string }>("/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ password, username })
+    });
+  },
   getAdminEconomy(token: string) {
     return apiFetch<ApiAdminEconomy>("/admin/economy", { token });
   },
