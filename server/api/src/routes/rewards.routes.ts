@@ -124,7 +124,7 @@ export function registerRewardRoutes(app: FastifyInstance) {
         }
       });
 
-      const xpResult = await grantXpForPointAward(tx, auth.session.userId);
+      const xpResult = await grantXpForPointAward(tx, auth.session.userId, { awardLevelBonus: false });
 
       return {
         alreadyAwarded: false,

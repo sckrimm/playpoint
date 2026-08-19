@@ -32,11 +32,15 @@ export function buildLevelProgress(user: Pick<User, "level" | "xp">, xpAwarded =
 
 export async function grantXpForPointAward(
   db: DbClient,
-  userId: string
+  userId: string,
+  options: {
+    awardLevelBonus?: boolean;
+  } = {}
 ): Promise<{
   progress: LevelProgress;
   user: User;
 }> {
+  const awardLevelBonus = options.awardLevelBonus ?? true;
   const currentUser = await db.user.findUniqueOrThrow({ where: { id: userId } });
   let nextLevel = currentUser.level;
   let nextXp = currentUser.xp + pointRules.xpPerPointAward;
@@ -47,11 +51,13 @@ export async function grantXpForPointAward(
     nextXp -= getLevelXpRequirement(nextLevel);
     nextLevel += 1;
     const bonusPoints = getLevelBonusPoints(nextLevel - 1);
-    levelBonusTotal += bonusPoints;
-    levelUps.push({
-      bonusPoints,
-      level: nextLevel
-    });
+    levelBonusTotal += awardLevelBonus ? bonusPoints : 0;
+    if (awardLevelBonus) {
+      levelUps.push({
+        bonusPoints,
+        level: nextLevel
+      });
+    }
   }
 
   for (const levelUp of levelUps) {
