@@ -94,7 +94,7 @@ export function calculatePlayPoints(score: number) {
 }
 
 export const userSummary = {
-  displayName: "Giorgi",
+  displayName: "User",
   points: 9000,
   dailyRank: 42,
   weeklyRank: 88

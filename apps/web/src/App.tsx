@@ -3992,14 +3992,13 @@ function ProfilePage({
               </span>
             </div>
             <div className="profile-daily-stars" aria-label={text("profile.dailyBonusTitle")}>
-              <strong>+{formatter.format(visibleDailyLogin.pointsPerDay)}</strong>
-              <div>
-                {visibleDailyLogin.weekDays.map((day) => (
-                  <span className={day.claimed ? "active" : ""} key={day.index}>
-                    <Star size={12} />
-                  </span>
-                ))}
-              </div>
+              <span>
+                <Star size={15} />
+                <strong>{formatter.format(visibleDailyLogin.cycleProgress)}/7</strong>
+              </span>
+              <small>
+                {text("profile.dailyBonusTitle")} <b>+{formatter.format(visibleDailyLogin.pointsPerDay)}</b>
+              </small>
             </div>
           </div>
         </div>
