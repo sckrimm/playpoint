@@ -3979,15 +3979,27 @@ function ProfilePage({
               </span>
             </p>
           </div>
-          <div className="profile-hero-stats" aria-label={`${text("profile.rating")}, ${text("profile.games")}`}>
-            <span>
-              <Medal size={17} />
-              <strong>#{userRank}</strong>
-            </span>
-            <span>
-              <Gamepad2 size={17} />
-              <strong>{formatter.format(gamesPlayed)}</strong>
-            </span>
+          <div className="profile-hero-side">
+            <div className="profile-hero-stats" aria-label={`${text("profile.rating")}, ${text("profile.games")}`}>
+              <span>
+                <Medal size={17} />
+                <strong>#{userRank}</strong>
+              </span>
+              <span>
+                <Gamepad2 size={17} />
+                <strong>{formatter.format(gamesPlayed)}</strong>
+              </span>
+            </div>
+            <div className="profile-daily-stars" aria-label={text("profile.dailyBonusTitle")}>
+              <strong>+{formatter.format(visibleDailyLogin.pointsPerDay)}</strong>
+              <div>
+                {visibleDailyLogin.weekDays.map((day) => (
+                  <span className={day.claimed ? "active" : ""} key={day.index}>
+                    <Star size={12} />
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
         <button className="profile-interest-tags" type="button" onClick={() => onNavigate("edit-profile")}>
@@ -4046,33 +4058,6 @@ function ProfilePage({
             </div>
           )}
         </div>
-      </section>
-
-      <section className="daily-login-card">
-        <div className="daily-login-card-header">
-          <span>
-            <Sparkles size={20} />
-          </span>
-          <div>
-            <h3>{text("profile.dailyBonusTitle")}</h3>
-            <p>
-              {visibleDailyLogin.todayClaimed ? text("profile.dailyBonusClaimed") : text("profile.dailyBonusAvailable")}
-            </p>
-          </div>
-          <strong>
-            +{formatter.format(visibleDailyLogin.pointsPerDay)}
-          </strong>
-        </div>
-        <div className="daily-login-days" aria-label={text("profile.dailyBonusTitle")}>
-          {visibleDailyLogin.weekDays.map((day) => (
-            <span className={day.claimed ? "active" : ""} key={day.index}>
-              {day.index}
-            </span>
-          ))}
-        </div>
-        <small>
-          {formatter.format(visibleDailyLogin.cycleProgress)}/7 {text("profile.dailyBonusProgress")}
-        </small>
       </section>
 
       <LevelProgressBar progress={levelProgress} text={text} />
