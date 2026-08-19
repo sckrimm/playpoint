@@ -3991,8 +3991,8 @@ function ProfilePage({
                 <strong>{formatter.format(gamesPlayed)}</strong>
               </span>
             </div>
-            <div className="profile-daily-stars" aria-label={text("profile.dailyBonusTitle")}>
-              <span>
+            <div className="profile-daily-widget" aria-label={text("profile.dailyBonusTitle")}>
+              <span className="profile-daily-stars">
                 <Star size={15} />
                 <strong>{formatter.format(visibleDailyLogin.cycleProgress)}/7</strong>
               </span>
@@ -4035,6 +4035,30 @@ function ProfilePage({
           </div>
           <div className="balance-orb" />
         </article>
+      </section>
+
+      <LevelProgressBar progress={levelProgress} text={text} />
+
+      <section className="profile-referral-card">
+        <div>
+          <span>
+            <Gift size={20} />
+          </span>
+          <section>
+            <h3>
+              {text("profile.referralTitle")}
+              <small>{userReferralCount} {text("profile.referralCount")}</small>
+            </h3>
+            <p>{text("profile.referralText")}</p>
+          </section>
+        </div>
+        <div className="referral-code-row">
+          <strong>{userReferralCode || "--------"}</strong>
+          <button type="button" disabled={!userReferralCode} onClick={copyReferralLink}>
+            <Copy size={16} />
+            {referralCopied ? text("profile.referralCopied") : text("profile.referralCopy")}
+          </button>
+        </div>
       </section>
 
       <section className="wallet-history-card">
@@ -4098,30 +4122,6 @@ function ProfilePage({
           </section>
         </div>
       ) : null}
-
-      <LevelProgressBar progress={levelProgress} text={text} />
-
-      <section className="profile-referral-card">
-        <div>
-          <span>
-            <Gift size={20} />
-          </span>
-          <section>
-            <h3>
-              {text("profile.referralTitle")}
-              <small>{userReferralCount} {text("profile.referralCount")}</small>
-            </h3>
-            <p>{text("profile.referralText")}</p>
-          </section>
-        </div>
-        <div className="referral-code-row">
-          <strong>{userReferralCode || "--------"}</strong>
-          <button type="button" disabled={!userReferralCode} onClick={copyReferralLink}>
-            <Copy size={16} />
-            {referralCopied ? text("profile.referralCopied") : text("profile.referralCopy")}
-          </button>
-        </div>
-      </section>
 
       {!emailIsVerified ? (
         <section className="profile-verification-card">
