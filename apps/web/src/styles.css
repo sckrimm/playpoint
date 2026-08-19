@@ -4496,18 +4496,13 @@ h3 {
 
 .wallet-history-modal-backdrop {
   position: fixed;
-  top: 24px;
-  bottom: 24px;
-  left: 50%;
+  inset: 0;
   z-index: 70;
   display: grid;
   place-items: center;
-  width: min(calc(100% - 48px), 430px);
   padding: 16px;
-  border-radius: 8px;
   background: rgb(28 4 58 / 48%);
   backdrop-filter: blur(8px);
-  transform: translateX(-50%);
 }
 
 .wallet-history-modal {
@@ -6917,9 +6912,6 @@ h3 {
   }
 
   .wallet-history-modal-backdrop {
-    top: 12px;
-    bottom: 12px;
-    width: min(calc(100% - 24px), 430px);
     padding: 12px;
   }
 
