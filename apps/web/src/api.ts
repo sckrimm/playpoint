@@ -646,6 +646,13 @@ export const playpointApi = {
       body: JSON.stringify(profile)
     });
   },
+  convertSeasonScore(token: string, seasonScore: number) {
+    return apiFetch<ApiMe>("/me/season-conversion", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ seasonScore })
+    });
+  },
   getRewards() {
     return apiFetch<ApiReward[]>("/rewards");
   },

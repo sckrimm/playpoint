@@ -955,6 +955,29 @@ export function App() {
     }
   };
 
+  const convertSeasonScore = async (seasonScore: number) => {
+    if (!authToken) {
+      navigate("phone");
+      return;
+    }
+
+    try {
+      setApiBusy(true);
+      const payload = await playpointApi.convertSeasonScore(authToken, seasonScore);
+      applyMePayload(payload);
+      const [dailyPayload, weeklyPayload] = await Promise.all([
+        playpointApi.getLeaderboard("daily"),
+        playpointApi.getLeaderboard("weekly")
+      ]);
+      setDailyLeaderboard(toRankedLeaderboard(dailyPayload, payload.user.id));
+      setWeeklyLeaderboard(toRankedLeaderboard(weeklyPayload, payload.user.id));
+    } catch (error: unknown) {
+      window.alert(getApiErrorMessage(error));
+    } finally {
+      setApiBusy(false);
+    }
+  };
+
   const restartRegistration = () => {
     if (authToken) {
       playpointApi.logout(authToken).catch(() => undefined);
@@ -1185,6 +1208,7 @@ export function App() {
               gameHistory={gameHistory}
               walletHistory={walletHistory}
               lastGameResult={lastGameResult}
+              onConvertSeasonScore={convertSeasonScore}
               onNavigate={navigate}
               onLogout={restartRegistration}
             />
@@ -3832,6 +3856,7 @@ function ProfilePage({
   gameHistory,
   walletHistory,
   lastGameResult,
+  onConvertSeasonScore,
   onNavigate,
   onLogout
 }: {
@@ -3862,6 +3887,7 @@ function ProfilePage({
   gameHistory: GameHistoryItem[];
   walletHistory: ApiWalletHistoryItem[];
   lastGameResult: GameResult;
+  onConvertSeasonScore: (seasonScore: number) => Promise<void>;
   onNavigate: (route: Route) => void;
   onLogout: () => void;
 }) {
@@ -3869,6 +3895,8 @@ function ProfilePage({
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [showWalletHistoryModal, setShowWalletHistoryModal] = useState(false);
   const [referralCopied, setReferralCopied] = useState(false);
+  const [seasonConvertValue, setSeasonConvertValue] = useState(() => String(Math.max(0, userPoints)));
+  const [seasonConvertBusy, setSeasonConvertBusy] = useState(false);
   const visibleRewards = showAllPrizes ? purchasedRewards : purchasedRewards.slice(0, 2);
   const gameHistoryIcons: Record<GameId, ReactNode> = {
     "aim-hit": <Target size={20} />,
@@ -3893,6 +3921,8 @@ function ProfilePage({
   }));
   const visibleHistoryItems = showFullHistory ? historyItems : historyItems.slice(0, 3);
   const visibleWalletHistory = walletHistory.slice(0, 3);
+  const seasonConvertAmount = Math.min(Math.max(0, Number(seasonConvertValue) || 0), userPoints);
+  const seasonConvertCoins = Math.round(seasonConvertAmount / pointRules.seasonScoreToMarketCoinRatio);
   const emailIsVerified = Boolean(userEmailVerifiedAt);
   const profileCompletionProgress =
     profileCompletion ??
@@ -3947,6 +3977,23 @@ function ProfilePage({
     }
     setReferralCopied(true);
     window.setTimeout(() => setReferralCopied(false), 1600);
+  };
+  useEffect(() => {
+    setSeasonConvertValue(String(Math.max(0, userPoints)));
+  }, [userPoints]);
+  const updateSeasonConvertValue = (value: string) => {
+    const normalizedValue = value.replace(/\D/g, "");
+    const nextValue = Math.min(Number(normalizedValue || 0), userPoints);
+    setSeasonConvertValue(String(nextValue));
+  };
+  const submitSeasonConversion = async () => {
+    if (seasonConvertBusy || seasonConvertAmount <= 0 || seasonConvertCoins <= 0) return;
+    setSeasonConvertBusy(true);
+    try {
+      await onConvertSeasonScore(seasonConvertAmount);
+    } finally {
+      setSeasonConvertBusy(false);
+    }
   };
 
   return (
@@ -4030,8 +4077,32 @@ function ProfilePage({
               <small>{text("profile.coin")}</small>
             </div>
           </div>
-          <div className="balance-icon">
-            <CircleDollarSign size={48} />
+          <div className="season-converter">
+            <label>
+              <span>{text("profile.convertSeasonScore")}</span>
+              <input
+                inputMode="numeric"
+                max={userPoints}
+                min="0"
+                type="text"
+                value={seasonConvertValue}
+                onChange={(event) => updateSeasonConvertValue(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>{text("profile.estimatedMarketCoins")}</span>
+              <output>
+                <Coins size={15} />
+                {formatter.format(seasonConvertCoins)}
+              </output>
+            </label>
+            <button
+              type="button"
+              disabled={seasonConvertBusy || seasonConvertAmount <= 0 || seasonConvertCoins <= 0}
+              onClick={submitSeasonConversion}
+            >
+              {seasonConvertBusy ? text("profile.converting") : text("profile.convertAction")}
+            </button>
           </div>
           <div className="balance-orb" />
         </article>

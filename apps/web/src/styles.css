@@ -3946,6 +3946,79 @@ h3 {
   backdrop-filter: blur(8px);
 }
 
+.season-converter {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  width: min(100%, 250px);
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 14%);
+  backdrop-filter: blur(10px);
+}
+
+.season-converter label {
+  display: grid;
+  gap: 5px;
+}
+
+.season-converter label span {
+  color: rgb(255 255 255 / 82%);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.season-converter input,
+.season-converter output {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 92%);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 1000;
+}
+
+.season-converter input {
+  padding: 0 10px;
+  color: #30006b;
+  outline: none;
+}
+
+.season-converter output {
+  gap: 6px;
+  padding: 0 10px;
+  color: #4a3000;
+  background: linear-gradient(135deg, #ffd66b, #f5b21b);
+}
+
+.season-converter button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  color: #6417d8;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 1000;
+  cursor: pointer;
+  box-shadow: 0 5px 14px rgb(28 4 58 / 18%);
+}
+
+.season-converter button:disabled {
+  color: #8a7c94;
+  background: rgb(255 255 255 / 58%);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .balance-orb {
   position: absolute;
   right: -32px;
@@ -6791,6 +6864,21 @@ h3 {
     right: 10px;
     width: 116px;
     gap: 7px;
+  }
+
+  .balance-card {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 18px;
+  }
+
+  .balance-card h3 {
+    font-size: 34px;
+    line-height: 38px;
+  }
+
+  .season-converter {
+    width: 100%;
   }
 
   .profile-hero-stats {

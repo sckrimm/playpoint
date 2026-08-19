@@ -1,9 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import type { Prisma } from "@prisma/client";
+import { pointRules } from "@playpoint/shared";
 import { z } from "zod";
 import { prisma } from "../db/prisma";
 import { hashPassword, requireSession } from "../modules/auth/auth.helpers";
 import { getDailyLoginProgress } from "../modules/points/daily-login";
+import { addMarketCoins } from "../modules/points/market-coins";
 import { awardProfileCompletionBonusIfReady, buildProfileCompletionProgress } from "../modules/points/profile-completion";
 import { awardReferralBonuses } from "../modules/points/referral-bonus";
 import { buildLevelProgress, type LevelProgress } from "../modules/points/progression";
@@ -37,6 +39,10 @@ const updateMeSchema = z.object({
 }).refine((data) => !data.password && !data.passwordConfirm ? true : data.password === data.passwordConfirm, {
   message: "Passwords do not match",
   path: ["passwordConfirm"]
+});
+
+const manualSeasonConversionSchema = z.object({
+  seasonScore: z.number().int().min(0)
 });
 
 function startOfToday() {
@@ -414,6 +420,56 @@ export function registerMeRoutes(app: FastifyInstance) {
       }
       throw error;
     }
+  });
+
+  app.post("/me/season-conversion", async (request, reply) => {
+    const auth = await requireSession(request, reply);
+    if (!auth) return;
+
+    const parsed = manualSeasonConversionSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ message: "Invalid conversion payload", issues: parsed.error.issues });
+
+    const scoreToConvert = parsed.data.seasonScore;
+    const marketCoinsAwarded = Math.round(scoreToConvert / pointRules.seasonScoreToMarketCoinRatio);
+    if (scoreToConvert <= 0 || marketCoinsAwarded <= 0) {
+      return reply.code(400).send({ message: "Conversion amount is too low" });
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        const user = await tx.user.findUniqueOrThrow({
+          where: { id: auth.session.userId },
+          select: {
+            seasonScore: true
+          }
+        });
+
+        if (scoreToConvert > user.seasonScore) throw new Error("INSUFFICIENT_SEASON_SCORE");
+
+        await addMarketCoins(tx, auth.session.userId, marketCoinsAwarded, {
+          source: "manual_season_conversion"
+        });
+
+        await tx.user.update({
+          where: { id: auth.session.userId },
+          data: {
+            marketCoins: {
+              increment: marketCoinsAwarded
+            },
+            seasonScore: {
+              decrement: scoreToConvert
+            }
+          }
+        });
+      });
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === "INSUFFICIENT_SEASON_SCORE") {
+        return reply.code(400).send({ message: "Not enough Season Score" });
+      }
+      throw error;
+    }
+
+    return getMePayload(auth.session.userId);
   });
 
   app.get("/me/reward-claims", async (request, reply) => {

@@ -31,7 +31,7 @@ export function normalizeSeasonKey(seasonKey?: string) {
 export function calculateMarketCoinsFromSeasonScore(seasonScore: number) {
   const scoreConverted = Math.min(Math.max(0, seasonScore), pointRules.monthlySeasonScoreCap);
   return {
-    marketCoinsAwarded: Math.floor(scoreConverted / pointRules.seasonScoreToMarketCoinRatio),
+    marketCoinsAwarded: Math.round(scoreConverted / pointRules.seasonScoreToMarketCoinRatio),
     scoreConverted
   };
 }

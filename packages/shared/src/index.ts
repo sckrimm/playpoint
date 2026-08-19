@@ -51,7 +51,7 @@ export const pointRules = {
   dailyAttemptsPerGame: 3,
   marketCoinExpiryDays: 90,
   monthlySeasonScoreCap: 10000,
-  seasonScoreToMarketCoinRatio: 10,
+  seasonScoreToMarketCoinRatio: 100,
   scoreToPointRatio: 0.01
 } as const;
 
