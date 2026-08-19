@@ -3867,6 +3867,7 @@ function ProfilePage({
 }) {
   const [showAllPrizes, setShowAllPrizes] = useState(false);
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [showWalletHistoryModal, setShowWalletHistoryModal] = useState(false);
   const [referralCopied, setReferralCopied] = useState(false);
   const visibleRewards = showAllPrizes ? purchasedRewards : purchasedRewards.slice(0, 2);
   const gameHistoryIcons: Record<GameId, ReactNode> = {
@@ -3891,7 +3892,7 @@ function ProfilePage({
     tone: "positive" as const
   }));
   const visibleHistoryItems = showFullHistory ? historyItems : historyItems.slice(0, 3);
-  const visibleWalletHistory = walletHistory.slice(0, 5);
+  const visibleWalletHistory = walletHistory.slice(0, 3);
   const emailIsVerified = Boolean(userEmailVerifiedAt);
   const profileCompletionProgress =
     profileCompletion ??
@@ -4040,11 +4041,16 @@ function ProfilePage({
       <section className="wallet-history-card">
         <div className="profile-section-title">
           <h3>{text("profile.walletHistory")}</h3>
-          {expiringMarketCoins > 0 ? (
-            <span className="wallet-expiry-pill">
-              {formatter.format(expiringMarketCoins)} {text("profile.expiringSoon")}
-            </span>
-          ) : null}
+          <div className="wallet-history-actions">
+            {expiringMarketCoins > 0 ? (
+              <span className="wallet-expiry-pill">
+                {formatter.format(expiringMarketCoins)} {text("profile.expiringSoon")}
+              </span>
+            ) : null}
+            <button type="button" disabled={walletHistory.length <= 3} onClick={() => setShowWalletHistoryModal(true)}>
+              {text("profile.viewAll")}
+            </button>
+          </div>
         </div>
         <div className="wallet-history-list">
           {visibleWalletHistory.length > 0 ? (
@@ -4059,6 +4065,40 @@ function ProfilePage({
           )}
         </div>
       </section>
+
+      {showWalletHistoryModal ? (
+        <div className="wallet-history-modal-backdrop" role="presentation" onClick={() => setShowWalletHistoryModal(false)}>
+          <section
+            className="wallet-history-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wallet-history-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span>{text("profile.balance")}</span>
+                <h3 id="wallet-history-modal-title">{text("profile.walletHistory")}</h3>
+              </div>
+              <button type="button" aria-label="Close" onClick={() => setShowWalletHistoryModal(false)}>
+                <X size={18} />
+              </button>
+            </header>
+            <div className="wallet-history-modal-list">
+              {walletHistory.length > 0 ? (
+                walletHistory.map((item) => (
+                  <WalletHistoryItem item={item} key={item.id} language={language} text={text} />
+                ))
+              ) : (
+                <div className="profile-empty-state">
+                  <CircleDollarSign size={22} />
+                  <span>{text("profile.emptyWalletHistory")}</span>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <LevelProgressBar progress={levelProgress} text={text} />
 
