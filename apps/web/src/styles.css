@@ -4377,6 +4377,7 @@ h3 {
 }
 
 .wallet-history-card {
+  margin-bottom: 24px;
   padding: 16px;
   border: 1px solid rgb(216 198 242 / 24%);
   border-radius: 8px;
