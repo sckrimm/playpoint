@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { env } from "./env";
 import { prisma } from "./db/prisma";
 import { registerAdminRoutes } from "./routes/admin.routes";
@@ -11,7 +12,9 @@ import { registerLeaderboardRoutes } from "./routes/leaderboard.routes";
 import { registerMeRoutes } from "./routes/me.routes";
 import { registerRewardRoutes } from "./routes/rewards.routes";
 
-const webDistPath = path.resolve(process.cwd(), "apps/web/dist");
+const currentFilePath = fileURLToPath(import.meta.url);
+const currentDir = path.dirname(currentFilePath);
+const webDistPath = path.resolve(currentDir, "../../../apps/web/dist");
 const webIndexPath = path.join(webDistPath, "index.html");
 
 const mimeTypes: Record<string, string> = {
@@ -32,8 +35,18 @@ const mimeTypes: Record<string, string> = {
 };
 
 function getWebAssetPath(requestPath: string) {
-  const decodedPath = decodeURIComponent(requestPath.split("?")[0] ?? "/");
-  const normalizedPath = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, "");
+  let decodedPath = "/";
+
+  try {
+    decodedPath = decodeURIComponent(requestPath.split("?")[0] ?? "/");
+  } catch {
+    decodedPath = "/";
+  }
+
+  const normalizedPath = path
+    .normalize(decodedPath)
+    .replace(/^[/\\]+/, "")
+    .replace(/^(\.\.[/\\])+/, "");
   const candidatePath = path.join(webDistPath, normalizedPath);
 
   if (!candidatePath.startsWith(webDistPath)) {
