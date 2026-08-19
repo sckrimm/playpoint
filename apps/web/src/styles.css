@@ -4774,6 +4774,12 @@ h3 {
   display: grid;
   grid-template-columns: minmax(280px, 0.74fr) minmax(420px, 1.26fr);
   gap: 12px;
+  align-items: start;
+}
+
+.admin-users-grid > .admin-panel,
+.admin-history-grid > .admin-panel {
+  grid-column: auto;
 }
 
 .admin-user-detail-stack {
@@ -5230,7 +5236,7 @@ h3 {
 }
 
 .admin-adjustment-form {
-  grid-template-columns: 140px 100px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(128px, 0.9fr) minmax(92px, 0.6fr) minmax(140px, 1fr) auto;
   margin-bottom: 0;
 }
 
