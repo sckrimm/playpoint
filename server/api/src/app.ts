@@ -1,4 +1,6 @@
 import Fastify from "fastify";
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
 import { env } from "./env";
 import { prisma } from "./db/prisma";
 import { registerAdminRoutes } from "./routes/admin.routes";
@@ -8,6 +10,38 @@ import { registerHealthRoutes } from "./routes/health.routes";
 import { registerLeaderboardRoutes } from "./routes/leaderboard.routes";
 import { registerMeRoutes } from "./routes/me.routes";
 import { registerRewardRoutes } from "./routes/rewards.routes";
+
+const webDistPath = path.resolve(process.cwd(), "apps/web/dist");
+const webIndexPath = path.join(webDistPath, "index.html");
+
+const mimeTypes: Record<string, string> = {
+  ".css": "text/css; charset=utf-8",
+  ".gif": "image/gif",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".ttf": "font/ttf",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2"
+};
+
+function getWebAssetPath(requestPath: string) {
+  const decodedPath = decodeURIComponent(requestPath.split("?")[0] ?? "/");
+  const normalizedPath = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, "");
+  const candidatePath = path.join(webDistPath, normalizedPath);
+
+  if (!candidatePath.startsWith(webDistPath)) {
+    return null;
+  }
+
+  return candidatePath;
+}
 
 export function buildApp() {
   const app = Fastify({
@@ -31,6 +65,28 @@ export function buildApp() {
   registerRewardRoutes(app);
   registerLeaderboardRoutes(app);
   registerAdminRoutes(app);
+
+  app.get("/*", async (request, reply) => {
+    const assetPath = getWebAssetPath(request.url);
+
+    if (assetPath) {
+      try {
+        const assetStat = await stat(assetPath);
+        if (assetStat.isFile()) {
+          const extension = path.extname(assetPath).toLowerCase();
+          return reply.type(mimeTypes[extension] ?? "application/octet-stream").send(await readFile(assetPath));
+        }
+      } catch {
+        // Fall back to the SPA entry below.
+      }
+    }
+
+    try {
+      return reply.type("text/html; charset=utf-8").send(await readFile(webIndexPath));
+    } catch {
+      return reply.code(404).send({ message: "Web build not found. Run npm run build before starting the app." });
+    }
+  });
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error);
