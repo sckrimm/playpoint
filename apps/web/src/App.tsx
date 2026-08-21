@@ -115,7 +115,12 @@ const appleRedirectUri = import.meta.env.VITE_APPLE_REDIRECT_URI ?? window.locat
 const defaultRoute: Route = window.localStorage.getItem(tokenStorageKey) ? "home" : "splash";
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
 const showDevOtpCode = import.meta.env.DEV;
+const gelToUsdRate = 2.7;
 const formatter = new Intl.NumberFormat("en-US");
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2
+});
 const displayNamePattern = /^[\p{L}\p{N}_ ]+$/u;
 const displayNameMinLength = 3;
 const displayNameMaxLength = 24;
@@ -3897,6 +3902,7 @@ function ProfilePage({
   const [referralCopied, setReferralCopied] = useState(false);
   const [seasonConvertValue, setSeasonConvertValue] = useState(() => String(Math.max(0, userPoints)));
   const [seasonConvertBusy, setSeasonConvertBusy] = useState(false);
+  const [gelConvertValue, setGelConvertValue] = useState("100");
   const visibleRewards = showAllPrizes ? purchasedRewards : purchasedRewards.slice(0, 2);
   const gameHistoryIcons: Record<GameId, ReactNode> = {
     "aim-hit": <Target size={20} />,
@@ -3923,6 +3929,8 @@ function ProfilePage({
   const visibleWalletHistory = walletHistory.slice(0, 3);
   const seasonConvertAmount = Math.min(Math.max(0, Number(seasonConvertValue) || 0), userPoints);
   const seasonConvertCoins = Math.round(seasonConvertAmount / pointRules.seasonScoreToMarketCoinRatio);
+  const gelConvertAmount = Math.max(0, Number(gelConvertValue) || 0);
+  const usdConvertAmount = gelConvertAmount / gelToUsdRate;
   const emailIsVerified = Boolean(userEmailVerifiedAt);
   const profileCompletionProgress =
     profileCompletion ??
@@ -3985,6 +3993,10 @@ function ProfilePage({
     const normalizedValue = value.replace(/\D/g, "");
     const nextValue = Math.min(Number(normalizedValue || 0), userPoints);
     setSeasonConvertValue(String(nextValue));
+  };
+  const updateGelConvertValue = (value: string) => {
+    const normalizedValue = value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
+    setGelConvertValue(normalizedValue);
   };
   const submitSeasonConversion = async () => {
     if (seasonConvertBusy || seasonConvertAmount <= 0 || seasonConvertCoins <= 0) return;
@@ -4105,6 +4117,36 @@ function ProfilePage({
             </button>
           </div>
           <div className="balance-orb" />
+        </article>
+        <article className="currency-converter-card">
+          <div>
+            <p>{text("profile.currencyExchange")}</p>
+            <h3>{text("profile.lariToDollar")}</h3>
+            <span className="currency-rate-label">
+              1 USD = {currencyFormatter.format(gelToUsdRate)} GEL
+            </span>
+          </div>
+          <div className="currency-converter-fields">
+            <label>
+              <span>{text("profile.lariAmount")}</span>
+              <div>
+                <input
+                  inputMode="decimal"
+                  type="text"
+                  value={gelConvertValue}
+                  onChange={(event) => updateGelConvertValue(event.target.value)}
+                />
+                <strong>GEL</strong>
+              </div>
+            </label>
+            <label>
+              <span>{text("profile.dollarAmount")}</span>
+              <output>
+                <CircleDollarSign size={16} />
+                {currencyFormatter.format(usdConvertAmount)}
+              </output>
+            </label>
+          </div>
         </article>
       </section>
 
