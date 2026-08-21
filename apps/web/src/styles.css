@@ -4030,102 +4030,6 @@ h3 {
   filter: blur(24px);
 }
 
-.currency-converter-card {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px;
-  border-radius: 8px;
-  color: #ffffff;
-  background:
-    radial-gradient(circle at 88% 10%, rgb(255 214 107 / 32%), transparent 28%),
-    linear-gradient(135deg, #073b38 0%, #0f766e 52%, #30a525 100%);
-  box-shadow: 0 6px 18px rgb(15 118 110 / 18%);
-}
-
-.currency-converter-card p {
-  margin-bottom: 5px;
-  color: rgb(255 255 255 / 80%);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.currency-converter-card h3 {
-  margin: 0 0 8px;
-  color: #ffffff;
-  font-size: 26px;
-  line-height: 30px;
-}
-
-.currency-rate-label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 8px;
-  color: #4a3000;
-  background: linear-gradient(135deg, #ffd66b, #f5b21b);
-  font-size: 11px;
-  font-weight: 1000;
-}
-
-.currency-converter-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  width: min(100%, 360px);
-}
-
-.currency-converter-fields label {
-  display: grid;
-  gap: 6px;
-}
-
-.currency-converter-fields label > span {
-  color: rgb(255 255 255 / 82%);
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.currency-converter-fields label > div,
-.currency-converter-fields output {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 42px;
-  padding: 0 10px;
-  border-radius: 8px;
-  background: rgb(255 255 255 / 92%);
-}
-
-.currency-converter-fields input {
-  min-width: 0;
-  width: 100%;
-  border: 0;
-  color: #073b38;
-  background: transparent;
-  font: inherit;
-  font-size: 16px;
-  font-weight: 1000;
-  outline: none;
-}
-
-.currency-converter-fields strong {
-  color: #0f766e;
-  font-size: 11px;
-  font-weight: 1000;
-}
-
-.currency-converter-fields output {
-  color: #4a3000;
-  background: linear-gradient(135deg, #ffd66b, #f5b21b);
-  font-size: 16px;
-  font-weight: 1000;
-}
-
 .mini-stat-card {
   padding: 16px;
   border: 1px solid rgb(216 198 242 / 30%);
@@ -6974,22 +6878,6 @@ h3 {
   }
 
   .season-converter {
-    width: 100%;
-  }
-
-  .currency-converter-card {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 18px;
-  }
-
-  .currency-converter-card h3 {
-    font-size: 22px;
-    line-height: 26px;
-  }
-
-  .currency-converter-fields {
-    grid-template-columns: 1fr;
     width: 100%;
   }
 
