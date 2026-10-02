@@ -1,6 +1,7 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { BinanceExchangeInfoService, type SpotSymbolCatalogItem } from "../binance/binanceExchangeInfoService.js";
 import { BinanceMarketHistoryService, type BinanceCandle, type HistoricalPrice } from "../binance/binanceMarketHistoryService.js";
@@ -16,6 +17,8 @@ import { UserAuthStore, type DashboardUser } from "../auth/userAuthStore.js";
 
 const port = Number(process.env.DASHBOARD_PORT ?? process.env.PORT ?? 4173);
 const publicDir = path.resolve("public");
+const lightweightChartsEntry = fileURLToPath(import.meta.resolve("lightweight-charts"));
+const lightweightChartsVendorPath = path.join(path.dirname(lightweightChartsEntry), "lightweight-charts.standalone.production.js");
 const basePath = normalizeBasePath(process.env.BASE_PATH ?? "");
 const dashboardUsername = process.env.DASHBOARD_USERNAME?.trim() ?? "";
 const dashboardPassword = process.env.DASHBOARD_PASSWORD ?? "";
@@ -822,8 +825,7 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (pathname === "/vendor/lightweight-charts.js") {
-    const vendorPath = path.resolve("node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js");
-    return fs.readFile(vendorPath, (error, data) => {
+    return fs.readFile(lightweightChartsVendorPath, (error, data) => {
       if (error) return response.writeHead(404).end("ვერ მოიძებნა");
       response.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "public, max-age=86400" });
       response.end(data);
