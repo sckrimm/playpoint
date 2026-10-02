@@ -29,14 +29,22 @@
           <div><p class="eyebrow">პორტფელის ავტომატიზაცია</p><h1>სტრატეგიები</h1><p class="muted">დამოუკიდებელი Spot USDT სიმულაციური სტრატეგიები</p></div>
           <div class="overview-actions">
             <div class="view-switch" role="tablist"><button id="showActive" class="selected" type="button">აქტიური</button><button id="showArchived" type="button">არქივი</button></div>
+            <button id="openMarketCandidates" class="secondary-button" type="button">ბაზრის კანდიდატები</button>
             <button id="openComparison" class="secondary-button" type="button">სტრატეგიების შედარება</button>
             <button id="openCreate" class="primary-button" type="button">+ სტრატეგიის შექმნა</button>
           </div>
         </div>
         <div id="strategyList" class="strategy-list"><p class="empty-state">სტრატეგიები იტვირთება...</p></div>
+      </section>
+
+      <section id="marketCandidatesView" hidden>
+        <button id="backFromMarketCandidates" class="back-button" type="button">← სტრატეგიები</button>
+        <div class="overview-head">
+          <div><p class="eyebrow">სტრატეგიის შექმნამდე</p><h1>ბაზრის კანდიდატები</h1><p class="muted">Binance Spot USDT წყვილები, რომლებიც ჩვენს 24-საათიან ტექნიკურ ფილტრებს გადიან</p></div>
+        </div>
         <section class="panel opportunity-panel">
           <div class="section-title"><div><h2>24-საათიანი ბაზრის შეფასება</h2><p>ლიკვიდური Spot USDT წყვილების ტექნიკური დაკვირვების სია</p></div><button id="refreshOpportunities" class="secondary-button" type="button">განახლება</button></div>
-          <div class="opportunity-guide"><span><strong>70–100</strong> დასაკვირვებელი</span><span><strong>55–69</strong> ნეიტრალური</span><span><strong>0–54</strong> მაღალი რისკი</span></div>
+          <div class="opportunity-guide"><span><strong>70–100</strong> ფილტრი გავლილია</span><span><strong>55–69</strong> დამატებით შესამოწმებელი</span><span><strong>0–54</strong> მაღალი რისკი</span></div>
           <p id="opportunityMethod" class="muted">შეფასება იტვირთება...</p>
           <div id="opportunityList" class="opportunity-list"></div>
         </section>

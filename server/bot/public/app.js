@@ -468,9 +468,18 @@ async function openComparison() {
   }));
   byId("overviewView").hidden = true;
   byId("detailView").hidden = true;
+  byId("marketCandidatesView").hidden = true;
   byId("comparisonView").hidden = false;
   if (symbols[0]) await loadComparison(symbols[0]);
   else byId("comparisonGrid").innerHTML = '<div class="empty-state"><strong>აქტიური სტრატეგიები ჯერ არ არის</strong><span>ჯერ შექმენი ერთი coin-ის რამდენიმე სტრატეგია.</span></div>';
+}
+
+function openMarketCandidates() {
+  byId("overviewView").hidden = true;
+  byId("detailView").hidden = true;
+  byId("comparisonView").hidden = true;
+  byId("marketCandidatesView").hidden = false;
+  void loadOpportunities();
 }
 
 function renderMarket(market) {
@@ -579,6 +588,7 @@ async function openDetail(id) {
   previousMarketPrice = null;
   byId("overviewView").hidden = true;
   byId("comparisonView").hidden = true;
+  byId("marketCandidatesView").hidden = true;
   byId("detailView").hidden = false;
   try {
     renderDetail(await api(`/api/strategies/${id}`));
@@ -754,6 +764,7 @@ byId("openCreate").addEventListener("click", async () => {
   try { await Promise.all([loadSymbols(), loadTemplates()]); prepareCreateForm(); } catch (error) { byId("formError").textContent = error.message; byId("formError").hidden = false; }
 });
 byId("openComparison").addEventListener("click", () => { void openComparison(); });
+byId("openMarketCandidates").addEventListener("click", openMarketCandidates);
 byId("comparisonSymbol").addEventListener("change", (event) => { void loadComparison(event.target.value); });
 byId("comparisonCreate").addEventListener("click", () => { void openCreateForComparison(); });
 byId("backtestRange").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
@@ -763,6 +774,12 @@ byId("backtestRange").querySelectorAll("button").forEach((button) => button.addE
 byId("runBacktest").addEventListener("click", () => { void runBacktest(); });
 byId("backFromComparison").addEventListener("click", () => {
   byId("comparisonView").hidden = true;
+  byId("marketCandidatesView").hidden = true;
+  byId("overviewView").hidden = false;
+  void loadOverview();
+});
+byId("backFromMarketCandidates").addEventListener("click", () => {
+  byId("marketCandidatesView").hidden = true;
   byId("overviewView").hidden = false;
   void loadOverview();
 });
@@ -775,6 +792,7 @@ byId("backToStrategies").addEventListener("click", () => {
   selectedStrategyData = null;
   byId("detailView").hidden = true;
   byId("comparisonView").hidden = true;
+  byId("marketCandidatesView").hidden = true;
   byId("overviewView").hidden = false;
   void loadOverview();
 });
@@ -947,5 +965,7 @@ api("/api/session").then(({ user }) => {
   byId("openUsers").hidden = user.role !== "ADMIN";
 }).catch(showError);
 loadOverview();
-loadOpportunities();
-setInterval(() => selectedStrategyId ? refreshDetail() : byId("comparisonView").hidden ? loadOverview() : undefined, 3_000);
+setInterval(() => {
+  if (selectedStrategyId) return refreshDetail();
+  if (!byId("overviewView").hidden) return loadOverview();
+}, 3_000);
