@@ -1,7 +1,7 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { BinanceExchangeInfoService, type SpotSymbolCatalogItem } from "../binance/binanceExchangeInfoService.js";
 import { BinanceMarketHistoryService, type BinanceCandle, type HistoricalPrice } from "../binance/binanceMarketHistoryService.js";
 import { appConfig } from "../config/env.js";
@@ -17,6 +17,9 @@ const publicDir = path.resolve("public");
 const basePath = normalizeBasePath(process.env.BASE_PATH ?? "");
 const dashboardUsername = process.env.DASHBOARD_USERNAME?.trim() ?? "";
 const dashboardPassword = process.env.DASHBOARD_PASSWORD ?? "";
+const dashboardSessionToken = createHash("sha256")
+  .update(`${dashboardUsername}\0${dashboardPassword}`)
+  .digest("hex");
 if (process.env.NODE_ENV === "production" && (!dashboardUsername || !dashboardPassword)) {
   throw new Error("Production dashboard requires DASHBOARD_USERNAME and DASHBOARD_PASSWORD");
 }
@@ -39,6 +42,11 @@ function secureEqual(actual: string, expected: string): boolean {
 
 function isAuthorized(request: IncomingMessage): boolean {
   if (!dashboardUsername || !dashboardPassword) return true;
+  const cookieToken = request.headers.cookie
+    ?.split(";")
+    .map((cookie) => cookie.trim().split("="))
+    .find(([name]) => name === "dashboard_session")?.[1];
+  if (cookieToken && secureEqual(cookieToken, dashboardSessionToken)) return true;
   const header = request.headers.authorization;
   if (!header?.startsWith("Basic ")) return false;
   try {
@@ -50,6 +58,57 @@ function isAuthorized(request: IncomingMessage): boolean {
   } catch {
     return false;
   }
+}
+
+function loginPage(errorMessage = ""): string {
+  const action = `${basePath}/login` || "/login";
+  return `<!doctype html>
+<html lang="ka">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>შესვლა | Spot Strategy</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #181a21; color: #f4f6f8; padding: 24px; }
+    main { width: min(100%, 420px); border: 1px solid #343944; background: #20232b; padding: 32px; border-radius: 8px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p { margin: 0 0 24px; color: #aeb5bf; }
+    label { display: block; margin: 16px 0 8px; font-weight: 700; }
+    input { width: 100%; border: 1px solid #444b58; border-radius: 6px; padding: 13px 14px; background: #181a21; color: #fff; font: inherit; }
+    input:focus { outline: 2px solid #e5b600; outline-offset: 1px; }
+    button { width: 100%; margin-top: 24px; border: 0; border-radius: 6px; padding: 13px; background: #f0b90b; color: #16181d; font: inherit; font-weight: 800; cursor: pointer; }
+    .error { color: #ff7378; margin: 0 0 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ავტორიზაცია</h1>
+    <p>შედი სტრატეგიების სამართავ პანელში</p>
+    ${errorMessage ? `<div class="error" role="alert">${errorMessage}</div>` : ""}
+    <form method="post" action="${action}">
+      <label for="username">მომხმარებელი</label>
+      <input id="username" name="username" autocomplete="username" required autofocus>
+      <label for="password">პაროლი</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">შესვლა</button>
+    </form>
+  </main>
+</body>
+</html>`;
+}
+
+async function readFormBody(request: IncomingMessage): Promise<URLSearchParams> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > 16_384) throw new Error("მოთხოვნა ზედმეტად დიდია");
+    chunks.push(buffer);
+  }
+  return new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
 }
 
 function getTestnetService(): BinanceTestnetOrderService | null {
@@ -576,6 +635,7 @@ const mimeTypes: Record<string, string> = {
 const server = http.createServer(async (request, response) => {
   const rawPathname = new URL(request.url ?? "/", "http://localhost").pathname;
   const healthPath = `${basePath}/health` || "/health";
+  const loginPath = `${basePath}/login` || "/login";
   if (rawPathname === healthPath || (!basePath && rawPathname === "/health")) {
     return json(response, 200, { status: "ok", service: "binance-strategy-dashboard" });
   }
@@ -584,9 +644,34 @@ const server = http.createServer(async (request, response) => {
     return response.end();
   }
   if (basePath && !rawPathname.startsWith(`${basePath}/`)) return response.writeHead(404).end("ვერ მოიძებნა");
+  if (rawPathname === loginPath && request.method === "GET") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    return response.end(loginPage());
+  }
+  if (rawPathname === loginPath && request.method === "POST") {
+    try {
+      const form = await readFormBody(request);
+      const valid = secureEqual(form.get("username") ?? "", dashboardUsername)
+        && secureEqual(form.get("password") ?? "", dashboardPassword);
+      if (valid) {
+        const cookiePath = `${basePath}/` || "/";
+        const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+        response.writeHead(303, {
+          Location: cookiePath,
+          "Set-Cookie": `dashboard_session=${dashboardSessionToken}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=604800${secure}`,
+          "Cache-Control": "no-store",
+        });
+        return response.end();
+      }
+    } catch {
+      // Invalid form data is shown as a regular login failure.
+    }
+    response.writeHead(401, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    return response.end(loginPage("მომხმარებელი ან პაროლი არასწორია"));
+  }
   if (!isAuthorized(request)) {
-    response.writeHead(401, { "WWW-Authenticate": 'Basic realm="Spot Strategy Dashboard"', "Content-Type": "text/plain; charset=utf-8" });
-    return response.end("ავტორიზაცია საჭიროა");
+    response.writeHead(303, { Location: loginPath, "Cache-Control": "no-store" });
+    return response.end();
   }
   const pathname = basePath ? rawPathname.slice(basePath.length) || "/" : rawPathname;
   try {
