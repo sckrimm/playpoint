@@ -7,7 +7,7 @@ type PgStrategyRow = {
   id: number; symbol: string; initial_entry_price: string; total_budget: string; initial_purchase_amount: string; final_reserve_percent: string; total_invested: string;
   base_asset: string; quote_asset: string;
   total_purchased_quantity: string; total_asset_quantity: string; total_sold_quantity: string;
-  total_sale_proceeds: string; realized_profit: string; remaining_cost_basis: string;
+  total_sale_proceeds: string; realized_profit: string; withdrawn_profit: string; remaining_cost_basis: string;
   average_entry_price: string; status: StrategyRecord["status"];
   execution_environment: StrategyRecord["executionEnvironment"];
   created_at: Date; updated_at: Date;
@@ -31,7 +31,8 @@ export class PostgresStrategyRepository implements StrategyStore {
         total_invested NUMERIC NOT NULL DEFAULT 0,
         total_purchased_quantity NUMERIC NOT NULL DEFAULT 0, total_asset_quantity NUMERIC NOT NULL DEFAULT 0,
         total_sold_quantity NUMERIC NOT NULL DEFAULT 0, total_sale_proceeds NUMERIC NOT NULL DEFAULT 0,
-        realized_profit NUMERIC NOT NULL DEFAULT 0, remaining_cost_basis NUMERIC NOT NULL DEFAULT 0,
+        realized_profit NUMERIC NOT NULL DEFAULT 0, withdrawn_profit NUMERIC NOT NULL DEFAULT 0,
+        remaining_cost_basis NUMERIC NOT NULL DEFAULT 0,
         average_entry_price NUMERIC NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'ACTIVE', created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL
       );
@@ -80,6 +81,7 @@ export class PostgresStrategyRepository implements StrategyStore {
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS total_sold_quantity NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS total_sale_proceeds NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS realized_profit NUMERIC NOT NULL DEFAULT 0`);
+    await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS withdrawn_profit NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS remaining_cost_basis NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_orders ADD COLUMN IF NOT EXISTS execution_environment TEXT NOT NULL DEFAULT 'SIMULATION'`);
     await this.pool.query(`ALTER TABLE bot_executed_levels ADD COLUMN IF NOT EXISTS allocation_percent NUMERIC NOT NULL DEFAULT 0`);
@@ -358,6 +360,41 @@ export class PostgresStrategyRepository implements StrategyStore {
     }
   }
 
+  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<PgStrategyRow>("SELECT * FROM bot_strategies WHERE id = $1 FOR UPDATE", [strategyId]);
+      const row = result.rows[0];
+      if (!row) throw new Error(`Strategy ${strategyId} not found`);
+      const strategy = this.map(row);
+      const remainingQuantity = strategy.totalAssetQuantity - assetQuantity;
+      if (assetQuantity <= 0 || remainingQuantity + 1e-12 < minimumReserveQuantity) {
+        throw new Error("მოგების აღება მუდმივ რეზერვს შეამცირებს");
+      }
+      const costBasisSold = assetQuantity * strategy.averageEntryPrice;
+      const remainingCostBasis = Math.max(0, strategy.remainingCostBasis - costBasisSold);
+      const averageEntryPrice = remainingQuantity <= 1e-12 ? 0 : remainingCostBasis / remainingQuantity;
+      const now = new Date();
+      await client.query(`UPDATE bot_strategies SET total_asset_quantity = $1,
+        total_sold_quantity = total_sold_quantity + $2, total_sale_proceeds = total_sale_proceeds + $3,
+        realized_profit = realized_profit + $4, withdrawn_profit = withdrawn_profit + $3,
+        remaining_cost_basis = $5, average_entry_price = $6, updated_at = $7 WHERE id = $8`,
+      [remainingQuantity, assetQuantity, quoteAmount, quoteAmount - costBasisSold,
+        remainingCostBasis, averageEntryPrice, now, strategyId]);
+      await client.query(`INSERT INTO bot_orders (strategy_id, external_order_id, side, level_percent,
+        market_price, quote_amount, asset_quantity, mode, execution_environment, created_at)
+        VALUES ($1, $2, 'SELL', 0, $3, $4, $5, $6, $6, $7)`,
+      [strategyId, externalOrderId, price, quoteAmount, assetQuantity, strategy.executionEnvironment, now]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async failLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, error: unknown): Promise<void> {
     const message = error instanceof Error ? error.message : "Unknown order error";
     await this.pool.query(`UPDATE bot_executed_levels SET status = 'FAILED', error_message = $1
@@ -474,6 +511,7 @@ export class PostgresStrategyRepository implements StrategyStore {
       totalPurchasedQuantity: Number(row.total_purchased_quantity),
       totalAssetQuantity: Number(row.total_asset_quantity), totalSoldQuantity: Number(row.total_sold_quantity),
       totalSaleProceeds: Number(row.total_sale_proceeds), realizedProfit: Number(row.realized_profit),
+      withdrawnProfit: Number(row.withdrawn_profit ?? 0),
       remainingCostBasis: Number(row.remaining_cost_basis), averageEntryPrice: Number(row.average_entry_price),
       status: row.status, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
     };

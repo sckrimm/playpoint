@@ -495,6 +495,10 @@ function renderDetail(data) {
   byId("soldQuantity").textContent = `გაყიდულია ${number.format(strategy.totalSoldQuantity)} ${strategy.baseAsset}`;
   byId("realizedProfit").textContent = money.format(strategy.realizedProfit);
   byId("realizedProfit").className = strategy.realizedProfit > 0 ? "positive" : strategy.realizedProfit < 0 ? "negative" : "";
+  const availableProfit = data.profitWithdrawal?.availableProfit ?? 0;
+  byId("withdrawnProfit").textContent = money.format(strategy.withdrawnProfit ?? 0);
+  byId("availableProfit").textContent = `ხელმისაწვდომი: ${money.format(availableProfit)}`;
+  byId("withdrawProfit").hidden = strategy.status === "COMPLETED" || availableProfit <= 0 || strategy.totalAssetQuantity <= 0;
   const reserveQuantity = strategy.totalPurchasedQuantity * (strategy.finalReservePercent / 100);
   byId("reserveQuantity").textContent = `${number.format(reserveQuantity)} ${strategy.baseAsset}`;
   byId("reserveQuantity").nextElementSibling.textContent = `ნაყიდი რაოდენობის ${strategy.finalReservePercent}%`;
@@ -536,7 +540,7 @@ function renderDetail(data) {
   const executedSells = sellLevels.filter((level) => level.status === "EXECUTED").length;
   byId("sellLevelCount").textContent = `${executedSells} / ${sellLevels.length}`;
   byId("sellLevels").innerHTML = sellLevels.map((level) => `<div class="level"><span class="level-badge sell-gain">+${level.levelPercent}%</span><div class="level-info"><strong>${formatPrice(level.triggerPrice)}</strong><span>ნაყიდი რაოდენობის ${level.allocationPercent}%</span></div><span class="level-state ${level.status.toLowerCase()}">${labelStatus(level.status)}</span></div>`).join("");
-  byId("orders").innerHTML = orders.length ? orders.map((order) => `<tr><td><span class="order-environment">${order.executionEnvironment}</span></td><td><span class="${order.side === "BUY" ? "buy" : "sell"}">${order.side === "BUY" && order.levelPercent === 0 ? "საწყისი ყიდვა" : `${order.side === "BUY" ? "ყიდვა" : "გაყიდვა"} ${order.side === "BUY" ? "-" : "+"}${order.levelPercent}%`}</span></td><td>${formatPrice(order.marketPrice)}</td><td>${money.format(order.quoteAmount)}</td><td class="quantity-cell ${order.side === "BUY" ? "positive" : "negative"}">${order.side === "BUY" ? "+" : "-"}${number.format(order.assetQuantity)}</td><td>${new Date(order.createdAt).toLocaleString("ka-GE", { dateStyle: "short", timeStyle: "short" })}</td></tr>`).join("") : '<tr><td colspan="6" class="empty">ორდერები ჯერ არ არის</td></tr>';
+  byId("orders").innerHTML = orders.length ? orders.map((order) => `<tr><td><span class="order-environment">${order.executionEnvironment}</span></td><td><span class="${order.side === "BUY" ? "buy" : "sell"}">${order.levelPercent === 0 ? (order.side === "BUY" ? "საწყისი ყიდვა" : "მოგების აღება") : `${order.side === "BUY" ? "ყიდვა" : "გაყიდვა"} ${order.side === "BUY" ? "-" : "+"}${order.levelPercent}%`}</span></td><td>${formatPrice(order.marketPrice)}</td><td>${money.format(order.quoteAmount)}</td><td class="quantity-cell ${order.side === "BUY" ? "positive" : "negative"}">${order.side === "BUY" ? "+" : "-"}${number.format(order.assetQuantity)}</td><td>${new Date(order.createdAt).toLocaleString("ka-GE", { dateStyle: "short", timeStyle: "short" })}</td></tr>`).join("") : '<tr><td colspan="6" class="empty">ორდერები ჯერ არ არის</td></tr>';
   byId("updatedAt").textContent = `განახლდა ${new Date(data.generatedAt).toLocaleTimeString("ka-GE")}`;
 }
 
@@ -783,6 +787,21 @@ byId("resetStrategy").addEventListener("click", async () => {
   try {
     const result = await api(`/api/strategies/${selectedStrategyId}/reset`, { method: "POST" });
     await openDetail(result.strategy.id);
+  } catch (error) { showError(error); }
+});
+byId("withdrawProfit").addEventListener("click", async () => {
+  if (!selectedStrategyId || !selectedStrategyData) return;
+  const available = selectedStrategyData.profitWithdrawal?.availableProfit ?? 0;
+  const value = prompt(`ხელმისაწვდომი მოგება: ${money.format(available)}\nრამდენი USDT-ის აღება გინდა?`, available.toFixed(2));
+  if (value === null) return;
+  const amount = Number(value.replace(",", "."));
+  if (!Number.isFinite(amount) || amount <= 0) return showError(new Error("სწორი თანხა შეიყვანე"));
+  if (!confirm(`${money.format(amount)} მოგების მისაღებად გაიყიდება შესაბამისი ${selectedStrategy.baseAsset}. გაგრძელდეს?`)) return;
+  try {
+    await api(`/api/strategies/${selectedStrategyId}/withdraw-profit`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount }),
+    });
+    await refreshDetail();
   } catch (error) { showError(error); }
 });
 byId("archiveStrategy").addEventListener("click", async () => {

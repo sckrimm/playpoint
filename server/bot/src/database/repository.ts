@@ -20,6 +20,7 @@ export interface StrategyStore {
   claimLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number): Promise<boolean>;
   completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string): Promise<void>;
   completeSell(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void>;
+  withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void>;
   failLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, error: unknown): Promise<void>;
   countOrders(strategyId: number): Promise<number>;
   getOrders(strategyId: number): Promise<OrderRecord[]>;

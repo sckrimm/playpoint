@@ -7,7 +7,7 @@ type StrategyRow = {
   id: number; symbol: string; initial_entry_price: number; total_budget: number; initial_purchase_amount: number; final_reserve_percent: number; total_invested: number;
   base_asset: string; quote_asset: string;
   total_purchased_quantity: number; total_asset_quantity: number; total_sold_quantity: number;
-  total_sale_proceeds: number; realized_profit: number; remaining_cost_basis: number;
+  total_sale_proceeds: number; realized_profit: number; withdrawn_profit: number; remaining_cost_basis: number;
   average_entry_price: number; status: StrategyRecord["status"];
   execution_environment: StrategyRecord["executionEnvironment"];
   created_at: string; updated_at: string;
@@ -240,6 +240,32 @@ export class StrategyRepository implements StrategyStore {
     transaction();
   }
 
+  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void> {
+    const transaction = this.db.transaction(() => {
+      const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
+      if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
+      const remainingQuantity = strategy.total_asset_quantity - assetQuantity;
+      if (assetQuantity <= 0 || remainingQuantity + 1e-12 < minimumReserveQuantity) {
+        throw new Error("მოგების აღება მუდმივ რეზერვს შეამცირებს");
+      }
+      const costBasisSold = assetQuantity * strategy.average_entry_price;
+      const remainingCostBasis = Math.max(0, strategy.remaining_cost_basis - costBasisSold);
+      const averageEntryPrice = remainingQuantity <= 1e-12 ? 0 : remainingCostBasis / remainingQuantity;
+      const now = new Date().toISOString();
+      this.db.prepare(`UPDATE strategies SET total_asset_quantity = ?, total_sold_quantity = total_sold_quantity + ?,
+        total_sale_proceeds = total_sale_proceeds + ?, realized_profit = realized_profit + ?,
+        withdrawn_profit = withdrawn_profit + ?, remaining_cost_basis = ?, average_entry_price = ?, updated_at = ? WHERE id = ?`)
+        .run(remainingQuantity, assetQuantity, quoteAmount, quoteAmount - costBasisSold,
+          quoteAmount, remainingCostBasis, averageEntryPrice, now, strategyId);
+      this.db.prepare(`INSERT INTO orders (strategy_id, external_order_id, side, level_percent,
+        market_price, quote_amount, asset_quantity, mode, execution_environment, created_at)
+        VALUES (?, ?, 'SELL', 0, ?, ?, ?, ?, ?, ?)`)
+        .run(strategyId, externalOrderId, price, quoteAmount, assetQuantity,
+          strategy.execution_environment, strategy.execution_environment, now);
+    });
+    transaction();
+  }
+
   async failLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, error: unknown): Promise<void> {
     const message = error instanceof Error ? error.message : "Unknown order error";
     this.db.prepare(`UPDATE executed_levels SET status = 'FAILED', error_message = ?
@@ -337,6 +363,7 @@ export class StrategyRepository implements StrategyStore {
       totalPurchasedQuantity: row.total_purchased_quantity,
       totalAssetQuantity: row.total_asset_quantity, totalSoldQuantity: row.total_sold_quantity,
       totalSaleProceeds: row.total_sale_proceeds, realizedProfit: row.realized_profit,
+      withdrawnProfit: row.withdrawn_profit ?? 0,
       remainingCostBasis: row.remaining_cost_basis, averageEntryPrice: row.average_entry_price,
       status: row.status, createdAt: row.created_at, updatedAt: row.updated_at,
     };

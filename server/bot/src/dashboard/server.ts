@@ -163,6 +163,10 @@ async function getStrategyState(id: number) {
     const connection = testnetService
       ? { status: "CONNECTED" as const, message: "Binance Spot Testnet დაკავშირებულია; გამოიყენება მხოლოდ სატესტო თანხა", updatedAt: new Date().toISOString() }
       : await repository.getBinanceConnectionState();
+    const totalPnl = market
+      ? strategy.totalAssetQuantity * market.price + strategy.totalSaleProceeds - strategy.totalInvested
+      : null;
+    const availableProfit = totalPnl === null ? null : Math.max(0, totalPnl - strategy.withdrawnProfit);
     return {
       tradingMode: appConfig.tradingMode,
       strategy,
@@ -173,8 +177,40 @@ async function getStrategyState(id: number) {
       market,
       symbolRules,
       account: { connection, balances: accountBalances },
+      profitWithdrawal: { totalPnl, availableProfit, withdrawnProfit: strategy.withdrawnProfit },
       generatedAt: new Date().toISOString(),
     };
+  } finally {
+    await repository.close();
+  }
+}
+
+async function withdrawStrategyProfit(id: number, body: unknown) {
+  const repository = await createStore();
+  try {
+    const strategy = await repository.getById(id);
+    if (strategy.executionEnvironment === "LIVE") throw new Error("LIVE რეჟიმი დაბლოკილია");
+    if (strategy.totalAssetQuantity <= 0) throw new Error("გასაყიდი აქტივი არ არის");
+    const testnetService = strategy.executionEnvironment === "TESTNET" ? requireTestnetService() : null;
+    const storedMarket = await repository.getMarketState(strategy.symbol);
+    const price = testnetService
+      ? await testnetService.getCurrentPrice(strategy.symbol)
+      : storedMarket?.price ?? await exchangeInfo.getCurrentPrice(strategy.symbol);
+    const totalPnl = strategy.totalAssetQuantity * price + strategy.totalSaleProceeds - strategy.totalInvested;
+    const availableProfit = Math.max(0, totalPnl - strategy.withdrawnProfit);
+    const requested = Number((body as { amount?: unknown }).amount ?? availableProfit);
+    if (!Number.isFinite(requested) || requested <= 0) throw new Error("ასაღები თანხა ნულზე მეტი უნდა იყოს");
+    if (requested > availableProfit + 0.00000001) {
+      throw new Error(`ხელმისაწვდომი მოგება არის ${availableProfit.toFixed(2)} USDT`);
+    }
+    const minimumReserveQuantity = strategy.totalPurchasedQuantity * strategy.finalReservePercent / 100;
+    const sellableQuantity = Math.max(0, strategy.totalAssetQuantity - minimumReserveQuantity);
+    const assetQuantity = requested / price;
+    if (assetQuantity > sellableQuantity + 1e-12) throw new Error("მოგების აღება მუდმივ რეზერვს შეამცირებს");
+    const order = await (testnetService ?? new SimulationOrderService()).sell(strategy.symbol, price, assetQuantity);
+    await repository.withdrawProfit(strategy.id, order.price, order.quoteAmount, order.assetQuantity,
+      minimumReserveQuantity, order.orderId);
+    return await repository.getById(strategy.id);
   } finally {
     await repository.close();
   }
@@ -607,6 +643,11 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     } finally {
       await repository.close();
     }
+    return true;
+  }
+  const withdrawMatch = pathname.match(/^\/api\/strategies\/(\d+)\/withdraw-profit$/);
+  if (request.method === "POST" && withdrawMatch) {
+    json(response, 200, { strategy: await withdrawStrategyProfit(Number(withdrawMatch[1]), await readJson(request)) });
     return true;
   }
   const archiveMatch = pathname.match(/^\/api\/strategies\/(\d+)\/archive$/);

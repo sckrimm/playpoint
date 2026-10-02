@@ -53,6 +53,7 @@ export interface StrategyRecord {
   totalSoldQuantity: number;
   totalSaleProceeds: number;
   realizedProfit: number;
+  withdrawnProfit: number;
   remainingCostBasis: number;
   averageEntryPrice: number;
   status: StrategyStatus;

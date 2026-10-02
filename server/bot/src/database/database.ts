@@ -24,6 +24,7 @@ export function openDatabase(filename: string): Database.Database {
       total_sold_quantity REAL NOT NULL DEFAULT 0,
       total_sale_proceeds REAL NOT NULL DEFAULT 0,
       realized_profit REAL NOT NULL DEFAULT 0,
+      withdrawn_profit REAL NOT NULL DEFAULT 0,
       remaining_cost_basis REAL NOT NULL DEFAULT 0,
       average_entry_price REAL NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'ACTIVE',
@@ -111,6 +112,7 @@ export function openDatabase(filename: string): Database.Database {
   ensureColumn(db, "strategies", "total_sold_quantity", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "strategies", "total_sale_proceeds", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "strategies", "realized_profit", "REAL NOT NULL DEFAULT 0");
+  ensureColumn(db, "strategies", "withdrawn_profit", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "strategies", "remaining_cost_basis", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "orders", "execution_environment", "TEXT NOT NULL DEFAULT 'SIMULATION'");
   ensureColumn(db, "executed_levels", "allocation_percent", "REAL NOT NULL DEFAULT 0");
