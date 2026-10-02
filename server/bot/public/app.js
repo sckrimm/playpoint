@@ -43,6 +43,17 @@ let comparisonSelection = new Set();
 let backtestDays = 30;
 let sessionUser = null;
 
+function applyCandidateColumns(columns, persist = true) {
+  const normalized = [2, 3, 4].includes(Number(columns)) ? Number(columns) : 3;
+  byId("opportunityList").style.setProperty("--candidate-columns", normalized);
+  byId("candidateColumns").querySelectorAll("button").forEach((button) => {
+    button.classList.toggle("selected", Number(button.dataset.columns) === normalized);
+  });
+  if (persist) {
+    try { localStorage.setItem("spot-candidate-columns", String(normalized)); } catch {}
+  }
+}
+
 function isDarkTheme() {
   return document.documentElement.dataset.theme === "dark";
 }
@@ -812,6 +823,9 @@ byId("showBuyLevels").addEventListener("click", () => showLevelView("BUY"));
 byId("showSellLevels").addEventListener("click", () => showLevelView("SELL"));
 byId("themeToggle").addEventListener("click", () => applyTheme(isDarkTheme() ? "light" : "dark"));
 byId("refreshOpportunities").addEventListener("click", loadOpportunities);
+byId("candidateColumns").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
+  applyCandidateColumns(button.dataset.columns);
+}));
 byId("openUsers").addEventListener("click", async () => {
   byId("usersDialog").showModal();
   byId("inviteResult").hidden = true;
@@ -959,6 +973,7 @@ byId("deleteTemplate").addEventListener("click", async () => {
 });
 
 applyTheme(document.documentElement.dataset.theme, false);
+try { applyCandidateColumns(localStorage.getItem("spot-candidate-columns"), false); } catch { applyCandidateColumns(3, false); }
 api("/api/session").then(({ user }) => {
   sessionUser = user;
   byId("currentUser").textContent = user.username;
