@@ -62,6 +62,12 @@ export function buildApp() {
     logger: env.NODE_ENV !== "test"
   });
 
+  app.addContentTypeParser(
+    "application/x-www-form-urlencoded",
+    { parseAs: "string" },
+    (_request, body, done) => done(null, body)
+  );
+
   app.addHook("onRequest", async (request, reply) => {
     reply.header("Access-Control-Allow-Origin", request.headers.origin ?? "*");
     reply.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
@@ -89,16 +95,25 @@ export function buildApp() {
       }
     }
     const hasBody = !["GET", "HEAD"].includes(request.method);
+    const proxyBody = !hasBody || request.body === undefined
+      ? undefined
+      : typeof request.body === "string" || request.body instanceof Buffer
+        ? request.body
+        : JSON.stringify(request.body);
     const upstream = await fetch(`${botInternalUrl}${request.url}`, {
       method: request.method,
       headers,
-      body: hasBody && request.body !== undefined ? JSON.stringify(request.body) : undefined,
+      body: proxyBody,
       redirect: "manual",
     });
     const contentType = upstream.headers.get("content-type");
     const location = upstream.headers.get("location");
+    const setCookie = upstream.headers.get("set-cookie");
+    const cacheControl = upstream.headers.get("cache-control");
     if (contentType) reply.type(contentType);
     if (location) reply.header("location", location);
+    if (setCookie) reply.header("set-cookie", setCookie);
+    if (cacheControl) reply.header("cache-control", cacheControl);
     reply.code(upstream.status);
     return reply.send(Buffer.from(await upstream.arrayBuffer()));
   });
