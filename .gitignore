@@ -10,3 +10,7 @@ coverage/
 .vite/
 *.log
 *.tsbuildinfo
+data/
+*.db
+*.db-shm
+*.db-wal

@@ -16,6 +16,7 @@ const currentFilePath = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFilePath);
 const webDistPath = path.resolve(currentDir, "../../../apps/web/dist");
 const webIndexPath = path.join(webDistPath, "index.html");
+const botInternalUrl = `http://127.0.0.1:${process.env.BOT_INTERNAL_PORT ?? "4173"}`;
 
 const mimeTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
@@ -78,6 +79,29 @@ export function buildApp() {
   registerRewardRoutes(app);
   registerLeaderboardRoutes(app);
   registerAdminRoutes(app);
+
+  app.all("/bot", async (_request, reply) => reply.redirect("/bot/", 308));
+  app.all("/bot/*", async (request, reply) => {
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(request.headers)) {
+      if (value !== undefined && !["host", "content-length", "connection"].includes(name)) {
+        headers.set(name, Array.isArray(value) ? value.join(",") : value);
+      }
+    }
+    const hasBody = !["GET", "HEAD"].includes(request.method);
+    const upstream = await fetch(`${botInternalUrl}${request.url}`, {
+      method: request.method,
+      headers,
+      body: hasBody && request.body !== undefined ? JSON.stringify(request.body) : undefined,
+      redirect: "manual",
+    });
+    const contentType = upstream.headers.get("content-type");
+    const location = upstream.headers.get("location");
+    if (contentType) reply.type(contentType);
+    if (location) reply.header("location", location);
+    reply.code(upstream.status);
+    return reply.send(Buffer.from(await upstream.arrayBuffer()));
+  });
 
   app.get("/*", async (request, reply) => {
     const assetPath = getWebAssetPath(request.url);

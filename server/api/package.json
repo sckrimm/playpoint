@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "build": "tsc -b --pretty",
     "dev": "tsx watch src/main.ts",
     "market-coins:expire": "tsx src/scripts/expire-market-coins.ts",
     "start": "tsx src/main.ts",

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ka">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Spot სტრატეგიების პანელი</title>
+    <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">B</span>
+        <div><strong>Spot სტრატეგიების პანელი</strong><span>სიმულაციის მონიტორინგი</span></div>
+      </div>
+      <div class="top-actions">
+        <span class="connection"><i></i> SQLite დაკავშირებულია</span>
+        <button id="themeToggle" class="theme-toggle" type="button" role="switch" aria-checked="false" title="ფერის თემის შეცვლა"><span>ღია</span><i></i><span>მუქი</span></button>
+        <span id="mode" class="mode">SIMULATION</span>
+      </div>
+    </header>
+
+    <main>
+      <section id="overviewView">
+        <div class="overview-head">
+          <div><p class="eyebrow">პორტფელის ავტომატიზაცია</p><h1>სტრატეგიები</h1><p class="muted">დამოუკიდებელი Spot USDT სიმულაციური სტრატეგიები</p></div>
+          <div class="overview-actions">
+            <div class="view-switch" role="tablist"><button id="showActive" class="selected" type="button">აქტიური</button><button id="showArchived" type="button">არქივი</button></div>
+            <button id="openComparison" class="secondary-button" type="button">სტრატეგიების შედარება</button>
+            <button id="openCreate" class="primary-button" type="button">+ სტრატეგიის შექმნა</button>
+          </div>
+        </div>
+        <div id="strategyList" class="strategy-list"><p class="empty-state">სტრატეგიები იტვირთება...</p></div>
+      </section>
+
+      <section id="comparisonView" hidden>
+        <button id="backFromComparison" class="back-button" type="button">← სტრატეგიები</button>
+        <div class="comparison-head">
+          <div><p class="eyebrow">შედეგების ანალიზი</p><h1>სტრატეგიების შედარება</h1><p class="muted">ერთი coin-ის სხვადასხვა შესვლის სტრატეგიები ერთ გვერდზე</p></div>
+          <label class="comparison-symbol">სიმბოლო<select id="comparisonSymbol"></select></label>
+        </div>
+        <div id="comparisonSummary" class="comparison-summary"></div>
+        <div class="comparison-controls">
+          <div><strong>შესადარებელი სტრატეგიები</strong><span>მონიშნე მინიმუმ ორი ვარიანტი</span></div>
+          <div id="comparisonChoices" class="comparison-choices"></div>
+          <button id="comparisonCreate" class="secondary-button" type="button">+ მეორე სტრატეგიის შექმნა</button>
+        </div>
+        <div id="comparisonInsights" class="comparison-insights" hidden></div>
+        <div id="comparisonGrid" class="comparison-grid"><p class="empty-state">შედარება იტვირთება...</p></div>
+        <section class="panel backtest-panel">
+          <div class="section-title backtest-head">
+            <div><h2>ისტორიულ მონაცემებზე ტესტირება</h2><p>იგივე სტრატეგიების შედეგი Binance-ის წარსულ ფასებზე</p></div>
+            <div class="backtest-actions">
+              <div id="backtestRange" class="view-switch" role="tablist" aria-label="Backtest-ის პერიოდი">
+                <button type="button" data-days="30" class="selected">30 დღე</button>
+                <button type="button" data-days="90">90 დღე</button>
+                <button type="button" data-days="365">365 დღე</button>
+              </div>
+              <button id="runBacktest" class="primary-button" type="button">ტესტის გაშვება</button>
+            </div>
+          </div>
+          <p id="backtestState" class="backtest-state">აირჩიე პერიოდი და გაუშვი ისტორიული ტესტი.</p>
+          <div id="backtestResults"></div>
+        </section>
+      </section>
+
+      <div id="detailView" hidden>
+      <button id="backToStrategies" class="back-button" type="button">← სტრატეგიები</button>
+      <section class="strategy-head">
+        <div>
+          <p class="eyebrow">აქტიური სტრატეგია</p>
+          <h1 id="symbol">BTCUSDT</h1>
+          <p class="muted">დონეები ყოველთვის ითვლება საწყისი შესვლის ფასიდან</p>
+        </div>
+        <div class="strategy-badges">
+          <span id="strategyEnvironment" class="environment-badge">სტრატეგიის გარემო: SIMULATION</span>
+          <button id="toggleStatus" class="status" type="button"><i></i><span id="status">აქტიური</span></button>
+        </div>
+      </section>
+      <div id="strategyActions" class="strategy-actions">
+        <button id="editStrategy" type="button">რედაქტირება</button>
+        <button id="resetStrategy" type="button">სიმულაციის განულება</button>
+        <button id="archiveStrategy" class="danger-action" type="button">არქივში გადატანა</button>
+      </div>
+
+      <section class="metrics" aria-label="სტრატეგიის მაჩვენებლები">
+        <article class="market-metric">
+          <span>მიმდინარე ფასი</span>
+          <strong id="currentPrice">—</strong>
+          <small id="priceChange" class="price-change neutral">ცვლილებას ელოდება</small>
+          <small id="marketStatus">WebSocket ელოდება</small>
+        </article>
+        <article><span>საწყისი ფასი</span><strong id="initialPrice">—</strong><small>ფიქსირებული საბაზისო ფასი</small></article>
+        <article><span>საშუალო შესვლა</span><strong id="averageEntry">—</strong><small>შეწონილი საშუალო</small></article>
+        <article><span>ინვესტირებული</span><strong id="invested">—</strong><small id="budgetShare">—</small></article>
+        <article><span>დარჩენილი ბიუჯეტი</span><strong id="remaining">—</strong><small id="totalBudget">—</small></article>
+        <article><span>სიმულაციური აქტივის ბალანსი</span><strong id="assetQuantity">—</strong><small id="simulatedAssetLabel">მხოლოდ სტრატეგიის აღრიცხვა</small></article>
+        <article><span>გაყიდვებიდან მიღებული</span><strong id="saleProceeds">—</strong><small id="soldQuantity">—</small></article>
+        <article><span>რეალიზებული მოგება</span><strong id="realizedProfit">—</strong><small>სიმულაციური შედეგი</small></article>
+        <article><span>მუდმივი რეზერვი</span><strong id="reserveQuantity">—</strong><small>ნაყიდი რაოდენობის 10%</small></article>
+      </section>
+
+      <section class="panel chart-panel">
+        <div class="section-title chart-head">
+          <div><h2>Binance ფასის გრაფიკი</h2><p id="chartSubtitle">სანთლები და სტრატეგიის შესრულებები</p></div>
+          <div id="chartRange" class="view-switch chart-range" role="tablist" aria-label="გრაფიკის პერიოდი">
+            <button type="button" data-range="24h">24 საათი</button>
+            <button type="button" data-range="7d" class="selected">7 დღე</button>
+            <button type="button" data-range="30d">30 დღე</button>
+          </div>
+        </div>
+        <div class="chart-legend" aria-label="გრაფიკის აღნიშვნები">
+          <span class="buy-key">BUY</span><span class="sell-key">SELL</span><span class="average-key">საშუალო შესვლა</span><span class="target-key">სამიზნე დონეები</span>
+        </div>
+        <div id="priceChart" class="price-chart"><p id="chartState">გრაფიკი იტვირთება...</p></div>
+      </section>
+
+      <section class="budget-panel">
+        <div class="section-title"><div><h2>ბიუჯეტის ათვისება</h2><p>ყიდვის დონეების მიხედვით</p></div><strong id="progressLabel">0%</strong></div>
+        <div class="progress"><span id="progressBar"></span></div>
+      </section>
+
+      <section class="rules-panel">
+        <div class="section-title"><div><h2>Binance-ის სიმბოლოს წესები</h2><p id="rulePair">ბირჟის ფილტრები</p></div><span id="ruleStatus" class="count">ელოდება</span></div>
+        <div class="rules-grid">
+          <div><span>მინ. რაოდენობა (minQty)</span><strong id="minQty">—</strong></div>
+          <div><span>რაოდენობის ბიჯი (stepSize)</span><strong id="stepSize">—</strong></div>
+          <div><span>ფასის ბიჯი (tickSize)</span><strong id="tickSize">—</strong></div>
+          <div><span>მინ. ღირებულება (minNotional)</span><strong id="minNotional">—</strong></div>
+        </div>
+      </section>
+
+      <section class="account-panel">
+        <div class="section-title"><div><h2 id="accountTitle">Binance Spot ანგარიში</h2><p id="accountSubtitle">ბალანსები მხოლოდ წაკითხვის რეჟიმში</p></div><span id="accountStatus" class="count">არ არის დაკავშირებული</span></div>
+        <div class="account-grid">
+          <div><span id="quoteBalanceLabel">საბაზო ვალუტა</span><strong id="availableUsdt">—</strong><small id="quoteLocked">დაბლოკილი: —</small></div>
+          <div><span id="coinBalanceLabel">ძირითადი აქტივი</span><strong id="coinBalance">—</strong><small id="coinLocked">დაბლოკილი: —</small></div>
+          <div><span>კავშირი</span><strong id="connectionMessage">—</strong><small id="balanceUpdated">განახლებას ელოდება</small></div>
+        </div>
+      </section>
+
+      <section class="panel strategy-levels-panel">
+        <div class="section-title levels-panel-head">
+          <div><h2>სტრატეგიის დონეები</h2><p>შესყიდვისა და გაყიდვის ავტომატური ზღვრები</p></div>
+          <div class="view-switch level-view-switch" role="tablist" aria-label="დონეების ტიპი">
+            <button id="showBuyLevels" class="selected" type="button" role="tab" aria-selected="true">ყიდვა</button>
+            <button id="showSellLevels" type="button" role="tab" aria-selected="false">გაყიდვა</button>
+          </div>
+        </div>
+        <div id="buyLevelsView" class="level-view">
+          <div class="section-title level-view-title"><div><h2>ყიდვის დონეები</h2><p>საწყის შესვლის ფასზე დაფუძნებული</p></div><span id="levelCount" class="count">0 / 4</span></div>
+          <div id="levels" class="levels"></div>
+        </div>
+        <div id="sellLevelsView" class="level-view" hidden>
+          <div class="section-title level-view-title"><div><h2>გაყიდვის დონეები</h2><p>საწყისი შესვლის ფასიდან ზრდის მიხედვით</p></div><span id="sellLevelCount" class="count">0 / 5</span></div>
+          <div id="sellLevels" class="levels"></div>
+        </div>
+      </section>
+
+      <div class="content-grid orders-grid">
+        <section class="panel">
+          <div class="section-title"><div><h2>ორდერების ისტორია</h2><p>ბოლო სიმულაციური შესრულებები</p></div><span id="updatedAt" class="updated">—</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>გარემო</th><th>დონე</th><th>ფასი</th><th>თანხა</th><th>აქტივი</th><th>დრო</th></tr></thead>
+              <tbody id="orders"><tr><td colspan="5" class="empty">მონაცემები იტვირთება...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+      </div>
+      <p id="error" class="error" hidden></p>
+    </main>
+
+    <dialog id="createDialog">
+      <form id="createForm" method="dialog">
+        <div class="dialog-head"><div><h2 id="formTitle">სტრატეგიის შექმნა</h2><p id="formSubtitle">მხოლოდ აქტიური Binance Spot USDT წყვილები</p></div><button id="closeCreate" class="icon-button" type="button" aria-label="დახურვა">×</button></div>
+        <div class="template-picker">
+          <label>სტრატეგიის შაბლონი<select id="templateSelect"></select></label>
+          <button id="deleteTemplate" class="icon-button" type="button" aria-label="შაბლონის წაშლა" title="შაბლონის წაშლა" hidden>×</button>
+        </div>
+        <label>სიმბოლო<input id="symbolSearch" name="symbol" list="symbolOptions" autocomplete="off" placeholder="მოძებნე, მაგალითად SOL" required /></label>
+        <datalist id="symbolOptions"></datalist>
+        <label>საწყისი შესვლის ფასი<input id="initialEntryPrice" name="initialEntryPrice" type="number" min="0" step="any" required /><span id="initialPriceHint" class="field-hint" hidden></span></label>
+        <label>სრული ბიუჯეტი (USDT)<input name="totalBudget" type="number" min="0" step="any" required /></label>
+        <label>საწყისი შესყიდვა (USDT) — არასავალდებულო<input id="initialPurchaseAmount" name="initialPurchaseAmount" type="number" min="0" step="any" value="0" /><span id="initialPurchaseHint" class="field-hint">თუ მიუთითებ თანხას, ბოტი შექმნისთანავე იყიდის მიმდინარე ფასში. თანხა შედის სრულ ბიუჯეტში; დანარჩენი BUY დონეებზე განაწილდება.</span></label>
+        <details id="customStrategySettings" class="custom-strategy-settings">
+          <summary><span><strong>ინდივიდუალური პარამეტრები</strong><small>BUY/SELL დონეების ხელით შეცვლა</small></span><i aria-hidden="true">⌄</i></summary>
+          <div class="custom-settings-content">
+            <section class="level-editor">
+              <div class="editor-title"><div><strong>შესყიდვის დონეები</strong><span>ფასის კლება / ბიუჯეტის წილი</span></div><button id="addBuyLevel" class="icon-button" type="button" title="BUY დონის დამატება">+</button></div>
+              <div id="buyLevelEditor" class="level-editor-rows"></div>
+              <p id="buyLevelError" class="level-validation-error" hidden></p>
+            </section>
+            <section class="level-editor">
+              <div class="editor-title"><div><strong>გაყიდვის დონეები</strong><span>ფასის ზრდა / ნაყიდი რაოდენობის წილი</span></div><button id="addSellLevel" class="icon-button" type="button" title="SELL დონის დამატება">+</button></div>
+              <div id="sellLevelEditor" class="level-editor-rows"></div>
+              <p id="sellLevelError" class="level-validation-error" hidden></p>
+            </section>
+            <label>საბოლოო რეზერვი (%)<input id="finalReservePercent" name="finalReservePercent" type="number" min="0" max="100" step="any" value="10" required /></label>
+            <label class="save-template-option"><input id="saveAsTemplate" type="checkbox" /> ამ პარამეტრების შაბლონად შენახვა</label>
+            <label id="templateNameLabel" hidden>შაბლონის სახელი<input id="templateName" maxlength="60" placeholder="მაგალითად: ჩემი -20% სტრატეგია" /></label>
+          </div>
+        </details>
+        <label>გარემო<select id="executionEnvironment" name="executionEnvironment"><option value="SIMULATION">SIMULATION — შიდა სიმულაცია</option><option value="TESTNET">TESTNET — Binance-ის სატესტო თანხა</option></select><span class="field-hint">TESTNET რეალური API ორდერის ფორმატს იყენებს, მაგრამ მხოლოდ Binance Spot Testnet-ის სატესტო ბალანსზე. LIVE დაბლოკილია.</span></label>
+        <p id="formError" class="form-error" hidden></p>
+        <button id="formSubmit" class="primary-button submit-button" type="submit">სტრატეგიის შექმნა</button>
+      </form>
+    </dialog>
+    <script src="vendor/lightweight-charts.js" defer></script>
+    <script src="app.js" defer></script>
+  </body>
+</html>
