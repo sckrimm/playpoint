@@ -15,6 +15,11 @@ const formatDrawdown = (value) => value == null ? "—" : `${value >= 0.005 ? "-
 const performanceClass = (value) => value > 0 ? "positive" : value < 0 ? "negative" : "neutral";
 const riskLabel = (risk) => ({ LOW: "დაბალი", MEDIUM: "საშუალო", HIGH: "მაღალი" })[risk] ?? risk;
 const signalLabel = (signal) => ({ WATCH: "დასაკვირვებელი", NEUTRAL: "ნეიტრალური", HIGH_RISK: "მაღალი რისკი" })[signal] ?? signal;
+const binanceTradeUrl = (symbol) => {
+  const quote = symbol.endsWith("USDT") ? "USDT" : "";
+  const base = quote ? symbol.slice(0, -quote.length) : symbol;
+  return `https://www.binance.com/en/trade/${encodeURIComponent(base)}_${encodeURIComponent(quote || "USDT")}`;
+};
 const byId = (id) => document.getElementById(id);
 let selectedStrategyId = null;
 let selectedStrategyStatus = null;
@@ -329,7 +334,7 @@ async function loadOpportunities() {
       <div class="opportunity-head"><div><strong>${item.symbol}</strong><small class="signal-${item.signal.toLowerCase().replace("_", "-")}">${signalLabel(item.signal)}</small></div><span class="opportunity-score signal-${item.signal.toLowerCase().replace("_", "-")}">${item.score}/100</span></div>
       <div class="opportunity-metrics"><span>ფასი <strong>${formatPrice(item.price)}</strong></span><span>24ს <strong class="${performanceClass(item.change24hPercent)}">${item.change24hPercent >= 0 ? "+" : ""}${item.change24hPercent.toFixed(2)}%</strong></span><span>RSI <strong>${item.rsi14 == null ? "—" : item.rsi14.toFixed(1)}</strong></span><span>რისკი <strong>${riskLabel(item.risk)}</strong></span></div>
       <div class="opportunity-reasons">${item.reasons.join(" · ")}</div>
-      <button class="card-action opportunity-create" data-symbol="${item.symbol}" type="button">SIMULATION სტრატეგიის შექმნა</button>
+      <div class="opportunity-actions"><a class="card-action binance-link" href="${binanceTradeUrl(item.symbol)}" target="_blank" rel="noopener noreferrer" title="${item.symbol}-ის Binance Spot გრაფიკის გახსნა">Binance გრაფიკი ↗</a><button class="card-action opportunity-create" data-symbol="${item.symbol}" type="button">SIMULATION სტრატეგიის შექმნა</button></div>
     </article>`).join("") : '<p class="empty-state">შეფასებისთვის საკმარისი მონაცემი ვერ მოიძებნა.</p>';
     list.querySelectorAll(".opportunity-create").forEach((button) => button.addEventListener("click", async () => {
       byId("createDialog").showModal();
