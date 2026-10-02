@@ -11,6 +11,7 @@ import { SimulationOrderService } from "../services/simulationOrderService.js";
 import { BinanceTestnetOrderService } from "../services/binanceTestnetOrderService.js";
 import { runStrategyBacktest } from "../services/strategyBacktestService.js";
 import type { BuyLevelConfig, OrderRecord, SellLevelConfig, StrategyConfig, StrategyRecord } from "../types/strategy.js";
+import { UserAuthStore, type DashboardUser } from "../auth/userAuthStore.js";
 
 const port = Number(process.env.DASHBOARD_PORT ?? process.env.PORT ?? 4173);
 const publicDir = path.resolve("public");
@@ -20,8 +21,14 @@ const dashboardPassword = process.env.DASHBOARD_PASSWORD ?? "";
 const dashboardSessionToken = createHash("sha256")
   .update(`${dashboardUsername}\0${dashboardPassword}`)
   .digest("hex");
+const userAuthStore = appConfig.databaseUrl ? new UserAuthStore(appConfig.databaseUrl) : null;
 if (process.env.NODE_ENV === "production" && (!dashboardUsername || !dashboardPassword)) {
   throw new Error("Production dashboard requires DASHBOARD_USERNAME and DASHBOARD_PASSWORD");
+}
+if (userAuthStore) {
+  const migrationStore = await createStore();
+  await migrationStore.close();
+  await userAuthStore.initialize(dashboardUsername, dashboardPassword);
 }
 const exchangeInfo = new BinanceExchangeInfoService();
 const marketHistory = new BinanceMarketHistoryService();
@@ -40,12 +47,14 @@ function secureEqual(actual: string, expected: string): boolean {
   return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
-function isAuthorized(request: IncomingMessage): boolean {
+function getCookie(request: IncomingMessage, name: string): string | undefined {
+  return request.headers.cookie?.split(";").map((cookie) => cookie.trim().split("="))
+    .find(([cookieName]) => cookieName === name)?.[1];
+}
+
+function isLegacyAuthorized(request: IncomingMessage): boolean {
   if (!dashboardUsername || !dashboardPassword) return true;
-  const cookieToken = request.headers.cookie
-    ?.split(";")
-    .map((cookie) => cookie.trim().split("="))
-    .find(([name]) => name === "dashboard_session")?.[1];
+  const cookieToken = getCookie(request, "dashboard_session");
   if (cookieToken && secureEqual(cookieToken, dashboardSessionToken)) return true;
   const header = request.headers.authorization;
   if (!header?.startsWith("Basic ")) return false;
@@ -80,6 +89,7 @@ function loginPage(errorMessage = ""): string {
     input:focus { outline: 2px solid #e5b600; outline-offset: 1px; }
     button { width: 100%; margin-top: 24px; border: 0; border-radius: 6px; padding: 13px; background: #f0b90b; color: #16181d; font: inherit; font-weight: 800; cursor: pointer; }
     .error { color: #ff7378; margin: 0 0 12px; }
+    a { display: block; margin-top: 18px; color: #f0b90b; text-align: center; }
   </style>
 </head>
 <body>
@@ -94,9 +104,22 @@ function loginPage(errorMessage = ""): string {
       <input id="password" name="password" type="password" autocomplete="current-password" required>
       <button type="submit">შესვლა</button>
     </form>
+    ${userAuthStore ? `<a href="${basePath}/register">მოწვევის კოდით რეგისტრაცია</a>` : ""}
   </main>
 </body>
 </html>`;
+}
+
+function registerPage(errorMessage = ""): string {
+  const action = `${basePath}/register` || "/register";
+  return loginPage(errorMessage)
+    .replace("შესვლა | Spot Strategy", "რეგისტრაცია | Spot Strategy")
+    .replace("<h1>ავტორიზაცია</h1>", "<h1>რეგისტრაცია</h1>")
+    .replace("შედი სტრატეგიების სამართავ პანელში", "შექმენი ანგარიში ერთჯერადი მოწვევის კოდით")
+    .replace(`<form method="post" action="${basePath}/login">`, `<form method="post" action="${action}">\n      <label for="inviteCode">მოწვევის კოდი</label>\n      <input id="inviteCode" name="inviteCode" required autofocus>`)
+    .replace(" required autofocus>", " required>")
+    .replace("<button type=\"submit\">შესვლა</button>", "<button type=\"submit\">ანგარიშის შექმნა</button>")
+    .replace(/<a href="[^"]+\/register">[\s\S]*?<\/a>/, `<a href="${basePath}/login">უკან შესვლაზე</a>`);
 }
 
 async function readFormBody(request: IncomingMessage): Promise<URLSearchParams> {
@@ -143,7 +166,18 @@ async function getHourlyReference(symbol: string): Promise<HistoricalPrice | nul
   }
 }
 
-async function getStrategyState(id: number) {
+async function ensureStrategyAccess(id: number, user: DashboardUser | null): Promise<void> {
+  if (userAuthStore && user) await userAuthStore.assertStrategyAccess(id, user);
+}
+
+async function visibleStrategies(strategies: StrategyRecord[], user: DashboardUser | null): Promise<StrategyRecord[]> {
+  if (!userAuthStore || !user) return strategies;
+  const visibleIds = await userAuthStore.filterStrategyIds(strategies.map((strategy) => strategy.id), user);
+  return strategies.filter((strategy) => visibleIds.has(strategy.id));
+}
+
+async function getStrategyState(id: number, user: DashboardUser | null = null) {
+  await ensureStrategyAccess(id, user);
   const repository = await createStore();
   try {
     const strategy = await repository.getById(id);
@@ -185,7 +219,8 @@ async function getStrategyState(id: number) {
   }
 }
 
-async function withdrawStrategyProfit(id: number, body: unknown) {
+async function withdrawStrategyProfit(id: number, body: unknown, user: DashboardUser | null) {
+  await ensureStrategyAccess(id, user);
   const repository = await createStore();
   try {
     const strategy = await repository.getById(id);
@@ -216,10 +251,11 @@ async function withdrawStrategyProfit(id: number, body: unknown) {
   }
 }
 
-async function getStrategiesOverview(archived = false) {
+async function getStrategiesOverview(archived = false, user: DashboardUser | null = null) {
   const repository = await createStore();
   try {
-    const strategies = archived ? await repository.listArchivedStrategies() : await repository.listStrategies();
+    const allStrategies = archived ? await repository.listArchivedStrategies() : await repository.listStrategies();
+    const strategies = await visibleStrategies(allStrategies, user);
     return await Promise.all(strategies.map(async (strategy) => {
       const market = await repository.getMarketState(strategy.symbol);
       const levels = await repository.getLevels(strategy.id);
@@ -286,10 +322,10 @@ function calculateMaximumDrawdown(strategy: StrategyRecord, orders: OrderRecord[
   return Math.max(0, maximumDrawdown);
 }
 
-async function getStrategyComparison(symbol: string) {
+async function getStrategyComparison(symbol: string, user: DashboardUser | null) {
   const repository = await createStore();
   try {
-    const strategies = (await repository.listStrategies()).filter((strategy) => strategy.symbol === symbol);
+    const strategies = (await visibleStrategies(await repository.listStrategies(), user)).filter((strategy) => strategy.symbol === symbol);
     const market = await repository.getMarketState(symbol);
     let candles: BinanceCandle[] = [];
     try { candles = await marketHistory.getCandles(symbol, "1h", 1_000); } catch (error) {
@@ -328,10 +364,10 @@ async function getStrategyComparison(symbol: string) {
   }
 }
 
-async function getStrategyBacktests(symbol: string, days: number) {
+async function getStrategyBacktests(symbol: string, days: number, user: DashboardUser | null) {
   const repository = await createStore();
   try {
-    const strategies = (await repository.listStrategies()).filter((strategy) => strategy.symbol === symbol);
+    const strategies = (await visibleStrategies(await repository.listStrategies(), user)).filter((strategy) => strategy.symbol === symbol);
     const endTime = Date.now();
     const startTime = endTime - days * 24 * 60 * 60_000;
     const candles = await marketHistory.getCandlesRange(symbol, "1h", startTime, endTime);
@@ -367,7 +403,8 @@ async function getStrategyBacktests(symbol: string, days: number) {
   }
 }
 
-async function updateStrategy(id: number, body: unknown) {
+async function updateStrategy(id: number, body: unknown, user: DashboardUser | null) {
+  await ensureStrategyAccess(id, user);
   const input = body as Record<string, unknown>;
   const symbol = String(input.symbol ?? "").toUpperCase();
   const initialEntryPrice = Number(input.initialEntryPrice);
@@ -405,7 +442,7 @@ async function updateStrategy(id: number, body: unknown) {
   }
 }
 
-async function createStrategy(body: unknown) {
+async function createStrategy(body: unknown, user: DashboardUser | null) {
   const input = body as Record<string, unknown>;
   const symbol = String(input.symbol ?? "").toUpperCase();
   const totalBudget = Number(input.totalBudget);
@@ -413,6 +450,9 @@ async function createStrategy(body: unknown) {
   const executionEnvironment = String(input.executionEnvironment ?? "SIMULATION").toUpperCase();
   if (executionEnvironment === "LIVE") throw new Error("LIVE რეჟიმი უსაფრთხოების მიზნით დაბლოკილია");
   if (executionEnvironment !== "SIMULATION" && executionEnvironment !== "TESTNET") throw new Error("გარემო უნდა იყოს SIMULATION ან TESTNET");
+  if (userAuthStore && user?.role !== "ADMIN" && executionEnvironment === "TESTNET") {
+    throw new Error("TESTNET ჩაირთვება პირადი API გასაღებების დამატების შემდეგ; ამ ეტაპზე გამოიყენე SIMULATION");
+  }
   const testnetService = executionEnvironment === "TESTNET" ? requireTestnetService() : null;
   if (!Number.isFinite(totalBudget) || totalBudget <= 0) throw new Error("სრული ბიუჯეტი ნულზე მეტი უნდა იყოს");
   const catalogItem = (await getCatalog()).find((item) => item.symbol === symbol);
@@ -443,6 +483,7 @@ async function createStrategy(body: unknown) {
   const repository = await createStore();
   try {
     let strategy = await repository.createStrategy(config);
+    if (userAuthStore && user) await userAuthStore.assignStrategy(strategy.id, user.id);
     await repository.saveSymbolRules(rules);
     if (initialPurchaseAmount > 0) {
       const currentPrice = testnetService
@@ -520,7 +561,21 @@ function json(response: ServerResponse, status: number, value: unknown): void {
   response.end(JSON.stringify(value));
 }
 
-async function handleApi(request: IncomingMessage, response: ServerResponse, pathname: string): Promise<boolean> {
+async function handleApi(request: IncomingMessage, response: ServerResponse, pathname: string, user: DashboardUser | null): Promise<boolean> {
+  if (request.method === "GET" && pathname === "/api/session") {
+    json(response, 200, { user: user ?? { username: dashboardUsername, role: "ADMIN" } });
+    return true;
+  }
+  if (request.method === "POST" && pathname === "/api/admin/invites") {
+    if (!userAuthStore || user?.role !== "ADMIN") throw new Error("მხოლოდ ადმინისტრატორს შეუძლია მოწვევის შექმნა");
+    json(response, 201, { invite: await userAuthStore.createInvite(user.id) });
+    return true;
+  }
+  if (request.method === "GET" && pathname === "/api/admin/users") {
+    if (!userAuthStore || user?.role !== "ADMIN") throw new Error("მხოლოდ ადმინისტრატორს აქვს მომხმარებლების ნახვის უფლება");
+    json(response, 200, { users: await userAuthStore.listUsers() });
+    return true;
+  }
   if (request.method === "GET" && pathname === "/api/strategy-templates") {
     json(response, 200, { templates: await getStrategyTemplates() });
     return true;
@@ -558,18 +613,18 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     return true;
   }
   if (request.method === "GET" && pathname === "/api/strategies") {
-    json(response, 200, { strategies: await getStrategiesOverview() });
+    json(response, 200, { strategies: await getStrategiesOverview(false, user) });
     return true;
   }
   if (request.method === "GET" && pathname === "/api/strategies/archived") {
-    json(response, 200, { strategies: await getStrategiesOverview(true) });
+    json(response, 200, { strategies: await getStrategiesOverview(true, user) });
     return true;
   }
   if (request.method === "GET" && pathname === "/api/strategies/comparison") {
     const requestUrl = new URL(request.url ?? pathname, "http://localhost");
     const symbol = String(requestUrl.searchParams.get("symbol") ?? "").toUpperCase();
     if (!/^[A-Z0-9]+USDT$/.test(symbol)) throw new Error("შედარებისთვის სწორი USDT სიმბოლო აირჩიე");
-    json(response, 200, await getStrategyComparison(symbol));
+    json(response, 200, await getStrategyComparison(symbol, user));
     return true;
   }
   if (request.method === "GET" && pathname === "/api/strategies/backtest") {
@@ -578,11 +633,11 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     const days = Number(requestUrl.searchParams.get("days") ?? 30);
     if (!/^[A-Z0-9]+USDT$/.test(symbol)) throw new Error("Backtest-ისთვის სწორი USDT სიმბოლო აირჩიე");
     if (![30, 90, 365].includes(days)) throw new Error("Backtest-ის პერიოდი უნდა იყოს 30, 90 ან 365 დღე");
-    json(response, 200, await getStrategyBacktests(symbol, days));
+    json(response, 200, await getStrategyBacktests(symbol, days, user));
     return true;
   }
   if (request.method === "POST" && pathname === "/api/strategies") {
-    json(response, 201, { strategy: await createStrategy(await readJson(request)) });
+    json(response, 201, { strategy: await createStrategy(await readJson(request), user) });
     return true;
   }
   const chartMatch = pathname.match(/^\/api\/strategies\/(\d+)\/chart$/);
@@ -595,6 +650,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
       : range === "30d" ? { interval: "1h" as const, limit: 720 } : { interval: "1h" as const, limit: 168 };
     const repository = await createStore();
     try {
+      await ensureStrategyAccess(strategyId, user);
       const strategy = await repository.getById(strategyId);
       json(response, 200, {
         symbol: strategy.symbol,
@@ -609,11 +665,11 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
   }
   const detailMatch = pathname.match(/^\/api\/strategies\/(\d+)$/);
   if (request.method === "GET" && detailMatch) {
-    json(response, 200, await getStrategyState(Number(detailMatch[1])));
+    json(response, 200, await getStrategyState(Number(detailMatch[1]), user));
     return true;
   }
   if (request.method === "PATCH" && detailMatch) {
-    json(response, 200, { strategy: await updateStrategy(Number(detailMatch[1]), await readJson(request)) });
+    json(response, 200, { strategy: await updateStrategy(Number(detailMatch[1]), await readJson(request), user) });
     return true;
   }
   const statusMatch = pathname.match(/^\/api\/strategies\/(\d+)\/status$/);
@@ -622,6 +678,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     if (body.status !== "ACTIVE" && body.status !== "PAUSED") throw new Error("სტატუსი უნდა იყოს ACTIVE ან PAUSED");
     const repository = await createStore();
     try {
+      await ensureStrategyAccess(Number(statusMatch[1]), user);
       json(response, 200, { strategy: await repository.setStrategyStatus(Number(statusMatch[1]), body.status) });
     } finally {
       await repository.close();
@@ -632,7 +689,9 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
   if (request.method === "POST" && resetMatch) {
     const repository = await createStore();
     try {
+      await ensureStrategyAccess(Number(resetMatch[1]), user);
       let strategy = await repository.resetSimulationStrategyById(Number(resetMatch[1]));
+      if (userAuthStore && user) await userAuthStore.assignStrategy(strategy.id, user.id);
       if (strategy.initialPurchaseAmount > 0) {
         const currentPrice = await exchangeInfo.getCurrentPrice(strategy.symbol);
         const order = await new SimulationOrderService().buy(strategy.symbol, currentPrice, strategy.initialPurchaseAmount);
@@ -647,13 +706,14 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
   }
   const withdrawMatch = pathname.match(/^\/api\/strategies\/(\d+)\/withdraw-profit$/);
   if (request.method === "POST" && withdrawMatch) {
-    json(response, 200, { strategy: await withdrawStrategyProfit(Number(withdrawMatch[1]), await readJson(request)) });
+    json(response, 200, { strategy: await withdrawStrategyProfit(Number(withdrawMatch[1]), await readJson(request), user) });
     return true;
   }
   const archiveMatch = pathname.match(/^\/api\/strategies\/(\d+)\/archive$/);
   if (request.method === "POST" && archiveMatch) {
     const repository = await createStore();
     try {
+      await ensureStrategyAccess(Number(archiveMatch[1]), user);
       json(response, 200, { strategy: await repository.archiveStrategy(Number(archiveMatch[1])) });
     } finally {
       await repository.close();
@@ -661,9 +721,9 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     return true;
   }
   if (request.method === "GET" && pathname === "/api/state") {
-    const strategies = await getStrategiesOverview();
+    const strategies = await getStrategiesOverview(false, user);
     if (!strategies[0]) throw new Error("სტრატეგია ჯერ არ არსებობს");
-    json(response, 200, await getStrategyState(strategies[0].id));
+    json(response, 200, await getStrategyState(strategies[0].id, user));
     return true;
   }
   return false;
@@ -677,6 +737,7 @@ const server = http.createServer(async (request, response) => {
   const rawPathname = new URL(request.url ?? "/", "http://localhost").pathname;
   const healthPath = `${basePath}/health` || "/health";
   const loginPath = `${basePath}/login` || "/login";
+  const registerPath = `${basePath}/register` || "/register";
   if (rawPathname === healthPath || (!basePath && rawPathname === "/health")) {
     return json(response, 200, { status: "ok", service: "binance-strategy-dashboard" });
   }
@@ -692,14 +753,17 @@ const server = http.createServer(async (request, response) => {
   if (rawPathname === loginPath && request.method === "POST") {
     try {
       const form = await readFormBody(request);
-      const valid = secureEqual(form.get("username") ?? "", dashboardUsername)
-        && secureEqual(form.get("password") ?? "", dashboardPassword);
-      if (valid) {
+      const username = form.get("username") ?? "";
+      const password = form.get("password") ?? "";
+      const user = userAuthStore ? await userAuthStore.authenticate(username, password) : null;
+      const legacyValid = !userAuthStore && secureEqual(username, dashboardUsername) && secureEqual(password, dashboardPassword);
+      if (user || legacyValid) {
         const cookiePath = `${basePath}/` || "/";
         const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+        const token = userAuthStore && user ? await userAuthStore.createSession(user.id) : dashboardSessionToken;
         response.writeHead(303, {
           Location: cookiePath,
-          "Set-Cookie": `dashboard_session=${dashboardSessionToken}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=604800${secure}`,
+          "Set-Cookie": `dashboard_session=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=604800${secure}`,
           "Cache-Control": "no-store",
         });
         return response.end();
@@ -710,13 +774,32 @@ const server = http.createServer(async (request, response) => {
     response.writeHead(401, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
     return response.end(loginPage("მომხმარებელი ან პაროლი არასწორია"));
   }
-  if (!isAuthorized(request)) {
+  if (rawPathname === registerPath && request.method === "GET" && userAuthStore) {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    return response.end(registerPage());
+  }
+  if (rawPathname === registerPath && request.method === "POST" && userAuthStore) {
+    try {
+      const form = await readFormBody(request);
+      const user = await userAuthStore.register(form.get("inviteCode") ?? "", form.get("username") ?? "", form.get("password") ?? "");
+      const token = await userAuthStore.createSession(user.id);
+      const cookiePath = `${basePath}/` || "/";
+      const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+      response.writeHead(303, { Location: cookiePath, "Set-Cookie": `dashboard_session=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=604800${secure}` });
+      return response.end();
+    } catch (error) {
+      response.writeHead(400, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      return response.end(registerPage(error instanceof Error ? error.message : "რეგისტრაცია ვერ შესრულდა"));
+    }
+  }
+  const currentUser = userAuthStore ? await userAuthStore.getSession(getCookie(request, "dashboard_session")) : null;
+  if (userAuthStore ? !currentUser : !isLegacyAuthorized(request)) {
     response.writeHead(303, { Location: loginPath, "Cache-Control": "no-store" });
     return response.end();
   }
   const pathname = basePath ? rawPathname.slice(basePath.length) || "/" : rawPathname;
   try {
-    if (pathname.startsWith("/api/") && await handleApi(request, response, pathname)) return;
+    if (pathname.startsWith("/api/") && await handleApi(request, response, pathname, currentUser)) return;
     if (pathname.startsWith("/api/")) return json(response, 404, { error: "API მისამართი ვერ მოიძებნა" });
   } catch (error) {
     return json(response, 400, { error: error instanceof Error ? error.message : "უცნობი შეცდომა" });

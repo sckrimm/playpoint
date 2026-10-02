@@ -83,6 +83,9 @@ h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: 0; }
 .strategy-actions button { height: 34px; padding: 0 12px; border: 1px solid #cfd8d3; border-radius: 5px; color: #3f4c45; background: #fff; font-weight: 750; }
 .strategy-actions .danger-action { color: #a12d2d; border-color: #e4c5c5; }
 .strategy-actions .profit-action { color: #117448; border-color: #9fd7bd; background: #eefaf4; }
+.users-list { display: grid; gap: 8px; margin: 18px 0; }
+.user-row { display: flex; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid #dce2df; border-radius: 6px; }
+.invite-result { margin-top: 14px; padding: 14px; border: 1px solid #d7b43b; border-radius: 6px; background: #fff8dc; overflow-wrap: anywhere; }
 .environment-badge { padding: 7px 10px; border-radius: 6px; background: #fff3bf; border: 1px solid #e2c854; color: #665000; font-size: 11px; font-weight: 800; }
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border: 1px solid #dce2df; background: #fff; border-radius: 8px; overflow: hidden; }
 .metrics article { min-width: 0; padding: 20px; border-right: 1px solid #e2e7e4; }
@@ -311,6 +314,8 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
 [data-theme="dark"] .back-button,
 [data-theme="dark"] .strategy-actions button { color: #c8d1cc; background: #1e2329; border-color: #3a414b; }
 [data-theme="dark"] .strategy-actions .profit-action { color: #4dcc91; border-color: #276647; background: #172a21; }
+[data-theme="dark"] .user-row { border-color: #3a414b; }
+[data-theme="dark"] .invite-result { color: #f3d76b; border-color: #6f5b1e; background: #2c2818; }
 [data-theme="dark"] .comparison-symbol select { color: #eaecef; background: #1e2329; border-color: #3a414b; }
 [data-theme="dark"] .comparison-card.best { border-color: #3f9c70; }
 [data-theme="dark"] .comparison-card-head { border-color: #303a35; }

@@ -15,6 +15,8 @@
         <div><strong>Spot სტრატეგიების პანელი</strong><span>სიმულაციის მონიტორინგი</span></div>
       </div>
       <div class="top-actions">
+        <span id="currentUser" class="connection">—</span>
+        <button id="openUsers" class="secondary-button" type="button" hidden>მომხმარებლები</button>
         <span class="connection"><i></i> SQLite დაკავშირებულია</span>
         <button id="themeToggle" class="theme-toggle" type="button" role="switch" aria-checked="false" title="ფერის თემის შეცვლა"><span>ღია</span><i></i><span>მუქი</span></button>
         <span id="mode" class="mode">SIMULATION</span>
@@ -209,6 +211,12 @@
         <p id="formError" class="form-error" hidden></p>
         <button id="formSubmit" class="primary-button submit-button" type="submit">სტრატეგიის შექმნა</button>
       </form>
+    </dialog>
+    <dialog id="usersDialog">
+      <div class="dialog-head"><div><h2>მომხმარებლები</h2><p>ანგარიშები და ერთჯერადი მოწვევები</p></div><button id="closeUsers" class="icon-button" type="button" aria-label="დახურვა">×</button></div>
+      <div id="usersList" class="users-list"></div>
+      <button id="createInvite" class="primary-button submit-button" type="button">მოწვევის კოდის შექმნა</button>
+      <div id="inviteResult" class="invite-result" hidden></div>
     </dialog>
     <script src="vendor/lightweight-charts.js" defer></script>
     <script src="app.js" defer></script>

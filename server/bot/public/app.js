@@ -39,6 +39,7 @@ let activeStrategies = [];
 let comparisonData = null;
 let comparisonSelection = new Set();
 let backtestDays = 30;
+let sessionUser = null;
 
 function isDarkTheme() {
   return document.documentElement.dataset.theme === "dark";
@@ -763,6 +764,22 @@ byId("showArchived").addEventListener("click", () => {
 byId("showBuyLevels").addEventListener("click", () => showLevelView("BUY"));
 byId("showSellLevels").addEventListener("click", () => showLevelView("SELL"));
 byId("themeToggle").addEventListener("click", () => applyTheme(isDarkTheme() ? "light" : "dark"));
+byId("openUsers").addEventListener("click", async () => {
+  byId("usersDialog").showModal();
+  byId("inviteResult").hidden = true;
+  try {
+    const { users } = await api("/api/admin/users");
+    byId("usersList").innerHTML = users.map((user) => `<div class="user-row"><strong>${user.username}</strong><span>${user.role} · ${user.strategyCount} სტრატეგია</span></div>`).join("");
+  } catch (error) { showError(error); }
+});
+byId("closeUsers").addEventListener("click", () => byId("usersDialog").close());
+byId("createInvite").addEventListener("click", async () => {
+  try {
+    const { invite } = await api("/api/admin/invites", { method: "POST" });
+    byId("inviteResult").hidden = false;
+    byId("inviteResult").innerHTML = `<strong>${invite.code}</strong><br><span>მოქმედებს ${new Date(invite.expiresAt).toLocaleString("ka-GE")}-მდე და გამოიყენება მხოლოდ ერთხელ.</span>`;
+  } catch (error) { showError(error); }
+});
 byId("chartRange").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
   if (selectedStrategyId) void loadPriceChart(selectedStrategyId, button.dataset.range);
 }));
@@ -894,5 +911,10 @@ byId("deleteTemplate").addEventListener("click", async () => {
 });
 
 applyTheme(document.documentElement.dataset.theme, false);
+api("/api/session").then(({ user }) => {
+  sessionUser = user;
+  byId("currentUser").textContent = user.username;
+  byId("openUsers").hidden = user.role !== "ADMIN";
+}).catch(showError);
 loadOverview();
 setInterval(() => selectedStrategyId ? refreshDetail() : byId("comparisonView").hidden ? loadOverview() : undefined, 3_000);
