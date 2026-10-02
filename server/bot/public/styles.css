@@ -88,11 +88,9 @@ h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: 0; }
 .invite-result { margin-top: 14px; padding: 14px; border: 1px solid #d7b43b; border-radius: 6px; background: #fff8dc; overflow-wrap: anywhere; }
 .opportunity-panel { margin-top: 22px; }
 .candidate-layout-actions { display: flex; align-items: center; gap: 10px; }
-.candidate-columns { align-items: center; }
-.candidate-columns > span { padding: 0 9px; color: #68756e; font-size: 10px; font-weight: 750; }
-.candidate-columns button { min-width: 34px; padding: 0 8px; }
+.candidate-layout button { min-width: 76px; }
 .opportunity-guide { display: flex; flex-wrap: wrap; gap: 16px; margin: 12px 0; color: #68756e; }
-.opportunity-list { --candidate-columns: 3; display: grid; grid-template-columns: repeat(var(--candidate-columns), minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.opportunity-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
 .opportunity { padding: 14px; border: 1px solid #dce2df; border-radius: 6px; }
 .opportunity-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .opportunity-head > div { display: grid; gap: 3px; }
@@ -102,6 +100,13 @@ h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: 0; }
 .opportunity-metrics span, .opportunity-reasons { color: #68756e; font-size: 11px; }
 .opportunity-reasons { line-height: 1.6; }
 .opportunity-create { width: 100%; margin-top: 12px; }
+.opportunity-list[data-layout="rows"] { grid-template-columns: 1fr; gap: 6px; }
+.opportunity-list[data-layout="rows"] .opportunity { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(360px, 1.5fr) minmax(240px, 1fr) 180px; align-items: center; gap: 18px; padding: 10px 12px; }
+.opportunity-list[data-layout="rows"] .opportunity-head > div { display: flex; align-items: center; gap: 10px; }
+.opportunity-list[data-layout="rows"] .opportunity-score { font-size: 15px; }
+.opportunity-list[data-layout="rows"] .opportunity-metrics { grid-template-columns: repeat(4, auto); gap: 14px; margin: 0; }
+.opportunity-list[data-layout="rows"] .opportunity-reasons { line-height: 1.35; }
+.opportunity-list[data-layout="rows"] .opportunity-create { margin-top: 0; }
 .signal-watch { color: #138a56; }.signal-neutral { color: #9b7400; }.signal-high-risk { color: #c53c3c; }
 .environment-badge { padding: 7px 10px; border-radius: 6px; background: #fff3bf; border: 1px solid #e2c854; color: #665000; font-size: 11px; font-weight: 800; }
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border: 1px solid #dce2df; background: #fff; border-radius: 8px; overflow: hidden; }
@@ -390,6 +395,9 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
   .metrics article { border-bottom: 1px solid #e2e7e4; }
   .content-grid { grid-template-columns: 1fr; }
   .strategy-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .opportunity-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .opportunity-list[data-layout="rows"] .opportunity { grid-template-columns: minmax(140px, .7fr) minmax(320px, 1.5fr) 170px; }
+  .opportunity-list[data-layout="rows"] .opportunity-reasons { display: none; }
   .rules-grid { grid-template-columns: repeat(2, 1fr); }
   .rules-grid div:nth-child(2) { border-right: 0; }
   .rules-grid div:nth-child(-n+2) { border-bottom: 1px solid #e2e7e4; }
@@ -419,8 +427,13 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
   .strategy-actions { justify-content: stretch; flex-direction: column; margin-top: 0; }
   .candidate-title { align-items: stretch; flex-direction: column; }
   .candidate-layout-actions { align-items: stretch; flex-direction: column; }
-  .candidate-columns { display: none; }
+  .candidate-layout { display: none; }
   .opportunity-list { grid-template-columns: 1fr; }
+  .opportunity-list[data-layout="rows"] .opportunity { display: block; padding: 14px; }
+  .opportunity-list[data-layout="rows"] .opportunity-head > div { display: grid; }
+  .opportunity-list[data-layout="rows"] .opportunity-metrics { grid-template-columns: repeat(2, 1fr); margin: 12px 0; }
+  .opportunity-list[data-layout="rows"] .opportunity-reasons { display: block; }
+  .opportunity-list[data-layout="rows"] .opportunity-create { margin-top: 12px; }
   h1 { font-size: 27px; }
   .muted { max-width: 250px; }
   .metrics { grid-template-columns: 1fr; }

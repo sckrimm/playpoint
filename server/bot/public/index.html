@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>Spot სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
-    <link rel="stylesheet" href="styles.css?v=20261003-3" />
+    <link rel="stylesheet" href="styles.css?v=20261003-4" />
   </head>
   <body>
     <header class="topbar">
@@ -43,7 +43,7 @@
           <div><p class="eyebrow">სტრატეგიის შექმნამდე</p><h1>ბაზრის კანდიდატები</h1><p class="muted">Binance Spot USDT წყვილები, რომლებიც ჩვენს 24-საათიან ტექნიკურ ფილტრებს გადიან</p></div>
         </div>
         <section class="panel opportunity-panel">
-          <div class="section-title candidate-title"><div><h2>24-საათიანი ბაზრის შეფასება</h2><p>ლიკვიდური Spot USDT წყვილების ტექნიკური დაკვირვების სია</p></div><div class="candidate-layout-actions"><div id="candidateColumns" class="view-switch candidate-columns" role="group" aria-label="ბარათების სვეტების რაოდენობა"><span>სვეტები</span><button type="button" data-columns="2" title="ორ სვეტად დალაგება">2</button><button type="button" data-columns="3" title="სამ სვეტად დალაგება">3</button><button type="button" data-columns="4" title="ოთხ სვეტად დალაგება">4</button></div><button id="refreshOpportunities" class="secondary-button" type="button">განახლება</button></div></div>
+          <div class="section-title candidate-title"><div><h2>24-საათიანი ბაზრის შეფასება</h2><p>ლიკვიდური Spot USDT წყვილების ტექნიკური დაკვირვების სია</p></div><div class="candidate-layout-actions"><div id="candidateLayout" class="view-switch candidate-layout" role="group" aria-label="ბარათების განლაგება"><button type="button" data-layout="rows" title="კომპაქტურ რიგებად დალაგება">რიგები</button><button type="button" data-layout="columns" title="ბოქსებად დალაგება">სვეტები</button></div><button id="refreshOpportunities" class="secondary-button" type="button">განახლება</button></div></div>
           <div class="opportunity-guide"><span><strong>70–100</strong> ფილტრი გავლილია</span><span><strong>55–69</strong> დამატებით შესამოწმებელი</span><span><strong>0–54</strong> მაღალი რისკი</span></div>
           <p id="opportunityMethod" class="muted">შეფასება იტვირთება...</p>
           <div id="opportunityList" class="opportunity-list"></div>
@@ -232,7 +232,7 @@
       <button id="createInvite" class="primary-button submit-button" type="button">მოწვევის კოდის შექმნა</button>
       <div id="inviteResult" class="invite-result" hidden></div>
     </dialog>
-    <script src="vendor/lightweight-charts.js?v=20261003-3" defer></script>
-    <script src="app.js?v=20261003-3" defer></script>
+    <script src="vendor/lightweight-charts.js?v=20261003-4" defer></script>
+    <script src="app.js?v=20261003-4" defer></script>
   </body>
 </html>

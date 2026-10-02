@@ -43,14 +43,14 @@ let comparisonSelection = new Set();
 let backtestDays = 30;
 let sessionUser = null;
 
-function applyCandidateColumns(columns, persist = true) {
-  const normalized = [2, 3, 4].includes(Number(columns)) ? Number(columns) : 3;
-  byId("opportunityList").style.setProperty("--candidate-columns", normalized);
-  byId("candidateColumns").querySelectorAll("button").forEach((button) => {
-    button.classList.toggle("selected", Number(button.dataset.columns) === normalized);
+function applyCandidateLayout(layout, persist = true) {
+  const normalized = layout === "rows" ? "rows" : "columns";
+  byId("opportunityList").dataset.layout = normalized;
+  byId("candidateLayout").querySelectorAll("button").forEach((button) => {
+    button.classList.toggle("selected", button.dataset.layout === normalized);
   });
   if (persist) {
-    try { localStorage.setItem("spot-candidate-columns", String(normalized)); } catch {}
+    try { localStorage.setItem("spot-candidate-layout", normalized); } catch {}
   }
 }
 
@@ -823,8 +823,8 @@ byId("showBuyLevels").addEventListener("click", () => showLevelView("BUY"));
 byId("showSellLevels").addEventListener("click", () => showLevelView("SELL"));
 byId("themeToggle").addEventListener("click", () => applyTheme(isDarkTheme() ? "light" : "dark"));
 byId("refreshOpportunities").addEventListener("click", loadOpportunities);
-byId("candidateColumns").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
-  applyCandidateColumns(button.dataset.columns);
+byId("candidateLayout").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
+  applyCandidateLayout(button.dataset.layout);
 }));
 byId("openUsers").addEventListener("click", async () => {
   byId("usersDialog").showModal();
@@ -973,7 +973,7 @@ byId("deleteTemplate").addEventListener("click", async () => {
 });
 
 applyTheme(document.documentElement.dataset.theme, false);
-try { applyCandidateColumns(localStorage.getItem("spot-candidate-columns"), false); } catch { applyCandidateColumns(3, false); }
+try { applyCandidateLayout(localStorage.getItem("spot-candidate-layout"), false); } catch { applyCandidateLayout("columns", false); }
 api("/api/session").then(({ user }) => {
   sessionUser = user;
   byId("currentUser").textContent = user.username;
