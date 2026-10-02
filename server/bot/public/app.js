@@ -13,6 +13,8 @@ const formatSignedPrice = (value) => `${value >= 0 ? "+" : "-"}${formatPrice(Mat
 const formatSignedMoney = (value) => `${value >= 0 ? "+" : "-"}${money.format(Math.abs(value))}`;
 const formatDrawdown = (value) => value == null ? "—" : `${value >= 0.005 ? "-" : ""}${value.toFixed(2)}%`;
 const performanceClass = (value) => value > 0 ? "positive" : value < 0 ? "negative" : "neutral";
+const riskLabel = (risk) => ({ LOW: "დაბალი", MEDIUM: "საშუალო", HIGH: "მაღალი" })[risk] ?? risk;
+const signalLabel = (signal) => ({ WATCH: "დასაკვირვებელი", NEUTRAL: "ნეიტრალური", HIGH_RISK: "მაღალი რისკი" })[signal] ?? signal;
 const byId = (id) => document.getElementById(id);
 let selectedStrategyId = null;
 let selectedStrategyStatus = null;
@@ -271,6 +273,7 @@ function renderOverview(strategies) {
         <div class="card-performance">
           <span class="card-status ${strategy.status.toLowerCase()}" data-status="${strategy.status}">${labelStatus(strategy.status)}</span>
           <span class="performance-line ${strategy.performance?.hourlyPnl == null ? "neutral" : performanceClass(strategy.performance.hourlyPnl)}"><small>1 საათში</small><strong>${strategy.performance?.hourlyPnl == null ? "—" : formatSignedMoney(strategy.performance.hourlyPnl)}</strong>${strategy.performance?.hourlyPercent == null ? "" : `<em>${strategy.performance.hourlyPercent >= 0 ? "+" : ""}${strategy.performance.hourlyPercent.toFixed(2)}%</em>`}</span>
+          <span class="performance-line ${strategy.performance?.dailyPnl == null ? "neutral" : performanceClass(strategy.performance.dailyPnl)}"><small>24 საათში</small><strong>${strategy.performance?.dailyPnl == null ? "—" : formatSignedMoney(strategy.performance.dailyPnl)}</strong>${strategy.performance?.dailyPercent == null ? "" : `<em>${strategy.performance.dailyPercent >= 0 ? "+" : ""}${strategy.performance.dailyPercent.toFixed(2)}%</em>`}</span>
         </div>
       </div>
       <div class="strategy-card-metrics">
@@ -303,6 +306,32 @@ async function loadOverview() {
     renderOverview(strategies);
     byId("error").hidden = true;
   } catch (error) { showError(error); }
+}
+
+async function loadOpportunities() {
+  const list = byId("opportunityList");
+  list.innerHTML = '<p class="empty-state">Binance-ის მონაცემები იტვირთება...</p>';
+  try {
+    const data = await api("/api/market-opportunities");
+    byId("opportunityMethod").textContent = `${data.methodology} · განახლდა ${new Date(data.generatedAt).toLocaleTimeString("ka-GE")}`;
+    list.innerHTML = data.items.length ? data.items.map((item) => `<article class="opportunity">
+      <div class="opportunity-head"><div><strong>${item.symbol}</strong><small class="signal-${item.signal.toLowerCase().replace("_", "-")}">${signalLabel(item.signal)}</small></div><span class="opportunity-score signal-${item.signal.toLowerCase().replace("_", "-")}">${item.score}/100</span></div>
+      <div class="opportunity-metrics"><span>ფასი <strong>${formatPrice(item.price)}</strong></span><span>24ს <strong class="${performanceClass(item.change24hPercent)}">${item.change24hPercent >= 0 ? "+" : ""}${item.change24hPercent.toFixed(2)}%</strong></span><span>RSI <strong>${item.rsi14 == null ? "—" : item.rsi14.toFixed(1)}</strong></span><span>რისკი <strong>${riskLabel(item.risk)}</strong></span></div>
+      <div class="opportunity-reasons">${item.reasons.join(" · ")}</div>
+      <button class="card-action opportunity-create" data-symbol="${item.symbol}" type="button">SIMULATION სტრატეგიის შექმნა</button>
+    </article>`).join("") : '<p class="empty-state">შეფასებისთვის საკმარისი მონაცემი ვერ მოიძებნა.</p>';
+    list.querySelectorAll(".opportunity-create").forEach((button) => button.addEventListener("click", async () => {
+      byId("createDialog").showModal();
+      try {
+        await Promise.all([loadSymbols(), loadTemplates()]);
+        prepareCreateForm();
+        byId("symbolSearch").value = button.dataset.symbol;
+        await useCurrentSymbolPrice();
+      } catch (error) { byId("formError").textContent = error.message; byId("formError").hidden = false; }
+    }));
+  } catch (error) {
+    list.innerHTML = `<p class="empty-state">შეფასება ვერ ჩაიტვირთა: ${error.message}</p>`;
+  }
 }
 
 function renderComparison(data, preserveSelection = false) {
@@ -764,6 +793,7 @@ byId("showArchived").addEventListener("click", () => {
 byId("showBuyLevels").addEventListener("click", () => showLevelView("BUY"));
 byId("showSellLevels").addEventListener("click", () => showLevelView("SELL"));
 byId("themeToggle").addEventListener("click", () => applyTheme(isDarkTheme() ? "light" : "dark"));
+byId("refreshOpportunities").addEventListener("click", loadOpportunities);
 byId("openUsers").addEventListener("click", async () => {
   byId("usersDialog").showModal();
   byId("inviteResult").hidden = true;
@@ -917,4 +947,5 @@ api("/api/session").then(({ user }) => {
   byId("openUsers").hidden = user.role !== "ADMIN";
 }).catch(showError);
 loadOverview();
+loadOpportunities();
 setInterval(() => selectedStrategyId ? refreshDetail() : byId("comparisonView").hidden ? loadOverview() : undefined, 3_000);

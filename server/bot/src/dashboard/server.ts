@@ -10,6 +10,7 @@ import { createStore } from "../database/createStore.js";
 import { SimulationOrderService } from "../services/simulationOrderService.js";
 import { BinanceTestnetOrderService } from "../services/binanceTestnetOrderService.js";
 import { runStrategyBacktest } from "../services/strategyBacktestService.js";
+import { MarketOpportunityService } from "../services/marketOpportunityService.js";
 import type { BuyLevelConfig, OrderRecord, SellLevelConfig, StrategyConfig, StrategyRecord } from "../types/strategy.js";
 import { UserAuthStore, type DashboardUser } from "../auth/userAuthStore.js";
 
@@ -32,6 +33,7 @@ if (userAuthStore) {
 }
 const exchangeInfo = new BinanceExchangeInfoService();
 const marketHistory = new BinanceMarketHistoryService();
+const marketOpportunities = new MarketOpportunityService();
 let catalogCache: { items: SpotSymbolCatalogItem[]; expiresAt: number } | null = null;
 const hourlyPriceCache = new Map<string, { value: HistoricalPrice; expiresAt: number }>();
 
@@ -154,11 +156,16 @@ async function getCatalog(): Promise<SpotSymbolCatalogItem[]> {
 }
 
 async function getHourlyReference(symbol: string): Promise<HistoricalPrice | null> {
-  const cached = hourlyPriceCache.get(symbol);
+  return getHistoricalReference(symbol, 1);
+}
+
+async function getHistoricalReference(symbol: string, hours: number): Promise<HistoricalPrice | null> {
+  const cacheKey = `${symbol}:${hours}`;
+  const cached = hourlyPriceCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   try {
-    const value = await marketHistory.getPriceOneHourAgo(symbol);
-    hourlyPriceCache.set(symbol, { value, expiresAt: Date.now() + 60_000 });
+    const value = await marketHistory.getPriceHoursAgo(symbol, hours);
+    hourlyPriceCache.set(cacheKey, { value, expiresAt: Date.now() + 60_000 });
     return value;
   } catch (error) {
     console.error(`Hourly price unavailable for ${symbol}:`, error instanceof Error ? error.message : error);
@@ -262,6 +269,7 @@ async function getStrategiesOverview(archived = false, user: DashboardUser | nul
       const buyLevels = levels.filter((level) => level.side === "BUY");
       const sellLevels = levels.filter((level) => level.side === "SELL");
       const hourlyReference = market ? await getHourlyReference(strategy.symbol) : null;
+      const dailyReference = market ? await getHistoricalReference(strategy.symbol, 24) : null;
       const hourlyPnl = market && hourlyReference
         ? strategy.totalAssetQuantity * (market.price - hourlyReference.price)
         : null;
@@ -281,6 +289,10 @@ async function getStrategiesOverview(archived = false, user: DashboardUser | nul
           hourlyPercent: market && hourlyReference ? (market.price / hourlyReference.price - 1) * 100 : null,
           hourlyReferencePrice: hourlyReference?.price ?? null,
           hourlyReferenceAt: hourlyReference?.timestamp ?? null,
+          dailyPnl: market && dailyReference ? strategy.totalAssetQuantity * (market.price - dailyReference.price) : null,
+          dailyPercent: market && dailyReference ? (market.price / dailyReference.price - 1) * 100 : null,
+          dailyReferencePrice: dailyReference?.price ?? null,
+          dailyReferenceAt: dailyReference?.timestamp ?? null,
           totalPnl,
           totalPnlPercent: totalPnl !== null && strategy.totalInvested > 0
             ? totalPnl / strategy.totalInvested * 100
@@ -564,6 +576,10 @@ function json(response: ServerResponse, status: number, value: unknown): void {
 async function handleApi(request: IncomingMessage, response: ServerResponse, pathname: string, user: DashboardUser | null): Promise<boolean> {
   if (request.method === "GET" && pathname === "/api/session") {
     json(response, 200, { user: user ?? { username: dashboardUsername, role: "ADMIN" } });
+    return true;
+  }
+  if (request.method === "GET" && pathname === "/api/market-opportunities") {
+    json(response, 200, await marketOpportunities.scan());
     return true;
   }
   if (request.method === "POST" && pathname === "/api/admin/invites") {

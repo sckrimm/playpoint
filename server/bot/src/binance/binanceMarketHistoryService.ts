@@ -65,7 +65,11 @@ export class BinanceMarketHistoryService {
   }
 
   async getPriceOneHourAgo(symbol: string): Promise<HistoricalPrice> {
-    const targetTime = Date.now() - 60 * 60_000;
+    return this.getPriceHoursAgo(symbol, 1);
+  }
+
+  async getPriceHoursAgo(symbol: string, hours: number): Promise<HistoricalPrice> {
+    const targetTime = Date.now() - hours * 60 * 60_000;
     const params = new URLSearchParams({
       symbol,
       interval: "1m",
@@ -79,7 +83,7 @@ export class BinanceMarketHistoryService {
     const payload = await response.json() as Kline[];
     const candle = payload[0];
     const price = Number(candle?.[4]);
-    if (!candle || !Number.isFinite(price) || price <= 0) throw new Error(`Binance returned no hourly reference price for ${symbol}`);
+    if (!candle || !Number.isFinite(price) || price <= 0) throw new Error(`Binance returned no historical reference price for ${symbol}`);
     return { price, timestamp: new Date(candle[0]).toISOString() };
   }
 }
