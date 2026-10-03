@@ -26,6 +26,7 @@
     "api:generate": "npm exec --workspace=@playpoint/api -- prisma generate",
 
     "bot:build": "npm run build -w @playpoint/bot",
+    "bot:test": "npm run test -w @playpoint/bot",
     "bot:start": "npm run start -w @playpoint/bot",
 
     "postinstall": "npm run api:generate"
