@@ -586,9 +586,30 @@ function renderReadiness(data) {
 
 async function loadReadiness() {
   byId("refreshReadiness").disabled = true;
-  try { renderReadiness(await api("/api/readiness")); }
+  try {
+    const [readiness, telegram] = await Promise.all([api("/api/readiness"), api("/api/telegram/status")]);
+    renderReadiness(readiness);
+    renderTelegramStatus(telegram);
+  }
   catch (error) { showError(error); }
   finally { byId("refreshReadiness").disabled = false; }
+}
+
+function renderTelegramStatus(status) {
+  const element = byId("telegramStatus");
+  element.className = status.configured && !status.lastError ? "telegram-state ok" : "telegram-state error";
+  element.textContent = !status.configured ? "Telegram: კონფიგურაცია ვერ მოიძებნა"
+    : status.lastError ? `Telegram: ${status.lastError}`
+      : status.lastSentAt ? `Telegram: გაიგზავნა ${new Date(status.lastSentAt).toLocaleTimeString("ka-GE")}` : "Telegram: მზადაა ტესტისთვის";
+}
+
+async function testTelegram() {
+  byId("testTelegram").disabled = true;
+  try {
+    const result = await api("/api/telegram/test", { method: "POST" });
+    renderTelegramStatus(result);
+  } catch (error) { showError(error); }
+  finally { byId("testTelegram").disabled = false; }
 }
 
 function openReadiness() {
@@ -888,6 +909,7 @@ byId("openMarketCandidates").addEventListener("click", openMarketCandidates);
 byId("openNews").addEventListener("click", openNews);
 byId("openReadiness").addEventListener("click", openReadiness);
 byId("refreshReadiness").addEventListener("click", loadReadiness);
+byId("testTelegram").addEventListener("click", testTelegram);
 byId("comparisonSymbol").addEventListener("change", (event) => { void loadComparison(event.target.value); });
 byId("comparisonCreate").addEventListener("click", () => { void openCreateForComparison(); });
 byId("backtestRange").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {

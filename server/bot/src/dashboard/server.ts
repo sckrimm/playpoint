@@ -683,6 +683,15 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     json(response, 200, await getReadinessReport(user));
     return true;
   }
+  if (request.method === "GET" && pathname === "/api/telegram/status") {
+    json(response, 200, telegramAlerts.getStatus());
+    return true;
+  }
+  if (request.method === "POST" && pathname === "/api/telegram/test") {
+    const sent = await telegramAlerts.send("PlayPoint სატესტო შეტყობინება\nTelegram კავშირი გამართულად მუშაობს");
+    json(response, 200, { sent, ...telegramAlerts.getStatus() });
+    return true;
+  }
   if (request.method === "POST" && pathname === "/api/admin/invites") {
     if (!userAuthStore || user?.role !== "ADMIN") throw new Error("მხოლოდ ადმინისტრატორს შეუძლია მოწვევის შექმნა");
     json(response, 201, { invite: await userAuthStore.createInvite(user.id) });

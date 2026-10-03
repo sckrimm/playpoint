@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>Spot სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
-    <link rel="stylesheet" href="styles.css?v=20261003-8" />
+    <link rel="stylesheet" href="styles.css?v=20261003-9" />
   </head>
   <body>
     <header class="topbar">
@@ -43,7 +43,7 @@
         <button id="backFromReadiness" class="back-button" type="button">← სტრატეგიები</button>
         <div class="overview-head readiness-head">
           <div><p class="eyebrow">ავტომატური უსაფრთხოების კონტროლი</p><h1>მზადყოფნის მონიტორი</h1><p class="muted">Testnet-ის შედეგები და LIVE რეჟიმამდე აუცილებელი შემოწმებები</p></div>
-          <button id="refreshReadiness" class="secondary-button" type="button">ახლავე შემოწმება</button>
+          <div class="readiness-actions"><span id="telegramStatus" class="muted">Telegram მოწმდება...</span><button id="testTelegram" class="secondary-button" type="button">Telegram ტესტი</button><button id="refreshReadiness" class="secondary-button" type="button">ახლავე შემოწმება</button></div>
         </div>
         <div id="readinessSummary" class="readiness-summary"><p class="empty-state">შემოწმება მიმდინარეობს...</p></div>
         <div id="readinessChecks" class="readiness-checks"></div>
@@ -259,6 +259,6 @@
       <div id="inviteResult" class="invite-result" hidden></div>
     </dialog>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
-    <script src="app.js?v=20261003-8" defer></script>
+    <script src="app.js?v=20261003-9" defer></script>
   </body>
 </html>

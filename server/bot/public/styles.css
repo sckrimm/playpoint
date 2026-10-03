@@ -37,6 +37,10 @@ main { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 50
 .secondary-button { min-height: 38px; padding: 0 13px; border: 1px solid #cfd8d3; border-radius: 6px; color: #3f4c45; background: #fff; font-weight: 750; }
 .secondary-button:hover { background: #f1f4f2; }
 .readiness-summary { margin-bottom: 14px; }
+.readiness-actions { display: flex; align-items: center; gap: 8px; }
+.telegram-state { max-width: 360px; font-size: 10px; font-weight: 750; overflow-wrap: anywhere; }
+.telegram-state.ok { color: #16774c; }
+.telegram-state.error { color: #b33131; }
 .readiness-overall { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px; border: 1px solid #dce2df; border-left-width: 5px; border-radius: 8px; background: #fff; }
 .readiness-overall div { display: grid; gap: 4px; }
 .readiness-overall span, .readiness-overall p { margin: 0; color: #738078; font-size: 11px; }
@@ -475,6 +479,7 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
   .overview-head { align-items: stretch; flex-direction: column; }
   .overview-actions { align-items: stretch; flex-direction: column; }
   .readiness-checks { grid-template-columns: 1fr; }
+  .readiness-actions { align-items: stretch; flex-direction: column; }
   .readiness-overall { align-items: flex-start; flex-direction: column; }
   .readiness-strategy { grid-template-columns: 1fr; }
   .readiness-strategy dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
