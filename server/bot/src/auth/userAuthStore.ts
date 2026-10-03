@@ -63,14 +63,25 @@ export class UserAuthStore {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
-    const existing = await this.pool.query<{ id: string }>("SELECT id FROM bot_users WHERE username = $1", [adminUsername]);
-    let adminId = Number(existing.rows[0]?.id);
+    const existing = await this.pool.query<{
+      id: string;
+      role: DashboardUser["role"];
+      password_hash: string;
+      password_salt: string;
+    }>("SELECT id, role, password_hash, password_salt FROM bot_users WHERE username = $1", [adminUsername]);
+    const existingAdmin = existing.rows[0];
+    let adminId = Number(existingAdmin?.id);
     if (!adminId) {
       const password = await hashPassword(adminPassword);
       const created = await this.pool.query<{ id: string }>(`INSERT INTO bot_users
         (username, password_hash, password_salt, role) VALUES ($1, $2, $3, 'ADMIN') RETURNING id`,
       [adminUsername, password.hash, password.salt]);
       adminId = Number(created.rows[0]!.id);
+    } else if (existingAdmin && (existingAdmin.role !== "ADMIN" || !await verifyPassword(adminPassword, existingAdmin.password_salt, existingAdmin.password_hash))) {
+      const password = await hashPassword(adminPassword);
+      await this.pool.query(`UPDATE bot_users SET password_hash = $2, password_salt = $3, role = 'ADMIN' WHERE id = $1`,
+        [adminId, password.hash, password.salt]);
+      await this.pool.query("DELETE FROM bot_user_sessions WHERE user_id = $1", [adminId]);
     }
     await this.pool.query(`INSERT INTO bot_strategy_owners (strategy_id, user_id)
       SELECT id, $1 FROM bot_strategies s
