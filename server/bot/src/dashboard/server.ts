@@ -188,6 +188,91 @@ async function visibleStrategies(strategies: StrategyRecord[], user: DashboardUs
   return strategies.filter((strategy) => visibleIds.has(strategy.id));
 }
 
+type ReadinessStatus = "OK" | "WAITING" | "WARNING" | "ERROR";
+
+async function getReadinessReport(user: DashboardUser | null) {
+  const repository = await createStore();
+  try {
+    const allStrategies = await visibleStrategies(await repository.listStrategies(), user);
+    const testnetStrategies = allStrategies.filter((strategy) => strategy.executionEnvironment === "TESTNET");
+    const activeTestnet = testnetStrategies.filter((strategy) => strategy.status === "ACTIVE");
+    const checks: Array<{ id: string; label: string; status: ReadinessStatus; detail: string }> = [];
+    const testnetService = getTestnetService();
+
+    if (!testnetService) {
+      checks.push({ id: "connection", label: "Binance Spot Testnet კავშირი", status: "ERROR", detail: "Testnet API key და secret კონფიგურირებული არ არის" });
+    } else {
+      try {
+        await testnetService.getBalances();
+        checks.push({ id: "connection", label: "Binance Spot Testnet კავშირი", status: "OK", detail: "API ავტორიზაცია და USER_DATA წვდომა მუშაობს" });
+      } catch (error) {
+        checks.push({ id: "connection", label: "Binance Spot Testnet კავშირი", status: "ERROR", detail: error instanceof Error ? error.message : "Testnet კავშირი ვერ დადასტურდა" });
+      }
+    }
+
+    checks.push(activeTestnet.length
+      ? { id: "active-strategy", label: "აქტიური Testnet სტრატეგია", status: "OK", detail: `${activeTestnet.length} აქტიური სტრატეგია მუშაობს` }
+      : { id: "active-strategy", label: "აქტიური Testnet სტრატეგია", status: "ERROR", detail: "აქტიური Testnet სტრატეგია არ არის" });
+
+    const liveStrategies = allStrategies.filter((strategy) => strategy.executionEnvironment === "LIVE" && strategy.status === "ACTIVE");
+    checks.push(liveStrategies.length === 0
+      ? { id: "live-lock", label: "LIVE უსაფრთხოების ჩამკეტი", status: "OK", detail: "რეალურ თანხაზე აქტიური სტრატეგია არ მუშაობს" }
+      : { id: "live-lock", label: "LIVE უსაფრთხოების ჩამკეტი", status: "ERROR", detail: `${liveStrategies.length} LIVE სტრატეგია აქტიურია` });
+
+    const strategyReports = await Promise.all(testnetStrategies.map(async (strategy) => {
+      const [levels, orders, market] = await Promise.all([
+        repository.getLevels(strategy.id), repository.getOrders(strategy.id), repository.getMarketState(strategy.symbol),
+      ]);
+      const buyCount = orders.filter((order) => order.side === "BUY").length;
+      const sellCount = orders.filter((order) => order.side === "SELL").length;
+      const completedCycles = Math.min(buyCount, sellCount);
+      const failedLevelCount = levels.filter((level) => level.status === "FAILED").length;
+      const invalidOrderCount = orders.filter((order) => order.executionEnvironment !== "TESTNET" || order.marketPrice <= 0 || order.quoteAmount <= 0 || order.assetQuantity <= 0).length;
+      const observationHours = Math.max(0, (Date.now() - Date.parse(strategy.createdAt)) / 3_600_000);
+      const marketAgeMinutes = market ? Math.max(0, (Date.now() - Date.parse(market.updatedAt)) / 60_000) : null;
+      const budgetUsedPercent = strategy.totalBudget > 0 ? strategy.totalInvested / strategy.totalBudget * 100 : 0;
+      return { id: strategy.id, symbol: strategy.symbol, status: strategy.status, observationHours, orderCount: orders.length,
+        buyCount, sellCount, completedCycles, failedLevelCount, invalidOrderCount, marketAgeMinutes, budgetUsedPercent };
+    }));
+
+    const oldestObservation = strategyReports.reduce((maximum, strategy) => Math.max(maximum, strategy.observationHours), 0);
+    checks.push(oldestObservation >= 24
+      ? { id: "observation", label: "მინიმუმ 24 საათის დაკვირვება", status: "OK", detail: `${oldestObservation.toFixed(1)} საათი დაგროვდა` }
+      : { id: "observation", label: "მინიმუმ 24 საათის დაკვირვება", status: "WAITING", detail: `${oldestObservation.toFixed(1)} / 24 საათი` });
+
+    const totalCycles = strategyReports.reduce((sum, strategy) => sum + strategy.completedCycles, 0);
+    checks.push(totalCycles >= 3
+      ? { id: "cycles", label: "3 სრული BUY → SELL ციკლი", status: "OK", detail: `${totalCycles} სრული ციკლი დადასტურდა` }
+      : { id: "cycles", label: "3 სრული BUY → SELL ციკლი", status: "WAITING", detail: `${totalCycles} / 3 სრული ციკლი` });
+
+    const failedCount = strategyReports.reduce((sum, strategy) => sum + strategy.failedLevelCount, 0);
+    checks.push(failedCount === 0
+      ? { id: "failures", label: "წარუმატებელი დონეები", status: "OK", detail: "FAILED დონე არ დაფიქსირებულა" }
+      : { id: "failures", label: "წარუმატებელი დონეები", status: "ERROR", detail: `${failedCount} დონე შეცდომით დასრულდა` });
+
+    const invalidOrderCount = strategyReports.reduce((sum, strategy) => sum + strategy.invalidOrderCount, 0);
+    checks.push(invalidOrderCount === 0
+      ? { id: "orders", label: "Testnet ორდერების სისწორე", status: "OK", detail: "გარემო, ფასი, თანხა და რაოდენობა სწორია" }
+      : { id: "orders", label: "Testnet ორდერების სისწორე", status: "ERROR", detail: `${invalidOrderCount} საეჭვო ორდერი მოიძებნა` });
+
+    const overBudget = strategyReports.filter((strategy) => strategy.budgetUsedPercent > 100.01);
+    checks.push(overBudget.length === 0
+      ? { id: "budget", label: "ბიუჯეტის ლიმიტი", status: "OK", detail: "არცერთ სტრატეგიას ბიუჯეტი არ გადაუჭარბებია" }
+      : { id: "budget", label: "ბიუჯეტის ლიმიტი", status: "ERROR", detail: `${overBudget.length} სტრატეგიამ ბიუჯეტს გადააჭარბა` });
+
+    const staleMarkets = strategyReports.filter((strategy) => strategy.status === "ACTIVE" && (strategy.marketAgeMinutes === null || strategy.marketAgeMinutes > 10));
+    checks.push(staleMarkets.length === 0 && activeTestnet.length > 0
+      ? { id: "market", label: "ბაზრის მონაცემების განახლება", status: "OK", detail: "აქტიური სტრატეგიების ფასი ბოლო 10 წუთში განახლდა" }
+      : { id: "market", label: "ბაზრის მონაცემების განახლება", status: activeTestnet.length ? "WARNING" : "WAITING", detail: activeTestnet.length ? `${staleMarkets.length} სტრატეგიის ფასი დაგვიანებულია` : "აქტიურ სტრატეგიას ელოდება" });
+
+    const blocking = checks.some((check) => check.status === "ERROR");
+    const pending = checks.some((check) => check.status === "WAITING" || check.status === "WARNING");
+    return { overall: blocking ? "BLOCKED" : pending ? "OBSERVING" : "READY", checks, strategies: strategyReports, generatedAt: new Date().toISOString() };
+  } finally {
+    await repository.close();
+  }
+}
+
 async function getStrategyState(id: number, user: DashboardUser | null = null) {
   await ensureStrategyAccess(id, user);
   const repository = await createStore();
@@ -589,6 +674,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
   }
   if (request.method === "GET" && pathname === "/api/news") {
     json(response, 200, await cryptoNews.latest());
+    return true;
+  }
+  if (request.method === "GET" && pathname === "/api/readiness") {
+    json(response, 200, await getReadinessReport(user));
     return true;
   }
   if (request.method === "POST" && pathname === "/api/admin/invites") {

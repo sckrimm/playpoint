@@ -567,6 +567,40 @@ function openNews() {
   void loadNews();
 }
 
+function readinessLabel(status) {
+  return ({ OK: "OK", WAITING: "მოლოდინი", WARNING: "ყურადღება", ERROR: "შეცდომა" })[status] ?? status;
+}
+
+function renderReadiness(data) {
+  const overall = ({
+    READY: ["მზადაა", "ყველა აუცილებელი შემოწმება გავლილია"],
+    OBSERVING: ["დაკვირვება გრძელდება", "სისტემა მუშაობს, მაგრამ მეტი Testnet მონაცემია საჭირო"],
+    BLOCKED: ["გადასვლა დაბლოკილია", "ერთი ან მეტი აუცილებელი შემოწმება ვერ გაიარა"],
+  })[data.overall];
+  const okCount = data.checks.filter((check) => check.status === "OK").length;
+  byId("readinessSummary").innerHTML = `<section class="readiness-overall ${data.overall.toLowerCase()}"><div><span>საერთო სტატუსი</span><strong>${overall[0]}</strong><p>${overall[1]}</p></div><b>${okCount} / ${data.checks.length} OK</b></section>`;
+  byId("readinessChecks").innerHTML = data.checks.map((check) => `<article class="readiness-check ${check.status.toLowerCase()}"><span class="readiness-icon">${check.status === "OK" ? "✓" : check.status === "ERROR" ? "!" : "…"}</span><div><strong>${escapeHtml(check.label)}</strong><p>${escapeHtml(check.detail)}</p></div><em>${readinessLabel(check.status)}</em></article>`).join("");
+  byId("readinessStrategyList").innerHTML = data.strategies.length ? data.strategies.map((strategy) => `<article class="readiness-strategy"><div><strong>${escapeHtml(strategy.symbol)}</strong><span>#${strategy.id} · ${strategy.status}</span></div><dl><div><dt>დაკვირვება</dt><dd>${strategy.observationHours.toFixed(1)} სთ</dd></div><div><dt>BUY / SELL</dt><dd>${strategy.buyCount} / ${strategy.sellCount}</dd></div><div><dt>სრული ციკლი</dt><dd>${strategy.completedCycles}</dd></div><div><dt>ბიუჯეტი</dt><dd>${strategy.budgetUsedPercent.toFixed(1)}%</dd></div><div><dt>FAILED</dt><dd class="${strategy.failedLevelCount ? "negative" : "positive"}">${strategy.failedLevelCount}</dd></div></dl></article>`).join("") : '<p class="empty-state">Testnet სტრატეგია ჯერ არ არის</p>';
+  byId("readinessUpdated").textContent = `განახლდა ${new Date(data.generatedAt).toLocaleTimeString("ka-GE")}`;
+}
+
+async function loadReadiness() {
+  byId("refreshReadiness").disabled = true;
+  try { renderReadiness(await api("/api/readiness")); }
+  catch (error) { showError(error); }
+  finally { byId("refreshReadiness").disabled = false; }
+}
+
+function openReadiness() {
+  byId("overviewView").hidden = true;
+  byId("detailView").hidden = true;
+  byId("comparisonView").hidden = true;
+  byId("marketCandidatesView").hidden = true;
+  byId("newsView").hidden = true;
+  byId("readinessView").hidden = false;
+  void loadReadiness();
+}
+
 function renderMarket(market) {
   const priceElement = byId("currentPrice");
   const changeElement = byId("priceChange");
@@ -852,6 +886,8 @@ byId("openCreate").addEventListener("click", async () => {
 byId("openComparison").addEventListener("click", () => { void openComparison(); });
 byId("openMarketCandidates").addEventListener("click", openMarketCandidates);
 byId("openNews").addEventListener("click", openNews);
+byId("openReadiness").addEventListener("click", openReadiness);
+byId("refreshReadiness").addEventListener("click", loadReadiness);
 byId("comparisonSymbol").addEventListener("change", (event) => { void loadComparison(event.target.value); });
 byId("comparisonCreate").addEventListener("click", () => { void openCreateForComparison(); });
 byId("backtestRange").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
@@ -873,6 +909,11 @@ byId("backFromMarketCandidates").addEventListener("click", () => {
 });
 byId("backFromNews").addEventListener("click", () => {
   byId("newsView").hidden = true;
+  byId("overviewView").hidden = false;
+  void loadOverview();
+});
+byId("backFromReadiness").addEventListener("click", () => {
+  byId("readinessView").hidden = true;
   byId("overviewView").hidden = false;
   void loadOverview();
 });
@@ -1070,3 +1111,6 @@ setInterval(() => {
   if (selectedStrategyId) return refreshDetail();
   if (!byId("overviewView").hidden) return loadOverview();
 }, 3_000);
+setInterval(() => {
+  if (!byId("readinessView").hidden) void loadReadiness();
+}, 30_000);
