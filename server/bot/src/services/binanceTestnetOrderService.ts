@@ -15,7 +15,7 @@ type OrderPayload = BinanceErrorPayload & {
   fills?: Array<{ price: string; qty: string; commission: string; commissionAsset: string }>;
 };
 
-export type TestnetErrorKind = "INVALID_KEY" | "INVALID_SIGNATURE" | "TIMESTAMP_ERROR" |
+export type TestnetErrorKind = "INVALID_KEY" | "INVALID_SIGNATURE" | "TIMESTAMP_ERROR" | "ORDER_NOT_FOUND" |
   "RATE_LIMITED" | "INSUFFICIENT_BALANCE" | "FILTER_REJECTED" | "UNKNOWN_RESULT" | "ERROR";
 
 export class BinanceTestnetOrderError extends Error {
@@ -37,17 +37,17 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     if (!apiKey || !apiSecret) throw new Error("Binance Spot Testnet API მონაცემები მითითებული არ არის");
   }
 
-  async buy(symbol: string, _price: number, quoteAmount: number): Promise<OrderExecutionResult> {
+  async buy(symbol: string, _price: number, quoteAmount: number, clientOrderId?: string): Promise<OrderExecutionResult> {
     if (!Number.isFinite(quoteAmount) || quoteAmount <= 0) throw new Error("TESTNET BUY თანხა ნულზე მეტი უნდა იყოს");
-    return this.placeMarketOrder(symbol, "BUY", { quoteOrderQty: this.decimal(quoteAmount, 8) });
+    return this.placeMarketOrder(symbol, "BUY", { quoteOrderQty: this.decimal(quoteAmount, 8) }, clientOrderId);
   }
 
-  async sell(symbol: string, _price: number, assetQuantity: number): Promise<OrderExecutionResult> {
+  async sell(symbol: string, _price: number, assetQuantity: number, clientOrderId?: string): Promise<OrderExecutionResult> {
     if (!Number.isFinite(assetQuantity) || assetQuantity <= 0) throw new Error("TESTNET SELL რაოდენობა ნულზე მეტი უნდა იყოს");
     const stepSize = await this.getStepSize(symbol);
     const quantity = this.floorToStep(assetQuantity, stepSize);
     if (quantity <= 0) throw new BinanceTestnetOrderError("FILTER_REJECTED", "გასაყიდი რაოდენობა Binance-ის stepSize-ზე ნაკლებია");
-    return this.placeMarketOrder(symbol, "SELL", { quantity: this.decimal(quantity, this.decimals(stepSize)) });
+    return this.placeMarketOrder(symbol, "SELL", { quantity: this.decimal(quantity, this.decimals(stepSize)) }, clientOrderId);
   }
 
   async getBalances(): Promise<AccountBalance[]> {
@@ -71,9 +71,25 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     return price;
   }
 
-  private async placeMarketOrder(symbol: string, side: "BUY" | "SELL", amount: Record<string, string>): Promise<OrderExecutionResult> {
+  async reconcileOrder(symbol: string, side: "BUY" | "SELL", clientOrderId: string): Promise<OrderExecutionResult | null> {
+    try {
+      const payload = await this.findOrder(symbol, clientOrderId);
+      const executedQty = Number(payload.executedQty ?? 0);
+      const terminalWithoutFill = ["CANCELED", "REJECTED", "EXPIRED", "EXPIRED_IN_MATCH"].includes(payload.status ?? "") && executedQty <= 0;
+      if (terminalWithoutFill) return null;
+      if (payload.status !== "FILLED" && !["CANCELED", "EXPIRED", "EXPIRED_IN_MATCH"].includes(payload.status ?? "")) {
+        throw new BinanceTestnetOrderError("UNKNOWN_RESULT", `TESTNET ორდერი ჯერ დასრულებული არ არის (${payload.status ?? "UNKNOWN"})`, true);
+      }
+      return this.toResult(symbol, side, payload);
+    } catch (error) {
+      if (error instanceof BinanceTestnetOrderError && error.kind === "ORDER_NOT_FOUND") return null;
+      throw error;
+    }
+  }
+
+  private async placeMarketOrder(symbol: string, side: "BUY" | "SELL", amount: Record<string, string>, requestedClientOrderId?: string): Promise<OrderExecutionResult> {
     await this.syncServerTime();
-    const clientOrderId = `bot_${side.toLowerCase()}_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+    const clientOrderId = requestedClientOrderId ?? `bot_${side.toLowerCase()}_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
     const params = { symbol, side, type: "MARKET", newOrderRespType: "FULL", newClientOrderId: clientOrderId, ...amount };
     let payload: OrderPayload;
     try {
@@ -150,6 +166,7 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     if (code === -1022) return new BinanceTestnetOrderError("INVALID_SIGNATURE", "Spot Testnet-მა მოთხოვნის ხელმოწერა უარყო");
     if (code === -1021) return new BinanceTestnetOrderError("TIMESTAMP_ERROR", "Spot Testnet-მა მოთხოვნის დრო უარყო");
     if (code === -2010) return new BinanceTestnetOrderError("INSUFFICIENT_BALANCE", "Spot Testnet ანგარიშზე საკმარისი ბალანსი არ არის");
+    if (code === -2013) return new BinanceTestnetOrderError("ORDER_NOT_FOUND", "Spot Testnet-ზე ორდერი ვერ მოიძებნა");
     if (code === -1013) return new BinanceTestnetOrderError("FILTER_REJECTED", "ორდერი Spot Testnet-ის symbol rules-ს არ აკმაყოფილებს");
     return new BinanceTestnetOrderError("ERROR", `Spot Testnet მოთხოვნა ვერ შესრულდა: HTTP ${httpStatus}${code ? ` (code ${code})` : ""}`);
   }

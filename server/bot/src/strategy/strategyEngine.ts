@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { OrderExecutionService, StrategyConfig } from "../types/strategy.js";
 import type { StrategyStore } from "../database/repository.js";
 import { money, quantity } from "../utils/format.js";
@@ -29,7 +30,52 @@ export class StrategyEngine {
       : await this.repository.getById(this.strategyId);
     this.strategyId = strategy.id;
     await this.repository.initializeBuyLevels(strategy.id, this.config);
+    await this.reconcilePendingOrders();
     return strategy.id;
+  }
+
+  private clientOrderId(strategyId: number, side: "BUY" | "SELL", levelPercent: number): string {
+    const level = String(levelPercent).replace(".", "p");
+    return `bot_${strategyId}_${side.toLowerCase()}_${level}_${randomUUID().replaceAll("-", "").slice(0, 10)}`.slice(0, 36);
+  }
+
+  reconcilePendingOrders(): Promise<void> {
+    this.evaluationQueue = this.evaluationQueue.then(() => this.reconcilePendingOrdersNow());
+    return this.evaluationQueue;
+  }
+
+  private async reconcilePendingOrdersNow(): Promise<void> {
+    if (!this.orders.reconcileOrder) return;
+    if (this.strategyId === null) return;
+    const strategyId = this.strategyId;
+    const strategy = await this.repository.getById(strategyId);
+    const levels = await this.repository.getLevels(strategyId);
+    const pending = levels.filter((level) => level.clientOrderId &&
+      (level.status === "EXECUTING" || (level.status === "FAILED" && level.errorMessage?.startsWith("[NO_AUTO_RETRY]"))));
+    for (const level of pending) {
+      const clientOrderId = level.clientOrderId!;
+      try {
+        const order = await this.orders.reconcileOrder(strategy.symbol, level.side, clientOrderId);
+        if (!order) {
+          await this.repository.releaseLevel(strategy.id, level.side, level.levelPercent, clientOrderId);
+          void telegramAlerts.send(`ორდერი უსაფრთხოდ გადამოწმდა\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\nBinance-ზე არ მოიძებნა და დონე დაბრუნდა მოლოდინში`);
+          continue;
+        }
+        if (level.side === "BUY") {
+          await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
+        } else {
+          const current = await this.repository.getById(strategy.id);
+          const minimumReserveQuantity = current.totalPurchasedQuantity * (current.finalReservePercent / 100);
+          await this.repository.completeSell(strategy.id, level.levelPercent, order.price, order.quoteAmount,
+            order.assetQuantity, minimumReserveQuantity, order.orderId);
+        }
+        void telegramAlerts.send(`ორდერი აღდგენილია restart-ის შემდეგ\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\nBinance order: ${order.orderId}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Order reconciliation failed for ${clientOrderId}: ${message}`);
+        void telegramAlerts.send(`ორდერის reconciliation ვერ დასრულდა\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\n${message}\nდონე უსაფრთხოდ დაბლოკილი რჩება`);
+      }
+    }
   }
 
   onPrice(price: number): Promise<void> {
@@ -50,12 +96,13 @@ export class StrategyEngine {
 
     let executedAny = false;
     for (const level of eligibleBuys) {
-      if (!await this.repository.claimLevel(strategy.id, "BUY", level.levelPercent)) continue;
+      const clientOrderId = this.clientOrderId(strategy.id, "BUY", level.levelPercent);
+      if (!await this.repository.claimLevel(strategy.id, "BUY", level.levelPercent, clientOrderId)) continue;
       executedAny = true;
       const levelBudget = strategy.totalBudget - strategy.initialPurchaseAmount;
       const quoteAmount = levelBudget * (level.allocationPercent / 100);
       try {
-        const order = await this.orders.buy(strategy.symbol, price, quoteAmount);
+        const order = await this.orders.buy(strategy.symbol, price, quoteAmount, clientOrderId);
         await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
         void telegramAlerts.send([
           `BUY შესრულდა [${this.orders.environment}]`,
@@ -90,10 +137,11 @@ export class StrategyEngine {
       const current = await this.repository.getById(strategy.id);
       const assetQuantity = current.totalPurchasedQuantity * (level.allocationPercent / 100);
       if (assetQuantity <= 0 || current.totalAssetQuantity - assetQuantity + 1e-12 < minimumReserveQuantity) continue;
-      if (!await this.repository.claimLevel(strategy.id, "SELL", level.levelPercent)) continue;
+      const clientOrderId = this.clientOrderId(strategy.id, "SELL", level.levelPercent);
+      if (!await this.repository.claimLevel(strategy.id, "SELL", level.levelPercent, clientOrderId)) continue;
       executedAny = true;
       try {
-        const order = await this.orders.sell(strategy.symbol, price, assetQuantity);
+        const order = await this.orders.sell(strategy.symbol, price, assetQuantity, clientOrderId);
         await this.repository.completeSell(strategy.id, level.levelPercent, order.price, order.quoteAmount,
           order.assetQuantity, minimumReserveQuantity, order.orderId);
         void telegramAlerts.send([

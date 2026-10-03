@@ -176,25 +176,42 @@ export class StrategyRepository implements StrategyStore {
   async getLevels(strategyId: number): Promise<ExecutedLevelRecord[]> {
     return this.db.prepare(`SELECT id, strategy_id AS strategyId, side, level_percent AS levelPercent,
       trigger_price AS triggerPrice, allocation_percent AS allocationPercent, status,
-      error_message AS errorMessage, executed_at AS executedAt
+      error_message AS errorMessage, executed_at AS executedAt,
+      client_order_id AS clientOrderId, execution_started_at AS executionStartedAt
       FROM executed_levels WHERE strategy_id = ? ORDER BY side, level_percent`).all(strategyId) as ExecutedLevelRecord[];
   }
 
-  async claimLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number): Promise<boolean> {
-    const result = this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTING', error_message = NULL
+  async claimLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<boolean> {
+    const result = this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTING', error_message = NULL,
+      client_order_id = ?, execution_started_at = ?
       WHERE strategy_id = ? AND side = ? AND level_percent = ?
         AND (status = 'WAITING' OR (status = 'FAILED' AND error_message NOT LIKE '[NO_AUTO_RETRY]%'))`)
-      .run(strategyId, side, levelPercent);
+      .run(clientOrderId, new Date().toISOString(), strategyId, side, levelPercent);
     return result.changes === 1;
   }
 
+  async releaseLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<void> {
+    this.db.prepare(`UPDATE executed_levels SET status = 'WAITING', error_message = NULL,
+      client_order_id = NULL, execution_started_at = NULL
+      WHERE strategy_id = ? AND side = ? AND level_percent = ? AND client_order_id = ?
+        AND status IN ('EXECUTING', 'FAILED')`).run(strategyId, side, levelPercent, clientOrderId);
+  }
+
   async completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string): Promise<void> {
-    const strategy = await this.getById(strategyId);
     const transaction = this.db.transaction(() => {
-      const totalInvested = strategy.totalInvested + quoteAmount;
-      const totalPurchasedQuantity = strategy.totalPurchasedQuantity + assetQuantity;
-      const totalAssetQuantity = strategy.totalAssetQuantity + assetQuantity;
-      const remainingCostBasis = strategy.remainingCostBasis + quoteAmount;
+      const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
+      if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
+      const existing = this.db.prepare("SELECT 1 FROM orders WHERE execution_environment = ? AND external_order_id = ?")
+        .get(strategy.execution_environment, externalOrderId);
+      if (existing) {
+        this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTED', executed_at = COALESCE(executed_at, ?), error_message = NULL
+          WHERE strategy_id = ? AND side = 'BUY' AND level_percent = ?`).run(new Date().toISOString(), strategyId, levelPercent);
+        return;
+      }
+      const totalInvested = strategy.total_invested + quoteAmount;
+      const totalPurchasedQuantity = strategy.total_purchased_quantity + assetQuantity;
+      const totalAssetQuantity = strategy.total_asset_quantity + assetQuantity;
+      const remainingCostBasis = strategy.remaining_cost_basis + quoteAmount;
       const averageEntryPrice = totalAssetQuantity === 0 ? 0 : remainingCostBasis / totalAssetQuantity;
       const now = new Date().toISOString();
       this.db.prepare(`UPDATE strategies SET total_invested = ?, total_purchased_quantity = ?,
@@ -204,9 +221,9 @@ export class StrategyRepository implements StrategyStore {
         market_price, quote_amount, asset_quantity, mode, execution_environment, created_at)
         VALUES (?, ?, 'BUY', ?, ?, ?, ?, ?, ?, ?)`)
         .run(strategyId, externalOrderId, levelPercent, price, quoteAmount, assetQuantity,
-          strategy.executionEnvironment, strategy.executionEnvironment, now);
+          strategy.execution_environment, strategy.execution_environment, now);
       this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTED', executed_at = ?, error_message = NULL
-        WHERE strategy_id = ? AND side = 'BUY' AND level_percent = ? AND status = 'EXECUTING'`)
+        WHERE strategy_id = ? AND side = 'BUY' AND level_percent = ? AND status IN ('EXECUTING', 'FAILED')`)
         .run(now, strategyId, levelPercent);
     });
     transaction();
@@ -216,6 +233,13 @@ export class StrategyRepository implements StrategyStore {
     const transaction = this.db.transaction(() => {
       const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
       if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
+      const existing = this.db.prepare("SELECT 1 FROM orders WHERE execution_environment = ? AND external_order_id = ?")
+        .get(strategy.execution_environment, externalOrderId);
+      if (existing) {
+        this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTED', executed_at = COALESCE(executed_at, ?), error_message = NULL
+          WHERE strategy_id = ? AND side = 'SELL' AND level_percent = ?`).run(new Date().toISOString(), strategyId, levelPercent);
+        return;
+      }
       if (assetQuantity > strategy.total_asset_quantity + 1e-12) throw new Error("Cannot sell more asset than the strategy owns");
       const remainingQuantity = Math.max(0, strategy.total_asset_quantity - assetQuantity);
       if (remainingQuantity + 1e-12 < minimumReserveQuantity) throw new Error("Sell would consume the permanent reserve");
@@ -234,7 +258,7 @@ export class StrategyRepository implements StrategyStore {
         .run(strategyId, externalOrderId, levelPercent, price, quoteAmount, assetQuantity,
           strategy.execution_environment, strategy.execution_environment, now);
       this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTED', executed_at = ?, error_message = NULL
-        WHERE strategy_id = ? AND side = 'SELL' AND level_percent = ? AND status = 'EXECUTING'`)
+        WHERE strategy_id = ? AND side = 'SELL' AND level_percent = ? AND status IN ('EXECUTING', 'FAILED')`)
         .run(now, strategyId, levelPercent);
     });
     transaction();
@@ -244,6 +268,9 @@ export class StrategyRepository implements StrategyStore {
     const transaction = this.db.transaction(() => {
       const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
       if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
+      const existing = this.db.prepare("SELECT 1 FROM orders WHERE execution_environment = ? AND external_order_id = ?")
+        .get(strategy.execution_environment, externalOrderId);
+      if (existing) return;
       const remainingQuantity = strategy.total_asset_quantity - assetQuantity;
       if (assetQuantity <= 0 || remainingQuantity + 1e-12 < minimumReserveQuantity) {
         throw new Error("მოგების აღება მუდმივ რეზერვს შეამცირებს");

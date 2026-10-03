@@ -102,6 +102,12 @@ if (accountService) {
 await syncStrategies();
 setInterval(() => void syncStrategies().catch((error) =>
   console.error("Strategy subscription sync failed:", error instanceof Error ? error.message : error)), 5_000).unref();
+setInterval(() => {
+  for (const engine of engines.values()) {
+    void engine.reconcilePendingOrders().catch((error) =>
+      console.error("Periodic order reconciliation failed:", error instanceof Error ? error.message : error));
+  }
+}, 60_000).unref();
 
 function startFeed(environment: "SIMULATION" | "TESTNET"): void {
   feeds[environment].start(async (symbol, price, eventTime) => {

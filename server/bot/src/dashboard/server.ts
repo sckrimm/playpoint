@@ -228,12 +228,13 @@ async function getReadinessReport(user: DashboardUser | null) {
       const sellCount = orders.filter((order) => order.side === "SELL").length;
       const completedCycles = Math.min(buyCount, sellCount);
       const failedLevelCount = levels.filter((level) => level.status === "FAILED").length;
+      const pendingExecutionCount = levels.filter((level) => level.status === "EXECUTING").length;
       const invalidOrderCount = orders.filter((order) => order.executionEnvironment !== "TESTNET" || order.marketPrice <= 0 || order.quoteAmount <= 0 || order.assetQuantity <= 0).length;
       const observationHours = Math.max(0, (Date.now() - Date.parse(strategy.createdAt)) / 3_600_000);
       const marketAgeMinutes = market ? Math.max(0, (Date.now() - Date.parse(market.updatedAt)) / 60_000) : null;
       const budgetUsedPercent = strategy.totalBudget > 0 ? strategy.totalInvested / strategy.totalBudget * 100 : 0;
       return { id: strategy.id, symbol: strategy.symbol, status: strategy.status, observationHours, orderCount: orders.length,
-        buyCount, sellCount, completedCycles, failedLevelCount, invalidOrderCount, marketAgeMinutes, budgetUsedPercent };
+        buyCount, sellCount, completedCycles, failedLevelCount, pendingExecutionCount, invalidOrderCount, marketAgeMinutes, budgetUsedPercent };
     }));
 
     const oldestObservation = strategyReports.reduce((maximum, strategy) => Math.max(maximum, strategy.observationHours), 0);
@@ -250,6 +251,11 @@ async function getReadinessReport(user: DashboardUser | null) {
     checks.push(failedCount === 0
       ? { id: "failures", label: "წარუმატებელი დონეები", status: "OK", detail: "FAILED დონე არ დაფიქსირებულა" }
       : { id: "failures", label: "წარუმატებელი დონეები", status: "ERROR", detail: `${failedCount} დონე შეცდომით დასრულდა` });
+
+    const pendingExecutionCount = strategyReports.reduce((sum, strategy) => sum + strategy.pendingExecutionCount, 0);
+    checks.push(pendingExecutionCount === 0
+      ? { id: "reconciliation", label: "ორდერების reconciliation", status: "OK", detail: "გაურკვეველი ან გაჭედილი ორდერი არ არის" }
+      : { id: "reconciliation", label: "ორდერების reconciliation", status: "WARNING", detail: `${pendingExecutionCount} ორდერი Binance-ის დადასტურებას ელოდება` });
 
     const invalidOrderCount = strategyReports.reduce((sum, strategy) => sum + strategy.invalidOrderCount, 0);
     checks.push(invalidOrderCount === 0

@@ -46,7 +46,8 @@ export class PostgresStrategyRepository implements StrategyStore {
         id BIGSERIAL PRIMARY KEY, strategy_id BIGINT NOT NULL REFERENCES bot_strategies(id),
         side TEXT NOT NULL, level_percent NUMERIC NOT NULL, trigger_price NUMERIC NOT NULL,
         status TEXT NOT NULL DEFAULT 'WAITING', error_message TEXT, executed_at TIMESTAMPTZ,
-        allocation_percent NUMERIC NOT NULL DEFAULT 0,
+        allocation_percent NUMERIC NOT NULL DEFAULT 0, client_order_id TEXT,
+        execution_started_at TIMESTAMPTZ,
         UNIQUE(strategy_id, side, level_percent)
       );
       CREATE TABLE IF NOT EXISTS bot_market_state (
@@ -85,6 +86,12 @@ export class PostgresStrategyRepository implements StrategyStore {
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS remaining_cost_basis NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_orders ADD COLUMN IF NOT EXISTS execution_environment TEXT NOT NULL DEFAULT 'SIMULATION'`);
     await this.pool.query(`ALTER TABLE bot_executed_levels ADD COLUMN IF NOT EXISTS allocation_percent NUMERIC NOT NULL DEFAULT 0`);
+    await this.pool.query(`ALTER TABLE bot_executed_levels ADD COLUMN IF NOT EXISTS client_order_id TEXT`);
+    await this.pool.query(`ALTER TABLE bot_executed_levels ADD COLUMN IF NOT EXISTS execution_started_at TIMESTAMPTZ`);
+    await this.pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS bot_orders_external_order_unique
+      ON bot_orders (execution_environment, external_order_id)`);
+    await this.pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS bot_levels_client_order_unique
+      ON bot_executed_levels (client_order_id) WHERE client_order_id IS NOT NULL`);
     await this.pool.query(`UPDATE bot_strategies SET quote_asset = 'USDT' WHERE quote_asset = ''`);
     await this.pool.query(`UPDATE bot_strategies SET base_asset = LEFT(symbol, LENGTH(symbol) - 4)
       WHERE base_asset = '' AND symbol LIKE '%USDT'`);
@@ -279,24 +286,43 @@ export class PostgresStrategyRepository implements StrategyStore {
     const result = await this.pool.query(`SELECT id, strategy_id AS "strategyId", side,
       level_percent::float8 AS "levelPercent", trigger_price::float8 AS "triggerPrice",
       allocation_percent::float8 AS "allocationPercent", status,
-      error_message AS "errorMessage", executed_at AS "executedAt"
+      error_message AS "errorMessage", executed_at AS "executedAt",
+      client_order_id AS "clientOrderId", execution_started_at AS "executionStartedAt"
       FROM bot_executed_levels WHERE strategy_id = $1 ORDER BY side, level_percent`, [strategyId]);
     return result.rows;
   }
 
-  async claimLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number): Promise<boolean> {
-    const result = await this.pool.query(`UPDATE bot_executed_levels SET status = 'EXECUTING', error_message = NULL
+  async claimLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<boolean> {
+    const result = await this.pool.query(`UPDATE bot_executed_levels SET status = 'EXECUTING', error_message = NULL,
+      client_order_id = $4, execution_started_at = NOW()
       WHERE strategy_id = $1 AND side = $2 AND level_percent = $3
         AND (status = 'WAITING' OR (status = 'FAILED' AND error_message NOT LIKE '[NO_AUTO_RETRY]%'))`,
-    [strategyId, side, levelPercent]);
+    [strategyId, side, levelPercent, clientOrderId]);
     return result.rowCount === 1;
+  }
+
+  async releaseLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<void> {
+    await this.pool.query(`UPDATE bot_executed_levels SET status = 'WAITING', error_message = NULL,
+      client_order_id = NULL, execution_started_at = NULL
+      WHERE strategy_id = $1 AND side = $2 AND level_percent = $3 AND client_order_id = $4
+        AND status IN ('EXECUTING', 'FAILED')`, [strategyId, side, levelPercent, clientOrderId]);
   }
 
   async completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const strategy = await this.getById(strategyId, client);
+      const locked = await client.query<PgStrategyRow>("SELECT * FROM bot_strategies WHERE id = $1 FOR UPDATE", [strategyId]);
+      if (!locked.rows[0]) throw new Error(`Strategy ${strategyId} not found`);
+      const strategy = this.map(locked.rows[0]);
+      const existing = await client.query("SELECT 1 FROM bot_orders WHERE execution_environment = $1 AND external_order_id = $2",
+        [strategy.executionEnvironment, externalOrderId]);
+      if (existing.rows[0]) {
+        await client.query(`UPDATE bot_executed_levels SET status = 'EXECUTED', executed_at = COALESCE(executed_at, NOW()), error_message = NULL
+          WHERE strategy_id = $1 AND side = 'BUY' AND level_percent = $2`, [strategyId, levelPercent]);
+        await client.query("COMMIT");
+        return;
+      }
       const totalInvested = strategy.totalInvested + quoteAmount;
       const totalPurchasedQuantity = strategy.totalPurchasedQuantity + assetQuantity;
       const totalAssetQuantity = strategy.totalAssetQuantity + assetQuantity;
@@ -312,7 +338,7 @@ export class PostgresStrategyRepository implements StrategyStore {
         VALUES ($1, $2, 'BUY', $3, $4, $5, $6, $7, $7, $8)`,
       [strategyId, externalOrderId, levelPercent, price, quoteAmount, assetQuantity, strategy.executionEnvironment, now]);
       await client.query(`UPDATE bot_executed_levels SET status = 'EXECUTED', executed_at = $1, error_message = NULL
-        WHERE strategy_id = $2 AND side = 'BUY' AND level_percent = $3 AND status = 'EXECUTING'`,
+        WHERE strategy_id = $2 AND side = 'BUY' AND level_percent = $3 AND status IN ('EXECUTING', 'FAILED')`,
       [now, strategyId, levelPercent]);
       await client.query("COMMIT");
     } catch (error) {
@@ -331,6 +357,14 @@ export class PostgresStrategyRepository implements StrategyStore {
       const row = result.rows[0];
       if (!row) throw new Error(`Strategy ${strategyId} not found`);
       const strategy = this.map(row);
+      const existing = await client.query("SELECT 1 FROM bot_orders WHERE execution_environment = $1 AND external_order_id = $2",
+        [strategy.executionEnvironment, externalOrderId]);
+      if (existing.rows[0]) {
+        await client.query(`UPDATE bot_executed_levels SET status = 'EXECUTED', executed_at = COALESCE(executed_at, NOW()), error_message = NULL
+          WHERE strategy_id = $1 AND side = 'SELL' AND level_percent = $2`, [strategyId, levelPercent]);
+        await client.query("COMMIT");
+        return;
+      }
       if (assetQuantity > strategy.totalAssetQuantity + 1e-12) throw new Error("Cannot sell more asset than the strategy owns");
       const remainingQuantity = Math.max(0, strategy.totalAssetQuantity - assetQuantity);
       if (remainingQuantity + 1e-12 < minimumReserveQuantity) throw new Error("Sell would consume the permanent reserve");
@@ -349,7 +383,7 @@ export class PostgresStrategyRepository implements StrategyStore {
         VALUES ($1, $2, 'SELL', $3, $4, $5, $6, $7, $7, $8)`,
       [strategyId, externalOrderId, levelPercent, price, quoteAmount, assetQuantity, strategy.executionEnvironment, now]);
       await client.query(`UPDATE bot_executed_levels SET status = 'EXECUTED', executed_at = $1, error_message = NULL
-        WHERE strategy_id = $2 AND side = 'SELL' AND level_percent = $3 AND status = 'EXECUTING'`,
+        WHERE strategy_id = $2 AND side = 'SELL' AND level_percent = $3 AND status IN ('EXECUTING', 'FAILED')`,
       [now, strategyId, levelPercent]);
       await client.query("COMMIT");
     } catch (error) {
@@ -368,6 +402,12 @@ export class PostgresStrategyRepository implements StrategyStore {
       const row = result.rows[0];
       if (!row) throw new Error(`Strategy ${strategyId} not found`);
       const strategy = this.map(row);
+      const existing = await client.query("SELECT 1 FROM bot_orders WHERE execution_environment = $1 AND external_order_id = $2",
+        [strategy.executionEnvironment, externalOrderId]);
+      if (existing.rows[0]) {
+        await client.query("COMMIT");
+        return;
+      }
       const remainingQuantity = strategy.totalAssetQuantity - assetQuantity;
       if (assetQuantity <= 0 || remainingQuantity + 1e-12 < minimumReserveQuantity) {
         throw new Error("მოგების აღება მუდმივ რეზერვს შეამცირებს");

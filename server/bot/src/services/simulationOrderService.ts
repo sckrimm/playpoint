@@ -4,12 +4,12 @@ export class SimulationOrderService {
   readonly environment = "SIMULATION" as const;
   private sequence = 0;
 
-  async buy(symbol: string, price: number, quoteAmount: number): Promise<SimulatedOrderResult> {
+  async buy(symbol: string, price: number, quoteAmount: number, clientOrderId?: string): Promise<SimulatedOrderResult> {
     if (price <= 0 || quoteAmount <= 0) throw new Error("Simulation order values must be positive");
     const assetQuantity = quoteAmount / price;
     this.sequence += 1;
     return {
-      orderId: `SIM-${Date.now()}-${this.sequence}`,
+      orderId: clientOrderId ?? `SIM-${Date.now()}-${this.sequence}`,
       symbol,
       side: "BUY",
       price,
@@ -18,11 +18,11 @@ export class SimulationOrderService {
     };
   }
 
-  async sell(symbol: string, price: number, assetQuantity: number): Promise<SimulatedOrderResult> {
+  async sell(symbol: string, price: number, assetQuantity: number, clientOrderId?: string): Promise<SimulatedOrderResult> {
     if (price <= 0 || assetQuantity <= 0) throw new Error("Simulation order values must be positive");
     this.sequence += 1;
     return {
-      orderId: `SIM-${Date.now()}-${this.sequence}`,
+      orderId: clientOrderId ?? `SIM-${Date.now()}-${this.sequence}`,
       symbol,
       side: "SELL",
       price,

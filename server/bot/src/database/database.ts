@@ -56,6 +56,8 @@ export function openDatabase(filename: string): Database.Database {
       status TEXT NOT NULL DEFAULT 'WAITING',
       error_message TEXT,
       executed_at TEXT,
+      client_order_id TEXT,
+      execution_started_at TEXT,
       UNIQUE(strategy_id, side, level_percent)
     );
 
@@ -116,6 +118,12 @@ export function openDatabase(filename: string): Database.Database {
   ensureColumn(db, "strategies", "remaining_cost_basis", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "orders", "execution_environment", "TEXT NOT NULL DEFAULT 'SIMULATION'");
   ensureColumn(db, "executed_levels", "allocation_percent", "REAL NOT NULL DEFAULT 0");
+  ensureColumn(db, "executed_levels", "client_order_id", "TEXT");
+  ensureColumn(db, "executed_levels", "execution_started_at", "TEXT");
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS orders_external_order_unique
+    ON orders (execution_environment, external_order_id)`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS levels_client_order_unique
+    ON executed_levels (client_order_id) WHERE client_order_id IS NOT NULL`);
   db.exec(`
     UPDATE strategies SET quote_asset = 'USDT' WHERE quote_asset = '';
     UPDATE strategies SET base_asset = substr(symbol, 1, length(symbol) - 4)
