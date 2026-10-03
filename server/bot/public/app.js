@@ -47,6 +47,22 @@ let comparisonData = null;
 let comparisonSelection = new Set();
 let backtestDays = 30;
 let sessionUser = null;
+let newsItems = [];
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
+}
+
+function safeHttpUrl(value) {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch { return ""; }
+}
+
+function newsSentimentLabel(value) {
+  return ({ POSITIVE: "პოზიტიური", NEUTRAL: "ნეიტრალური", NEGATIVE: "ნეგატიური" })[value] ?? value;
+}
 
 function applyCandidateLayout(layout, persist = true) {
   const normalized = layout === "rows" ? "rows" : "columns";
@@ -350,6 +366,44 @@ async function loadOpportunities() {
   }
 }
 
+function renderNews() {
+  const source = byId("newsSource").value;
+  const sentiment = byId("newsSentiment").value;
+  const filtered = newsItems.filter((item) => (source === "ALL" || item.source === source) && (sentiment === "ALL" || item.sentiment === sentiment));
+  byId("newsList").innerHTML = filtered.length ? filtered.map((item) => {
+    const articleUrl = safeHttpUrl(item.url);
+    const imageUrl = safeHttpUrl(item.imageUrl);
+    const image = imageUrl ? `<img class="news-image" src="${escapeHtml(imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : '<div class="news-image news-image-placeholder" aria-hidden="true"></div>';
+    const sentimentClass = item.sentiment.toLowerCase();
+    return `<article class="news-card">
+      ${image}
+      <div class="news-card-body">
+        <div class="news-card-meta"><strong>${escapeHtml(item.source)}</strong><time datetime="${escapeHtml(item.publishedAt)}">${new Date(item.publishedAt).toLocaleString("ka-GE", { dateStyle: "medium", timeStyle: "short" })}</time>${item.translated ? "" : '<span class="translation-warning">თარგმანი დროებით მიუწვდომელია</span>'}</div>
+        <h2 title="${escapeHtml(item.originalTitle)}">${escapeHtml(item.title)}</h2>
+        <p>${escapeHtml(item.summary)}</p>
+        <div class="news-tags"><span class="news-chip news-sentiment ${sentimentClass}">${newsSentimentLabel(item.sentiment)}</span>${item.coins.map((coin) => `<span class="news-chip">${escapeHtml(coin)}</span>`).join("")}</div>
+        ${articleUrl ? `<a class="card-action news-original" href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">ორიგინალის ნახვა ↗</a>` : ""}
+      </div>
+    </article>`;
+  }).join("") : '<p class="empty-state">ამ ფილტრით სიახლეები ვერ მოიძებნა.</p>';
+}
+
+async function loadNews() {
+  byId("newsList").innerHTML = '<p class="empty-state">სიახლეები და ქართული თარგმანი იტვირთება...</p>';
+  try {
+    const data = await api("/api/news");
+    newsItems = data.items;
+    const select = byId("newsSource");
+    const selected = select.value;
+    select.replaceChildren(new Option("ყველა წყარო", "ALL"), ...data.sources.map((source) => new Option(source, source)));
+    select.value = data.sources.includes(selected) ? selected : "ALL";
+    byId("newsMeta").textContent = `${data.sources.join(" · ")} · განახლდა ${new Date(data.generatedAt).toLocaleTimeString("ka-GE")}`;
+    renderNews();
+  } catch (error) {
+    byId("newsList").innerHTML = `<p class="empty-state">სიახლეები ვერ ჩაიტვირთა: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
 function renderComparison(data, preserveSelection = false) {
   comparisonData = data;
   const grid = byId("comparisonGrid");
@@ -485,6 +539,7 @@ async function openComparison() {
   byId("overviewView").hidden = true;
   byId("detailView").hidden = true;
   byId("marketCandidatesView").hidden = true;
+  byId("newsView").hidden = true;
   byId("comparisonView").hidden = false;
   if (symbols[0]) await loadComparison(symbols[0]);
   else byId("comparisonGrid").innerHTML = '<div class="empty-state"><strong>აქტიური სტრატეგიები ჯერ არ არის</strong><span>ჯერ შექმენი ერთი coin-ის რამდენიმე სტრატეგია.</span></div>';
@@ -494,8 +549,18 @@ function openMarketCandidates() {
   byId("overviewView").hidden = true;
   byId("detailView").hidden = true;
   byId("comparisonView").hidden = true;
+  byId("newsView").hidden = true;
   byId("marketCandidatesView").hidden = false;
   void loadOpportunities();
+}
+
+function openNews() {
+  byId("overviewView").hidden = true;
+  byId("detailView").hidden = true;
+  byId("comparisonView").hidden = true;
+  byId("marketCandidatesView").hidden = true;
+  byId("newsView").hidden = false;
+  void loadNews();
 }
 
 function renderMarket(market) {
@@ -605,6 +670,7 @@ async function openDetail(id) {
   byId("overviewView").hidden = true;
   byId("comparisonView").hidden = true;
   byId("marketCandidatesView").hidden = true;
+  byId("newsView").hidden = true;
   byId("detailView").hidden = false;
   try {
     renderDetail(await api(`/api/strategies/${id}`));
@@ -781,6 +847,7 @@ byId("openCreate").addEventListener("click", async () => {
 });
 byId("openComparison").addEventListener("click", () => { void openComparison(); });
 byId("openMarketCandidates").addEventListener("click", openMarketCandidates);
+byId("openNews").addEventListener("click", openNews);
 byId("comparisonSymbol").addEventListener("change", (event) => { void loadComparison(event.target.value); });
 byId("comparisonCreate").addEventListener("click", () => { void openCreateForComparison(); });
 byId("backtestRange").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
@@ -791,11 +858,17 @@ byId("runBacktest").addEventListener("click", () => { void runBacktest(); });
 byId("backFromComparison").addEventListener("click", () => {
   byId("comparisonView").hidden = true;
   byId("marketCandidatesView").hidden = true;
+  byId("newsView").hidden = true;
   byId("overviewView").hidden = false;
   void loadOverview();
 });
 byId("backFromMarketCandidates").addEventListener("click", () => {
   byId("marketCandidatesView").hidden = true;
+  byId("overviewView").hidden = false;
+  void loadOverview();
+});
+byId("backFromNews").addEventListener("click", () => {
+  byId("newsView").hidden = true;
   byId("overviewView").hidden = false;
   void loadOverview();
 });
@@ -809,6 +882,7 @@ byId("backToStrategies").addEventListener("click", () => {
   byId("detailView").hidden = true;
   byId("comparisonView").hidden = true;
   byId("marketCandidatesView").hidden = true;
+  byId("newsView").hidden = true;
   byId("overviewView").hidden = false;
   void loadOverview();
 });
@@ -828,6 +902,9 @@ byId("showBuyLevels").addEventListener("click", () => showLevelView("BUY"));
 byId("showSellLevels").addEventListener("click", () => showLevelView("SELL"));
 byId("themeToggle").addEventListener("click", () => applyTheme(isDarkTheme() ? "light" : "dark"));
 byId("refreshOpportunities").addEventListener("click", loadOpportunities);
+byId("refreshNews").addEventListener("click", loadNews);
+byId("newsSource").addEventListener("change", renderNews);
+byId("newsSentiment").addEventListener("change", renderNews);
 byId("candidateLayout").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
   applyCandidateLayout(button.dataset.layout);
 }));

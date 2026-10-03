@@ -111,6 +111,24 @@ h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: 0; }
 .opportunity-list[data-layout="rows"] .opportunity-reasons { line-height: 1.35; }
 .opportunity-list[data-layout="rows"] .opportunity-actions { margin-top: 0; }
 .signal-watch { color: #138a56; }.signal-neutral { color: #9b7400; }.signal-high-risk { color: #c53c3c; }
+.news-page-head { align-items: center; }
+.news-controls { display: flex; align-items: flex-end; gap: 8px; }
+.news-controls label { display: grid; gap: 5px; color: #68756e; font-size: 10px; font-weight: 750; }
+.news-controls select { min-width: 150px; height: 38px; padding: 0 10px; border: 1px solid #cfd8d3; border-radius: 6px; color: #3f4c45; background: #fff; font: inherit; }
+.news-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.news-card { min-width: 0; display: grid; grid-template-columns: 150px minmax(0, 1fr); overflow: hidden; border: 1px solid #dce2df; border-radius: 8px; background: #fff; }
+.news-image { width: 100%; height: 100%; min-height: 170px; display: block; object-fit: cover; background: #eef2f0; }
+.news-image-placeholder { background: #eef2f0; }
+.news-card-body { min-width: 0; display: flex; flex-direction: column; gap: 9px; padding: 15px; }
+.news-card-meta, .news-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: #748079; font-size: 10px; }
+.news-card h2 { margin: 0; font-size: 16px; line-height: 1.35; }
+.news-card p { display: -webkit-box; margin: 0; overflow: hidden; color: #68756e; font-size: 11px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.news-chip { padding: 4px 6px; border-radius: 4px; background: #eef2f0; font-weight: 800; }
+.news-sentiment.positive { color: #16774c; background: #e5f5ed; }
+.news-sentiment.neutral { color: #776116; background: #fff3bf; }
+.news-sentiment.negative { color: #a12d2d; background: #fdeaea; }
+.news-original { align-self: flex-start; margin-top: auto; text-decoration: none; }
+.translation-warning { color: #9b7400; font-weight: 750; }
 .environment-badge { padding: 7px 10px; border-radius: 6px; background: #fff3bf; border: 1px solid #e2c854; color: #665000; font-size: 11px; font-weight: 800; }
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border: 1px solid #dce2df; background: #fff; border-radius: 8px; overflow: hidden; }
 .metrics article { min-width: 0; padding: 20px; border-right: 1px solid #e2e7e4; }
@@ -345,6 +363,13 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
 [data-theme="dark"] .opportunity-metrics span, [data-theme="dark"] .opportunity-reasons { color: #99a49e; }
 [data-theme="dark"] .binance-link { color: #f0cd55; border-color: #6f5a12; background: #302912; }
 [data-theme="dark"] .binance-link:hover { background: #3b3216; }
+[data-theme="dark"] .news-card { border-color: #3a414b; background: #1e2329; }
+[data-theme="dark"] .news-image, [data-theme="dark"] .news-chip { background-color: #29322e; }
+[data-theme="dark"] .news-card p, [data-theme="dark"] .news-card-meta, [data-theme="dark"] .news-tags { color: #99a49e; }
+[data-theme="dark"] .news-controls select { color: #eaecef; background: #1e2329; border-color: #3a414b; }
+[data-theme="dark"] .news-sentiment.positive { color: #63d39b; background: #183629; }
+[data-theme="dark"] .news-sentiment.neutral { color: #f1d86b; background: #302912; }
+[data-theme="dark"] .news-sentiment.negative { color: #ff8c8c; background: #351d22; }
 [data-theme="dark"] .comparison-symbol select { color: #eaecef; background: #1e2329; border-color: #3a414b; }
 [data-theme="dark"] .comparison-card.best { border-color: #3f9c70; }
 [data-theme="dark"] .comparison-card-head { border-color: #303a35; }
@@ -400,6 +425,7 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
   .metrics article { border-bottom: 1px solid #e2e7e4; }
   .content-grid { grid-template-columns: 1fr; }
   .strategy-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .news-list { grid-template-columns: 1fr; }
   .opportunity-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .opportunity-list[data-layout="rows"] .opportunity { grid-template-columns: minmax(140px, .7fr) minmax(320px, 1.5fr) 170px; }
   .opportunity-list[data-layout="rows"] .opportunity-reasons { display: none; }
@@ -414,6 +440,10 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
   main { width: calc(100% - 28px); padding-top: 24px; }
   .overview-head { align-items: stretch; flex-direction: column; }
   .overview-actions { align-items: stretch; flex-direction: column; }
+  .news-page-head, .news-controls { align-items: stretch; flex-direction: column; }
+  .news-controls select { width: 100%; }
+  .news-card { grid-template-columns: 1fr; }
+  .news-image { min-height: 190px; }
   .comparison-head { align-items: stretch; flex-direction: column; }
   .comparison-symbol { min-width: 0; }
   .comparison-controls { grid-template-columns: 1fr; gap: 12px; }

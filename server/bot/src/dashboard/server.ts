@@ -12,6 +12,7 @@ import { SimulationOrderService } from "../services/simulationOrderService.js";
 import { BinanceTestnetOrderService } from "../services/binanceTestnetOrderService.js";
 import { runStrategyBacktest } from "../services/strategyBacktestService.js";
 import { MarketOpportunityService } from "../services/marketOpportunityService.js";
+import { CryptoNewsService } from "../services/cryptoNewsService.js";
 import type { BuyLevelConfig, OrderRecord, SellLevelConfig, StrategyConfig, StrategyRecord } from "../types/strategy.js";
 import { UserAuthStore, type DashboardUser } from "../auth/userAuthStore.js";
 
@@ -37,6 +38,7 @@ if (userAuthStore) {
 const exchangeInfo = new BinanceExchangeInfoService();
 const marketHistory = new BinanceMarketHistoryService();
 const marketOpportunities = new MarketOpportunityService();
+const cryptoNews = new CryptoNewsService();
 let catalogCache: { items: SpotSymbolCatalogItem[]; expiresAt: number } | null = null;
 const hourlyPriceCache = new Map<string, { value: HistoricalPrice; expiresAt: number }>();
 
@@ -583,6 +585,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
   }
   if (request.method === "GET" && pathname === "/api/market-opportunities") {
     json(response, 200, await marketOpportunities.scan());
+    return true;
+  }
+  if (request.method === "GET" && pathname === "/api/news") {
+    json(response, 200, await cryptoNews.latest());
     return true;
   }
   if (request.method === "POST" && pathname === "/api/admin/invites") {
