@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { telegramAlerts } from "../services/telegramAlertService.js";
 type MiniTickerMessage = { e: string; E: number; s: string; c: string };
 export type MultiPriceHandler = (symbol: string, price: number, eventTime: Date) => Promise<void>;
 
@@ -59,6 +60,7 @@ export class BinancePriceFeed {
       this.lastMessageAt = Date.now();
       this.sendSubscription("SUBSCRIBE", [...this.symbols]);
       console.log(`${this.label} WebSocket connected with ${this.symbols.size} symbol(s)`);
+      void telegramAlerts.transition(`feed:${this.label}`, "CONNECTED", `${this.label} ფასის ნაკადი აღდგა`);
     });
 
     this.socket.on("message", (raw) => {
@@ -78,7 +80,10 @@ export class BinancePriceFeed {
     this.socket.on("error", (error) => console.error(`${this.label} WebSocket error:`, error.message));
     this.socket.on("close", () => {
       this.socket = null;
-      if (!this.stopped) this.scheduleReconnect(onPrice);
+      if (!this.stopped) {
+        void telegramAlerts.transition(`feed:${this.label}`, "DISCONNECTED", `${this.label} ფასის ნაკადი გაითიშა\nბოტი ავტომატურად ცდილობს აღდგენას`);
+        this.scheduleReconnect(onPrice);
+      }
     });
   }
 

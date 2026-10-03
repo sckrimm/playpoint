@@ -1,6 +1,7 @@
 import type { OrderExecutionService, StrategyConfig } from "../types/strategy.js";
 import type { StrategyStore } from "../database/repository.js";
 import { money, quantity } from "../utils/format.js";
+import { telegramAlerts } from "../services/telegramAlertService.js";
 
 export class StrategyEngine {
   private evaluationQueue: Promise<void> = Promise.resolve();
@@ -56,6 +57,14 @@ export class StrategyEngine {
       try {
         const order = await this.orders.buy(strategy.symbol, price, quoteAmount);
         await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
+        void telegramAlerts.send([
+          `BUY შესრულდა [${this.orders.environment}]`,
+          `${strategy.symbol} · სტრატეგია #${strategy.id}`,
+          `დონე: -${level.levelPercent}%`,
+          `ფასი: ${money(order.price)}`,
+          `თანხა: ${money(order.quoteAmount)}`,
+          `მიღებული: ${quantity(order.assetQuantity)} ${strategy.baseAsset}`,
+        ].join("\n"));
         console.log([
           "BUY LEVEL TRIGGERED",
           `Level: -${level.levelPercent}% (trigger ${money(level.triggerPrice)})`,
@@ -65,7 +74,9 @@ export class StrategyEngine {
         ].join("\n"));
       } catch (error) {
         await this.repository.failLevel(strategy.id, "BUY", level.levelPercent, error);
-        console.error(`BUY -${level.levelPercent}% failed safely`, error instanceof Error ? error.message : error);
+        const message = error instanceof Error ? error.message : String(error);
+        void telegramAlerts.send(`BUY შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: -${level.levelPercent}%\n${message}`);
+        console.error(`BUY -${level.levelPercent}% failed safely`, message);
       }
     }
 
@@ -85,6 +96,14 @@ export class StrategyEngine {
         const order = await this.orders.sell(strategy.symbol, price, assetQuantity);
         await this.repository.completeSell(strategy.id, level.levelPercent, order.price, order.quoteAmount,
           order.assetQuantity, minimumReserveQuantity, order.orderId);
+        void telegramAlerts.send([
+          `SELL შესრულდა [${this.orders.environment}]`,
+          `${strategy.symbol} · სტრატეგია #${strategy.id}`,
+          `დონე: +${level.levelPercent}%`,
+          `ფასი: ${money(order.price)}`,
+          `მიღებული: ${money(order.quoteAmount)}`,
+          `გაყიდული: ${quantity(order.assetQuantity)} ${strategy.baseAsset}`,
+        ].join("\n"));
         console.log([
           "SELL LEVEL TRIGGERED",
           `Level: +${level.levelPercent}% (trigger ${money(level.triggerPrice)})`,
@@ -94,7 +113,9 @@ export class StrategyEngine {
         ].join("\n"));
       } catch (error) {
         await this.repository.failLevel(strategy.id, "SELL", level.levelPercent, error);
-        console.error(`SELL +${level.levelPercent}% failed safely`, error instanceof Error ? error.message : error);
+        const message = error instanceof Error ? error.message : String(error);
+        void telegramAlerts.send(`SELL შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: +${level.levelPercent}%\n${message}`);
+        console.error(`SELL +${level.levelPercent}% failed safely`, message);
       }
     }
     if (!executedAny && this.verbose) console.log("No action.");

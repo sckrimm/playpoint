@@ -15,6 +15,7 @@ import { MarketOpportunityService } from "../services/marketOpportunityService.j
 import { CryptoNewsService } from "../services/cryptoNewsService.js";
 import type { BuyLevelConfig, OrderRecord, SellLevelConfig, StrategyConfig, StrategyRecord } from "../types/strategy.js";
 import { UserAuthStore, type DashboardUser } from "../auth/userAuthStore.js";
+import { telegramAlerts } from "../services/telegramAlertService.js";
 
 const port = Number(process.env.DASHBOARD_PORT ?? process.env.PORT ?? 4173);
 const publicDir = path.resolve("public");
@@ -342,6 +343,7 @@ async function withdrawStrategyProfit(id: number, body: unknown, user: Dashboard
     const order = await (testnetService ?? new SimulationOrderService()).sell(strategy.symbol, price, assetQuantity);
     await repository.withdrawProfit(strategy.id, order.price, order.quoteAmount, order.assetQuantity,
       minimumReserveQuantity, order.orderId);
+    void telegramAlerts.send(`მოგების აღება [${strategy.executionEnvironment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nმიღებული: ${order.quoteAmount.toFixed(2)} ${strategy.quoteAsset}\nგაყიდული: ${order.assetQuantity} ${strategy.baseAsset}`);
     return await repository.getById(strategy.id);
   } finally {
     await repository.close();
@@ -592,6 +594,7 @@ async function createStrategy(body: unknown, user: DashboardUser | null) {
         ? await testnetService.getCurrentPrice(symbol) : await exchangeInfo.getCurrentPrice(symbol);
       const order = await (testnetService ?? new SimulationOrderService()).buy(symbol, currentPrice, initialPurchaseAmount);
       await repository.completeBuy(strategy.id, 0, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
+      void telegramAlerts.send(`საწყისი BUY [${executionEnvironment}]\n${symbol} · სტრატეგია #${strategy.id}\nფასი: ${order.price}\nთანხა: ${order.quoteAmount.toFixed(2)} ${catalogItem.quoteAsset}`);
       strategy = await repository.getById(strategy.id);
     }
     return strategy;
@@ -941,3 +944,12 @@ server.listen(port, "0.0.0.0", () => {
   console.log(`Dashboard: http://127.0.0.1:${port}${basePath || "/"}`);
   console.log(`Mode: ${appConfig.tradingMode} | Database: ${appConfig.databaseUrl ? "PostgreSQL" : appConfig.databasePath}`);
 });
+
+setInterval(() => void getReadinessReport(null).then((report) => {
+  const message = report.overall === "READY"
+    ? "Testnet მზადყოფნა: READY\nყველა აუცილებელი შემოწმება გავლილია"
+    : report.overall === "BLOCKED"
+      ? "Testnet მზადყოფნა დაიბლოკა\nგახსენი მზადყოფნის მონიტორი დეტალებისთვის"
+      : "Testnet დაკვირვება გრძელდება";
+  return telegramAlerts.transition("readiness:overall", report.overall, message);
+}).catch((error) => console.error("Readiness alert check failed:", error instanceof Error ? error.message : error)), 60_000).unref();

@@ -9,6 +9,7 @@ import { StrategyEngine } from "./strategy/strategyEngine.js";
 import { strategyRecordToConfig } from "./strategy/strategyConfig.js";
 import type { StrategyRecord } from "./types/strategy.js";
 import { money } from "./utils/format.js";
+import { telegramAlerts } from "./services/telegramAlertService.js";
 
 const store = await createStore();
 const exchangeInfo = new BinanceExchangeInfoService();
@@ -22,6 +23,12 @@ const strategiesByEnvironment = {
   TESTNET: new Map<string, StrategyRecord[]>(),
 };
 const lastPersistedAt = new Map<string, number>();
+
+if (telegramAlerts.configured) {
+  void telegramAlerts.send("PlayPoint მონიტორინგი ჩაირთო\nTelegram შეტყობინებები დაკავშირებულია");
+} else {
+  console.log("Telegram alerts are not configured");
+}
 
 async function syncStrategies(): Promise<void> {
   const active = (await store.listStrategies()).filter((strategy) =>
@@ -69,11 +76,13 @@ async function refreshBalances(): Promise<void> {
     await store.saveBinanceConnectionState({
       status: "CONNECTED", message: "Spot ანგარიში დაკავშირებულია მხოლოდ წაკითხვის რეჟიმში", updatedAt: new Date().toISOString(),
     });
+    void telegramAlerts.transition("account:read-only", "CONNECTED", "Binance read-only API კავშირი აღდგა");
     console.log("Binance Spot account balances refreshed");
   } catch (error) {
     const status = error instanceof BinanceAccountError ? error.kind : "ERROR";
     const message = error instanceof BinanceAccountError ? error.message : "Binance account connection failed safely";
     await store.saveBinanceConnectionState({ status, message, updatedAt: new Date().toISOString() });
+    void telegramAlerts.transition("account:read-only", status, `Binance read-only API შეცდომა [${status}]\n${message}`);
     console.error(`Read-only account refresh failed [${status}]: ${message}`);
   }
 }
