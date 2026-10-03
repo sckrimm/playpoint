@@ -7,6 +7,8 @@ export class BinancePriceFeed {
   private stopped = false;
   private reconnectAttempt = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private watchdogTimer: NodeJS.Timeout | null = null;
+  private lastMessageAt = 0;
 
   private symbols = new Set<string>();
   private requestId = 1;
@@ -18,6 +20,13 @@ export class BinancePriceFeed {
 
   start(onPrice: MultiPriceHandler): void {
     this.stopped = false;
+    this.watchdogTimer ??= setInterval(() => {
+      if (!this.symbols.size || this.socket?.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - this.lastMessageAt <= 45_000) return;
+      console.error(`${this.label} WebSocket stale for 45s; reconnecting`);
+      this.socket.terminate();
+    }, 15_000);
+    this.watchdogTimer.unref();
     this.connect(onPrice);
   }
 
@@ -27,6 +36,7 @@ export class BinancePriceFeed {
     const removed = [...this.symbols].filter((symbol) => !next.has(symbol));
     this.symbols = next;
     if (this.socket?.readyState === WebSocket.OPEN) {
+      if (added.length) this.lastMessageAt = Date.now();
       this.sendSubscription("SUBSCRIBE", added);
       this.sendSubscription("UNSUBSCRIBE", removed);
     }
@@ -35,6 +45,8 @@ export class BinancePriceFeed {
   stop(): void {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.watchdogTimer) clearInterval(this.watchdogTimer);
+    this.watchdogTimer = null;
     this.socket?.close();
   }
 
@@ -44,6 +56,7 @@ export class BinancePriceFeed {
 
     this.socket.on("open", () => {
       this.reconnectAttempt = 0;
+      this.lastMessageAt = Date.now();
       this.sendSubscription("SUBSCRIBE", [...this.symbols]);
       console.log(`${this.label} WebSocket connected with ${this.symbols.size} symbol(s)`);
     });
@@ -54,14 +67,15 @@ export class BinancePriceFeed {
         if (!("e" in message)) return;
         const price = Number(message.c);
         if (message.e !== "24hrMiniTicker" || !this.symbols.has(message.s) || !Number.isFinite(price) || price <= 0) return;
+        this.lastMessageAt = Date.now();
         void onPrice(message.s, price, new Date(message.E)).catch((error) =>
-          console.error("Price processing failed:", error instanceof Error ? error.message : error));
+          console.error(`${this.label} price processing failed:`, error instanceof Error ? error.message : error));
       } catch (error) {
         console.error("Malformed Binance message:", error instanceof Error ? error.message : error);
       }
     });
 
-    this.socket.on("error", (error) => console.error("Binance WebSocket error:", error.message));
+    this.socket.on("error", (error) => console.error(`${this.label} WebSocket error:`, error.message));
     this.socket.on("close", () => {
       this.socket = null;
       if (!this.stopped) this.scheduleReconnect(onPrice);

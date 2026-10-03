@@ -98,7 +98,7 @@ function startFeed(environment: "SIMULATION" | "TESTNET"): void {
   feeds[environment].start(async (symbol, price, eventTime) => {
   const now = Date.now();
   const marketKey = `${environment}:${symbol}`;
-  if (environment === "SIMULATION" && now - (lastPersistedAt.get(marketKey) ?? 0) >= 1_000) {
+  if (now - (lastPersistedAt.get(marketKey) ?? 0) >= 1_000) {
     await store.updateMarketPrice(symbol, price, eventTime);
     lastPersistedAt.set(marketKey, now);
     console.log(`[${environment}] ${symbol} ${money(price)}`);
