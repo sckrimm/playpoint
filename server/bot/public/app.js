@@ -61,7 +61,11 @@ function safeHttpUrl(value) {
 }
 
 function newsSentimentLabel(value) {
-  return ({ POSITIVE: "პოზიტიური", NEUTRAL: "ნეიტრალური", NEGATIVE: "ნეგატიური" })[value] ?? value;
+  return ({ POSITIVE: "პოზიტიური გავლენა", NEUTRAL: "ნეიტრალური გავლენა", NEGATIVE: "ნეგატიური გავლენა" })[value] ?? value;
+}
+
+function coinDisplayName(symbol) {
+  return ({ BTC: "Bitcoin", ETH: "Ethereum", SOL: "Solana", BNB: "BNB", XRP: "XRP", DOGE: "Dogecoin", ADA: "Cardano", AVAX: "Avalanche", LINK: "Chainlink", DOT: "Polkadot", TRX: "TRON", TON: "Toncoin", SUI: "Sui", LTC: "Litecoin", SHIB: "Shiba Inu", PEPE: "Pepe" })[symbol] ?? symbol;
 }
 
 function applyCandidateLayout(layout, persist = true) {
@@ -381,7 +385,7 @@ function renderNews() {
         <div class="news-card-meta"><strong>${escapeHtml(item.source)}</strong><time datetime="${escapeHtml(item.publishedAt)}">${new Date(item.publishedAt).toLocaleString("ka-GE", { dateStyle: "medium", timeStyle: "short" })}</time>${item.translated ? "" : '<span class="translation-warning">თარგმანი დროებით მიუწვდომელია</span>'}</div>
         <h2 title="${escapeHtml(item.originalTitle)}">${escapeHtml(item.title)}</h2>
         <p>${escapeHtml(item.summary)}</p>
-        <div class="news-tags"><span class="news-chip news-sentiment ${sentimentClass}">${newsSentimentLabel(item.sentiment)}</span>${item.coins.map((coin) => `<span class="news-chip">${escapeHtml(coin)}</span>`).join("")}</div>
+        <div class="news-tags"><span class="news-chip news-sentiment ${sentimentClass}" title="ნიუსის სავარაუდო გავლენა კრიპტო ბაზარზე">${newsSentimentLabel(item.sentiment)}</span>${item.coins.map((coin) => `<span class="news-chip news-coin" title="ნიუსი ეხება ${escapeHtml(coinDisplayName(coin))}-ს"><strong>${escapeHtml(coin)}</strong> · ${escapeHtml(coinDisplayName(coin))}</span>`).join("")}</div>
         ${articleUrl ? `<a class="card-action news-original" href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">ორიგინალის ნახვა ↗</a>` : ""}
       </div>
     </article>`;

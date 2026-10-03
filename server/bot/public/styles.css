@@ -127,6 +127,8 @@ h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: 0; }
 .news-sentiment.positive { color: #16774c; background: #e5f5ed; }
 .news-sentiment.neutral { color: #776116; background: #fff3bf; }
 .news-sentiment.negative { color: #a12d2d; background: #fdeaea; }
+.news-coin { color: #46524c; background: #edf1ef; }
+.news-coin strong { color: #172126; }
 .news-original { align-self: flex-start; margin-top: auto; text-decoration: none; }
 .translation-warning { color: #9b7400; font-weight: 750; }
 .environment-badge { padding: 7px 10px; border-radius: 6px; background: #fff3bf; border: 1px solid #e2c854; color: #665000; font-size: 11px; font-weight: 800; }
@@ -370,6 +372,8 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
 [data-theme="dark"] .news-sentiment.positive { color: #63d39b; background: #183629; }
 [data-theme="dark"] .news-sentiment.neutral { color: #f1d86b; background: #302912; }
 [data-theme="dark"] .news-sentiment.negative { color: #ff8c8c; background: #351d22; }
+[data-theme="dark"] .news-coin { color: #bdc7c1; background: #29322e; }
+[data-theme="dark"] .news-coin strong { color: #f3f7f5; }
 [data-theme="dark"] .comparison-symbol select { color: #eaecef; background: #1e2329; border-color: #3a414b; }
 [data-theme="dark"] .comparison-card.best { border-color: #3f9c70; }
 [data-theme="dark"] .comparison-card-head { border-color: #303a35; }
