@@ -29,6 +29,7 @@ button { cursor: pointer; }
 main { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 50px; }
 .overview-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .overview-actions { display: flex; align-items: center; gap: 10px; }
+.overview-actions button { font-size: 12px; white-space: nowrap; }
 .view-switch { display: inline-flex; padding: 3px; border: 1px solid #d7dedb; border-radius: 6px; background: #eef2f0; }
 .view-switch button { height: 32px; padding: 0 12px; border: 0; border-radius: 4px; color: #66716b; background: transparent; font-weight: 750; }
 .view-switch button.selected { color: #172126; background: #fff; box-shadow: 0 1px 3px rgba(20, 30, 25, .12); }
