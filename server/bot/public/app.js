@@ -676,6 +676,7 @@ function renderDetail(data) {
   byId("realizedProfit").className = strategy.realizedProfit > 0 ? "positive" : strategy.realizedProfit < 0 ? "negative" : "";
   const availableProfit = data.profitWithdrawal?.availableProfit ?? 0;
   byId("withdrawnProfit").textContent = money.format(strategy.withdrawnProfit ?? 0);
+  byId("withdrawnProfitTotal").textContent = `სულ აღებული: ${money.format(strategy.withdrawnProfit ?? 0)}`;
   byId("availableProfit").textContent = `ხელმისაწვდომი: ${money.format(availableProfit)}`;
   byId("withdrawProfit").hidden = strategy.status === "COMPLETED" || availableProfit <= 0 || strategy.totalAssetQuantity <= 0;
   const reserveQuantity = strategy.totalPurchasedQuantity * (strategy.finalReservePercent / 100);
