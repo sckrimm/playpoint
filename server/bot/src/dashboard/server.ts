@@ -190,6 +190,8 @@ async function visibleStrategies(strategies: StrategyRecord[], user: DashboardUs
 }
 
 type ReadinessStatus = "OK" | "WAITING" | "WARNING" | "ERROR";
+const TESTNET_OBSERVATION_TARGET_HOURS = 48;
+const TESTNET_CYCLE_TARGET = 3;
 
 async function getReadinessReport(user: DashboardUser | null) {
   const repository = await createStore();
@@ -237,15 +239,19 @@ async function getReadinessReport(user: DashboardUser | null) {
         buyCount, sellCount, completedCycles, failedLevelCount, pendingExecutionCount, invalidOrderCount, marketAgeMinutes, budgetUsedPercent };
     }));
 
-    const oldestObservation = strategyReports.reduce((maximum, strategy) => Math.max(maximum, strategy.observationHours), 0);
-    checks.push(oldestObservation >= 24
-      ? { id: "observation", label: "მინიმუმ 24 საათის დაკვირვება", status: "OK", detail: `${oldestObservation.toFixed(1)} საათი დაგროვდა` }
-      : { id: "observation", label: "მინიმუმ 24 საათის დაკვირვება", status: "WAITING", detail: `${oldestObservation.toFixed(1)} / 24 საათი` });
+    const activeReports = strategyReports.filter((strategy) => strategy.status === "ACTIVE");
+    const shortestObservation = activeReports.length
+      ? activeReports.reduce((minimum, strategy) => Math.min(minimum, strategy.observationHours), Number.POSITIVE_INFINITY)
+      : 0;
+    checks.push(activeReports.length > 0 && shortestObservation >= TESTNET_OBSERVATION_TARGET_HOURS
+      ? { id: "observation", label: "ყველა სტრატეგიის 48-საათიანი დაკვირვება", status: "OK", detail: `მინიმუმ ${shortestObservation.toFixed(1)} საათი დაგროვდა თითოეულზე` }
+      : { id: "observation", label: "ყველა სტრატეგიის 48-საათიანი დაკვირვება", status: "WAITING", detail: `${shortestObservation.toFixed(1)} / ${TESTNET_OBSERVATION_TARGET_HOURS} საათი ყველაზე ახალ აქტიურ სტრატეგიაზე` });
 
     const totalCycles = strategyReports.reduce((sum, strategy) => sum + strategy.completedCycles, 0);
-    checks.push(totalCycles >= 3
-      ? { id: "cycles", label: "3 სრული BUY → SELL ციკლი", status: "OK", detail: `${totalCycles} სრული ციკლი დადასტურდა` }
-      : { id: "cycles", label: "3 სრული BUY → SELL ციკლი", status: "WAITING", detail: `${totalCycles} / 3 სრული ციკლი` });
+    const strategiesWithoutCycle = activeReports.filter((strategy) => strategy.completedCycles < 1);
+    checks.push(totalCycles >= TESTNET_CYCLE_TARGET && strategiesWithoutCycle.length === 0 && activeReports.length > 0
+      ? { id: "cycles", label: "TESTNET BUY → SELL ციკლები", status: "OK", detail: `${totalCycles} სრული ციკლი; ყველა აქტიური სტრატეგია მონაწილეობდა` }
+      : { id: "cycles", label: "TESTNET BUY → SELL ციკლები", status: "WAITING", detail: `${totalCycles} / ${TESTNET_CYCLE_TARGET} სრული ციკლი; ${strategiesWithoutCycle.length} სტრატეგიას სრული ციკლი ჯერ არ აქვს` });
 
     const failedCount = strategyReports.reduce((sum, strategy) => sum + strategy.failedLevelCount, 0);
     checks.push(failedCount === 0
