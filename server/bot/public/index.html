@@ -4,19 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <title>Spot სტრატეგიების პანელი</title>
+    <title>სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
-    <link rel="stylesheet" href="styles.css?v=20261005-3" />
+    <link rel="stylesheet" href="styles.css?v=20261005-4" />
   </head>
   <body>
     <header class="topbar">
-      <div class="brand">
+      <button id="brandHome" class="brand" type="button" aria-label="მთავარ გვერდზე დაბრუნება">
         <span class="brand-mark">B</span>
-        <div><strong>Spot სტრატეგიების პანელი</strong><span>სიმულაციის მონიტორინგი</span></div>
-      </div>
+        <span class="brand-copy"><strong>სტრატეგიების პანელი</strong><span>მონიტორინგი</span></span>
+      </button>
       <div class="top-actions">
         <span id="currentUser" class="connection">—</span>
-        <button id="openUsers" class="secondary-button" type="button" hidden>მომხმარებლები</button>
+        <button id="openUsers" class="secondary-button" type="button" title="მომხმარებლები" hidden><span class="wide-label">მომხმარებლები</span><span class="compact-label" aria-hidden="true">ადმინი</span></button>
         <span class="connection"><i></i> SQLite დაკავშირებულია</span>
         <button id="themeToggle" class="theme-toggle" type="button" role="switch" aria-checked="false" title="ფერის თემის შეცვლა"><span>ღია</span><i></i><span>მუქი</span></button>
         <span id="mode" class="mode">SIMULATION</span>
@@ -263,6 +263,6 @@
       <article id="newsDetail" class="news-detail"></article>
     </dialog>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
-    <script src="app.js?v=20261005-3" defer></script>
+    <script src="app.js?v=20261005-4" defer></script>
   </body>
 </html>

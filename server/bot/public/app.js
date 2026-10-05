@@ -954,6 +954,10 @@ byId("openCreate").addEventListener("click", async () => {
   byId("createDialog").showModal();
   try { await Promise.all([loadSymbols(), loadTemplates()]); prepareCreateForm(); } catch (error) { byId("formError").textContent = error.message; byId("formError").hidden = false; }
 });
+byId("brandHome").addEventListener("click", () => {
+  if (!byId("overviewView").hidden) void loadOverview();
+  else showOverview();
+});
 byId("openComparison").addEventListener("click", () => { void openComparison(); });
 byId("openMarketCandidates").addEventListener("click", openMarketCandidates);
 byId("openNews").addEventListener("click", openNews);
