@@ -343,10 +343,16 @@ async function withdrawStrategyProfit(id: number, body: unknown, user: Dashboard
       : storedMarket?.price ?? await exchangeInfo.getCurrentPrice(strategy.symbol);
     const totalPnl = strategy.totalAssetQuantity * price + strategy.totalSaleProceeds - strategy.totalInvested;
     const availableProfit = Math.max(0, totalPnl - strategy.withdrawnProfit);
-    const requested = Number((body as { amount?: unknown }).amount ?? availableProfit);
+    const orderRules = testnetService ? await testnetService.getOrderRules(strategy.symbol) : null;
+    const minimumWithdrawal = orderRules ? orderRules.minNotional + price * orderRules.stepSize : 0;
+    let requested = Number((body as { amount?: unknown }).amount ?? availableProfit);
     if (!Number.isFinite(requested) || requested <= 0) throw new Error("ასაღები თანხა ნულზე მეტი უნდა იყოს");
+    if (requested > availableProfit && requested - availableProfit < 0.01) requested = availableProfit;
     if (requested > availableProfit + 0.00000001) {
       throw new Error(`ხელმისაწვდომი მოგება არის ${availableProfit.toFixed(2)} USDT`);
+    }
+    if (requested + 0.00000001 < minimumWithdrawal) {
+      throw new Error(`Binance-ის მინიმალური შესრულებადი თანხაა ${minimumWithdrawal.toFixed(2)} USDT; ჯერ დააგროვე მეტი მოგება`);
     }
     const minimumReserveQuantity = strategy.totalPurchasedQuantity * strategy.finalReservePercent / 100;
     const sellableQuantity = Math.max(0, strategy.totalAssetQuantity - minimumReserveQuantity);

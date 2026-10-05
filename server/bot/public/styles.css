@@ -115,6 +115,7 @@ h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: 0; }
 .strategy-actions button { height: 34px; padding: 0 12px; border: 1px solid #cfd8d3; border-radius: 5px; color: #3f4c45; background: #fff; font-size: 12px; font-weight: 750; white-space: nowrap; }
 .strategy-actions .danger-action { color: #a12d2d; border-color: #e4c5c5; }
 .strategy-actions .profit-action { color: #117448; border-color: #9fd7bd; background: #eefaf4; }
+.strategy-actions .profit-action:disabled { cursor: not-allowed; color: #7c8881; border-color: #cfd8d3; background: #eef2f0; opacity: .75; }
 .withdrawn-profit-total { min-height: 34px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid #9fd7bd; border-radius: 5px; color: #117448; background: #f5fbf8; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .users-list { display: grid; gap: 8px; margin: 18px 0; }
 .user-row { display: flex; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid #dce2df; border-radius: 6px; }
@@ -395,6 +396,7 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
 [data-theme="dark"] .back-button,
 [data-theme="dark"] .strategy-actions button { color: #c8d1cc; background: #1e2329; border-color: #3a414b; }
 [data-theme="dark"] .strategy-actions .profit-action { color: #4dcc91; border-color: #276647; background: #172a21; }
+[data-theme="dark"] .strategy-actions .profit-action:disabled { color: #87938d; border-color: #3a414b; background: #1e2329; }
 [data-theme="dark"] .withdrawn-profit-total { color: #4dcc91; border-color: #276647; background: #172a21; }
 [data-theme="dark"] .user-row { border-color: #3a414b; }
 [data-theme="dark"] .invite-result { color: #f3d76b; border-color: #6f5b1e; background: #2c2818; }

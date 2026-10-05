@@ -92,6 +92,21 @@ describe("order duplication protection", () => {
     assert.equal(await store.countOrders(strategy.id), 1);
   });
 
+  test("profit withdrawal updates the total once and remains idempotent", async () => {
+    const store = repository();
+    const strategy = await store.createStrategy(config());
+    await store.claimLevel(strategy.id, "BUY", 10, "buy-client");
+    await store.completeBuy(strategy.id, 10, 100, 1_000, 10, "buy-order");
+
+    await store.withdrawProfit(strategy.id, 120, 20, 1 / 6, 2, "withdraw-order");
+    await store.withdrawProfit(strategy.id, 120, 20, 1 / 6, 2, "withdraw-order");
+
+    const current = await store.getById(strategy.id);
+    assert.equal(current.withdrawnProfit, 20);
+    assert.equal(current.totalAssetQuantity, 10 - 1 / 6);
+    assert.equal(await store.countOrders(strategy.id), 2);
+  });
+
   test("restart reconciliation records a confirmed exchange order exactly once", async () => {
     const store = repository();
     const strategy = await store.createStrategy(config("TESTNET"));
@@ -152,5 +167,14 @@ describe("Binance reconciliation responses", () => {
         .reconcileOrder("BTCUSDT", "BUY", "open"),
       (error) => error instanceof BinanceTestnetOrderError && error.kind === "UNKNOWN_RESULT" && error.noAutoRetry,
     );
+  });
+
+  test("reads TESTNET step size and minimum notional", async () => {
+    const fetchMock: typeof fetch = async () => response({ symbols: [{ filters: [
+      { filterType: "LOT_SIZE", stepSize: "0.00100000" },
+      { filterType: "NOTIONAL", minNotional: "5.00000000" },
+    ] }] });
+    const rules = await new BinanceTestnetOrderService("key", "secret", fetchMock).getOrderRules("SOLUSDT");
+    assert.deepEqual(rules, { stepSize: 0.001, minNotional: 5 });
   });
 });

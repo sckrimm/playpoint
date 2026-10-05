@@ -44,7 +44,7 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
 
   async sell(symbol: string, _price: number, assetQuantity: number, clientOrderId?: string): Promise<OrderExecutionResult> {
     if (!Number.isFinite(assetQuantity) || assetQuantity <= 0) throw new Error("TESTNET SELL რაოდენობა ნულზე მეტი უნდა იყოს");
-    const stepSize = await this.getStepSize(symbol);
+    const { stepSize } = await this.getOrderRules(symbol);
     const quantity = this.floorToStep(assetQuantity, stepSize);
     if (quantity <= 0) throw new BinanceTestnetOrderError("FILTER_REJECTED", "გასაყიდი რაოდენობა Binance-ის stepSize-ზე ნაკლებია");
     return this.placeMarketOrder(symbol, "SELL", { quantity: this.decimal(quantity, this.decimals(stepSize)) }, clientOrderId);
@@ -69,6 +69,23 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     const price = Number(payload.price);
     if (!Number.isFinite(price) || price <= 0) throw new BinanceTestnetOrderError("ERROR", "Spot Testnet-მა არასწორი ფასი დააბრუნა");
     return price;
+  }
+
+  async getOrderRules(symbol: string): Promise<{ stepSize: number; minNotional: number }> {
+    const response = await this.fetchImpl(`${TESTNET_BASE_URL}/api/v3/exchangeInfo?symbol=${encodeURIComponent(symbol)}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    const payload = await response.json().catch(() => ({})) as BinanceErrorPayload & {
+      symbols?: Array<{ filters: Array<{ filterType: string; stepSize?: string; minNotional?: string }> }>;
+    };
+    if (!response.ok) throw this.safeError(response.status, payload.code);
+    const filters = payload.symbols?.[0]?.filters ?? [];
+    const stepSize = Number(filters.find((filter) => filter.filterType === "LOT_SIZE")?.stepSize);
+    const minNotional = Number(filters.find((filter) => ["NOTIONAL", "MIN_NOTIONAL"].includes(filter.filterType))?.minNotional);
+    if (!Number.isFinite(stepSize) || stepSize <= 0 || !Number.isFinite(minNotional) || minNotional <= 0) {
+      throw new BinanceTestnetOrderError("FILTER_REJECTED", "სიმბოლოს TESTNET სავაჭრო წესები ვერ მოიძებნა");
+    }
+    return { stepSize, minNotional };
   }
 
   async reconcileOrder(symbol: string, side: "BUY" | "SELL", clientOrderId: string): Promise<OrderExecutionResult | null> {
@@ -136,19 +153,6 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     const payload = await response.json().catch(() => ({})) as BinanceErrorPayload;
     if (!response.ok) throw this.safeError(response.status, payload.code);
     return payload;
-  }
-
-  private async getStepSize(symbol: string): Promise<number> {
-    const response = await this.fetchImpl(`${TESTNET_BASE_URL}/api/v3/exchangeInfo?symbol=${encodeURIComponent(symbol)}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    const payload = await response.json().catch(() => ({})) as BinanceErrorPayload & {
-      symbols?: Array<{ filters: Array<{ filterType: string; stepSize?: string }> }>;
-    };
-    if (!response.ok) throw this.safeError(response.status, payload.code);
-    const stepSize = Number(payload.symbols?.[0]?.filters.find((filter) => filter.filterType === "LOT_SIZE")?.stepSize);
-    if (!Number.isFinite(stepSize) || stepSize <= 0) throw new BinanceTestnetOrderError("FILTER_REJECTED", "სიმბოლოს TESTNET stepSize ვერ მოიძებნა");
-    return stepSize;
   }
 
   private async syncServerTime(): Promise<void> {

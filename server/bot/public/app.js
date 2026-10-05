@@ -675,10 +675,16 @@ function renderDetail(data) {
   byId("realizedProfit").textContent = money.format(strategy.realizedProfit);
   byId("realizedProfit").className = strategy.realizedProfit > 0 ? "positive" : strategy.realizedProfit < 0 ? "negative" : "";
   const availableProfit = data.profitWithdrawal?.availableProfit ?? 0;
+  const minimumWithdrawal = strategy.executionEnvironment === "TESTNET" ? Number(data.symbolRules?.minNotional ?? 0) : 0;
   byId("withdrawnProfit").textContent = money.format(strategy.withdrawnProfit ?? 0);
   byId("withdrawnProfitTotal").textContent = `სულ აღებული: ${money.format(strategy.withdrawnProfit ?? 0)}`;
-  byId("availableProfit").textContent = `ხელმისაწვდომი: ${money.format(availableProfit)}`;
-  byId("withdrawProfit").hidden = strategy.status === "COMPLETED" || availableProfit <= 0 || strategy.totalAssetQuantity <= 0;
+  byId("availableProfit").textContent = `ხელმისაწვდომი: ${money.format(availableProfit)}${minimumWithdrawal > 0 ? ` · მინ. ${money.format(minimumWithdrawal)}` : ""}`;
+  const withdrawButton = byId("withdrawProfit");
+  withdrawButton.hidden = strategy.status === "COMPLETED" || strategy.totalAssetQuantity <= 0;
+  withdrawButton.disabled = availableProfit <= 0 || availableProfit + 0.00000001 < minimumWithdrawal;
+  withdrawButton.title = withdrawButton.disabled && minimumWithdrawal > 0
+    ? `Binance-ზე მინიმუმ ${money.format(minimumWithdrawal)} მოგება უნდა დაგროვდეს`
+    : "ხელმისაწვდომი მოგების აღება";
   const reserveQuantity = strategy.totalPurchasedQuantity * (strategy.finalReservePercent / 100);
   byId("reserveQuantity").textContent = `${number.format(reserveQuantity)} ${strategy.baseAsset}`;
   byId("reserveQuantity").nextElementSibling.textContent = `ნაყიდი რაოდენობის ${strategy.finalReservePercent}%`;
@@ -1021,7 +1027,8 @@ byId("resetStrategy").addEventListener("click", async () => {
 byId("withdrawProfit").addEventListener("click", async () => {
   if (!selectedStrategyId || !selectedStrategyData) return;
   const available = selectedStrategyData.profitWithdrawal?.availableProfit ?? 0;
-  const value = prompt(`ხელმისაწვდომი მოგება: ${money.format(available)}\nრამდენი USDT-ის აღება გინდა?`, available.toFixed(2));
+  const defaultAmount = Math.floor(available * 100) / 100;
+  const value = prompt(`ხელმისაწვდომი მოგება: ${money.format(available)}\nრამდენი USDT-ის აღება გინდა?`, defaultAmount.toFixed(2));
   if (value === null) return;
   const amount = Number(value.replace(",", "."));
   if (!Number.isFinite(amount) || amount <= 0) return showError(new Error("სწორი თანხა შეიყვანე"));
