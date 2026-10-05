@@ -697,6 +697,12 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     json(response, 200, await cryptoNews.latest());
     return true;
   }
+  const newsDetailMatch = request.method === "GET" ? pathname.match(/^\/api\/news\/([^/]+)$/) : null;
+  if (newsDetailMatch) {
+    const detail = await cryptoNews.detail(decodeURIComponent(newsDetailMatch[1] ?? ""));
+    json(response, detail ? 200 : 404, detail ?? { error: "სიახლე ვერ მოიძებნა" });
+    return true;
+  }
   if (request.method === "GET" && pathname === "/api/readiness") {
     json(response, 200, await getReadinessReport(user));
     return true;

@@ -16,6 +16,13 @@ export interface CryptoNewsItem {
   translated: boolean;
 }
 
+export interface CryptoNewsDetail {
+  id: string;
+  content: string;
+  translated: boolean;
+  expanded: boolean;
+}
+
 const feeds = [
   { source: "CoinDesk", url: "https://www.coindesk.com/arc/outboundfeeds/rss/" },
   { source: "Cointelegraph", url: "https://cointelegraph.com/rss" },
@@ -37,6 +44,7 @@ const positiveWords = /\b(surge|gain|rise|rally|record|approval|approved|launch|
 const negativeWords = /\b(drop|fall|crash|hack|exploit|fraud|lawsuit|ban|bearish|liquidation|loss|stolen|scam|probe)\b/gi;
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", cdataPropName: "#text" });
 const translationCache = new Map<string, { title: string; summary: string; translated: boolean }>();
+const detailTranslationCache = new Map<string, CryptoNewsDetail>();
 
 function text(value: unknown): string {
   if (typeof value === "string") return value;
@@ -49,6 +57,76 @@ function stripHtml(value: string): string {
   return value.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/\s+/g, " ").trim();
+}
+
+function decodeHtml(value: string): string {
+  return stripHtml(value.replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16))));
+}
+
+function splitTranslationChunks(value: string, maxLength = 430): string[] {
+  const sentences = value.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
+  const chunks: string[] = [];
+  let current = "";
+  for (const sentence of sentences) {
+    if (sentence.length > maxLength) {
+      if (current) chunks.push(current);
+      for (let offset = 0; offset < sentence.length; offset += maxLength) chunks.push(sentence.slice(offset, offset + maxLength));
+      current = "";
+    } else if (!current || current.length + sentence.length + 1 <= maxLength) {
+      current = current ? `${current} ${sentence}` : sentence;
+    } else {
+      chunks.push(current);
+      current = sentence;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+async function translateText(value: string): Promise<{ text: string; translated: boolean }> {
+  const chunks = splitTranslationChunks(value.slice(0, 1_500));
+  if (!chunks.length) return { text: value, translated: false };
+  try {
+    const translated: string[] = [];
+    for (const chunk of chunks) {
+      const url = new URL("https://api.mymemory.translated.net/get");
+      url.searchParams.set("q", chunk);
+      url.searchParams.set("langpair", "en|ka");
+      const response = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+      if (!response.ok) throw new Error(`Translation HTTP ${response.status}`);
+      const payload = await response.json() as { responseData?: { translatedText?: string } };
+      const result = payload.responseData?.translatedText?.trim();
+      if (!result) throw new Error("Empty translation");
+      translated.push(result);
+    }
+    return { text: translated.join("\n\n"), translated: true };
+  } catch {
+    return { text: value, translated: false };
+  }
+}
+
+function findArticleBody(html: string): string {
+  for (const match of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const root = JSON.parse(match[1] ?? "null") as unknown;
+      const queue: unknown[] = [root];
+      while (queue.length) {
+        const value = queue.shift();
+        if (Array.isArray(value)) queue.push(...value);
+        else if (value && typeof value === "object") {
+          const record = value as Record<string, unknown>;
+          if (typeof record.articleBody === "string" && record.articleBody.length > 500) return decodeHtml(record.articleBody);
+          queue.push(...Object.values(record));
+        }
+      }
+    } catch { /* Some publishers emit invalid JSON-LD. */ }
+  }
+  const article = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1] ?? html;
+  const paragraphs = [...article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => decodeHtml(match[1] ?? ""))
+    .filter((paragraph) => paragraph.length >= 45);
+  return paragraphs.join("\n\n");
 }
 
 function toArray<T>(value: T | T[] | undefined): T[] {
@@ -100,6 +178,33 @@ async function translate(title: string, summary: string): Promise<{ title: strin
 
 export class CryptoNewsService {
   private cache: { items: CryptoNewsItem[]; expiresAt: number; generatedAt: string } | null = null;
+  private originalItems = new Map<string, { url: string; summary: string }>();
+
+  async detail(id: string): Promise<CryptoNewsDetail | null> {
+    await this.latest();
+    const cached = detailTranslationCache.get(id);
+    if (cached) return cached;
+    const original = this.originalItems.get(id);
+    if (!original) return null;
+    let sourceText = original.summary;
+    try {
+      const response = await fetch(original.url, { headers: { "User-Agent": "Mozilla/5.0 PlaypointCryptoNews/1.0" }, redirect: "follow", signal: AbortSignal.timeout(10_000) });
+      if (response.ok) {
+        const extracted = findArticleBody(await response.text());
+        if (extracted.length > sourceText.length) sourceText = extracted;
+      }
+    } catch { /* RSS content remains the fallback. */ }
+    const localized = await translateText(sourceText);
+    const localizedFallback = this.cache?.items.find((item) => item.id === id)?.summary ?? original.summary;
+    const detail = {
+      id,
+      content: localized.translated ? localized.text : localizedFallback,
+      translated: localized.translated,
+      expanded: localized.translated && sourceText.length > original.summary.length,
+    };
+    detailTranslationCache.set(id, detail);
+    return detail;
+  }
 
   async latest(): Promise<{ items: CryptoNewsItem[]; generatedAt: string; sources: string[] }> {
     if (this.cache && this.cache.expiresAt > Date.now()) {
@@ -137,8 +242,10 @@ export class CryptoNewsService {
       batch.forEach((item, batchIndex) => {
         const combined = `${item.title} ${item.summary}`;
         const localized = translated[batchIndex] ?? { title: item.title, summary: item.summary, translated: false };
+        const id = Buffer.from(item.url).toString("base64url").slice(0, 32);
+        this.originalItems.set(id, { url: item.url, summary: item.summary });
         items.push({
-          id: Buffer.from(item.url).toString("base64url").slice(0, 32), source: item.source,
+          id, source: item.source,
           title: localized.title, summary: localized.summary,
           originalTitle: item.title, url: item.url, imageUrl: item.imageUrl,
           publishedAt: item.publishedAt, coins: coinPatterns.filter(([, pattern]) => pattern.test(combined)).map(([symbol]) => symbol),

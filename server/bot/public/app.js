@@ -426,9 +426,7 @@ function renderNews() {
   });
 }
 
-function openNewsDetail(index) {
-  const item = newsItems[index];
-  if (!item) return;
+function renderNewsDetail(item, content, status = "") {
   const articleUrl = safeHttpUrl(item.url);
   const imageUrl = safeHttpUrl(item.imageUrl);
   const sentimentClass = item.sentiment.toLowerCase();
@@ -442,13 +440,26 @@ function openNewsDetail(index) {
       <button id="closeNewsDetail" class="icon-button news-detail-close" type="button" aria-label="დახურვა">×</button>
     </div>
     <div class="news-detail-body">
+      ${status ? `<p class="news-detail-status">${escapeHtml(status)}</p>` : ""}
       ${item.translated ? "" : '<p class="translation-warning">ქართული თარგმანი დროებით მიუწვდომელია.</p>'}
-      <p class="news-detail-summary">${escapeHtml(item.summary)}</p>
+      <p class="news-detail-summary">${escapeHtml(content)}</p>
       <div class="news-tags"><span class="news-chip news-sentiment ${sentimentClass}">${newsSentimentLabel(item.sentiment)}</span>${item.coins.map((coin) => `<span class="news-chip news-coin"><strong>${escapeHtml(coin)}</strong> · ${escapeHtml(coinDisplayName(coin))}</span>`).join("")}</div>
       ${articleUrl ? `<a class="primary-button news-detail-original" href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">ორიგინალის ნახვა ↗</a>` : ""}
     </div>`;
   byId("closeNewsDetail").addEventListener("click", () => byId("newsDialog").close());
+}
+
+async function openNewsDetail(index) {
+  const item = newsItems[index];
+  if (!item) return;
+  renderNewsDetail(item, item.summary, "ვრცელი ქართული ვერსია იტვირთება...");
   byId("newsDialog").showModal();
+  try {
+    const detail = await api(`/api/news/${encodeURIComponent(item.id)}`);
+    renderNewsDetail(item, detail.content || item.summary, detail.expanded ? "ვრცელი თარგმანი" : "წყაროს ხელმისაწვდომი ტექსტი");
+  } catch {
+    renderNewsDetail(item, item.summary, "ვრცელი ტექსტი ვერ ჩაიტვირთა; ნაჩვენებია მოკლე ვერსია");
+  }
 }
 
 async function loadNews() {
