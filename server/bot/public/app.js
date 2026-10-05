@@ -276,6 +276,32 @@ const labelStatus = (status) => statusLabels[status] ?? status;
 const labelConnection = (status) => connectionLabels[status] ?? status;
 
 const appBasePath = window.location.pathname === "/bot" || window.location.pathname.startsWith("/bot/") ? "/bot" : "";
+const appViews = ["overviewView", "detailView", "comparisonView", "marketCandidatesView", "newsView", "readinessView"];
+
+function setVisibleView(view) {
+  appViews.forEach((id) => { byId(id).hidden = id !== view; });
+}
+
+function updateNavigationState(view, strategyId = null, mode = "push") {
+  const state = { ...(window.history.state ?? {}), appView: view, strategyId };
+  window.history[mode === "replace" ? "replaceState" : "pushState"](state, "", window.location.href);
+}
+
+function showOverview({ historyMode = "push" } = {}) {
+  chartRequest += 1;
+  resetPriceChart();
+  selectedStrategyId = null;
+  selectedStrategy = null;
+  selectedStrategyData = null;
+  setVisibleView("overviewView");
+  if (historyMode !== "none") updateNavigationState("overviewView", null, historyMode);
+  void loadOverview();
+}
+
+function backToPreviousView() {
+  if (window.history.state?.appView && window.history.state.appView !== "overviewView") window.history.back();
+  else showOverview({ historyMode: "replace" });
+}
 
 async function api(url, options) {
   const response = await fetch(`${appBasePath}${url}`, { cache: "no-store", ...options });
@@ -562,7 +588,7 @@ async function openCreateForComparison() {
   }
 }
 
-async function openComparison() {
+async function openComparison({ historyMode = "push" } = {}) {
   if (!activeStrategies.length) activeStrategies = (await api("/api/strategies")).strategies;
   const counts = activeStrategies.reduce((result, strategy) => result.set(strategy.symbol, (result.get(strategy.symbol) ?? 0) + 1), new Map());
   const symbols = [...counts.keys()].sort((a, b) => (counts.get(b) - counts.get(a)) || a.localeCompare(b));
@@ -573,30 +599,21 @@ async function openComparison() {
     option.textContent = `${symbol} · ${counts.get(symbol)} სტრატეგია`;
     return option;
   }));
-  byId("overviewView").hidden = true;
-  byId("detailView").hidden = true;
-  byId("marketCandidatesView").hidden = true;
-  byId("newsView").hidden = true;
-  byId("comparisonView").hidden = false;
+  setVisibleView("comparisonView");
+  if (historyMode !== "none") updateNavigationState("comparisonView", null, historyMode);
   if (symbols[0]) await loadComparison(symbols[0]);
   else byId("comparisonGrid").innerHTML = '<div class="empty-state"><strong>აქტიური სტრატეგიები ჯერ არ არის</strong><span>ჯერ შექმენი ერთი coin-ის რამდენიმე სტრატეგია.</span></div>';
 }
 
-function openMarketCandidates() {
-  byId("overviewView").hidden = true;
-  byId("detailView").hidden = true;
-  byId("comparisonView").hidden = true;
-  byId("newsView").hidden = true;
-  byId("marketCandidatesView").hidden = false;
+function openMarketCandidates({ historyMode = "push" } = {}) {
+  setVisibleView("marketCandidatesView");
+  if (historyMode !== "none") updateNavigationState("marketCandidatesView", null, historyMode);
   void loadOpportunities();
 }
 
-function openNews() {
-  byId("overviewView").hidden = true;
-  byId("detailView").hidden = true;
-  byId("comparisonView").hidden = true;
-  byId("marketCandidatesView").hidden = true;
-  byId("newsView").hidden = false;
+function openNews({ historyMode = "push" } = {}) {
+  setVisibleView("newsView");
+  if (historyMode !== "none") updateNavigationState("newsView", null, historyMode);
   void loadNews();
 }
 
@@ -645,13 +662,9 @@ async function testTelegram() {
   finally { byId("testTelegram").disabled = false; }
 }
 
-function openReadiness() {
-  byId("overviewView").hidden = true;
-  byId("detailView").hidden = true;
-  byId("comparisonView").hidden = true;
-  byId("marketCandidatesView").hidden = true;
-  byId("newsView").hidden = true;
-  byId("readinessView").hidden = false;
+function openReadiness({ historyMode = "push" } = {}) {
+  setVisibleView("readinessView");
+  if (historyMode !== "none") updateNavigationState("readinessView", null, historyMode);
   void loadReadiness();
 }
 
@@ -763,14 +776,11 @@ function renderDetail(data) {
   byId("updatedAt").textContent = `განახლდა ${new Date(data.generatedAt).toLocaleTimeString("ka-GE")}`;
 }
 
-async function openDetail(id) {
+async function openDetail(id, { historyMode = "push" } = {}) {
   selectedStrategyId = id;
   previousMarketPrice = null;
-  byId("overviewView").hidden = true;
-  byId("comparisonView").hidden = true;
-  byId("marketCandidatesView").hidden = true;
-  byId("newsView").hidden = true;
-  byId("detailView").hidden = false;
+  setVisibleView("detailView");
+  if (historyMode !== "none") updateNavigationState("detailView", id, historyMode);
   try {
     renderDetail(await api(`/api/strategies/${id}`));
     await loadPriceChart(id);
@@ -958,40 +968,20 @@ byId("backtestRange").querySelectorAll("button").forEach((button) => button.addE
 }));
 byId("runBacktest").addEventListener("click", () => { void runBacktest(); });
 byId("backFromComparison").addEventListener("click", () => {
-  byId("comparisonView").hidden = true;
-  byId("marketCandidatesView").hidden = true;
-  byId("newsView").hidden = true;
-  byId("overviewView").hidden = false;
-  void loadOverview();
+  backToPreviousView();
 });
 byId("backFromMarketCandidates").addEventListener("click", () => {
-  byId("marketCandidatesView").hidden = true;
-  byId("overviewView").hidden = false;
-  void loadOverview();
+  backToPreviousView();
 });
 byId("backFromNews").addEventListener("click", () => {
-  byId("newsView").hidden = true;
-  byId("overviewView").hidden = false;
-  void loadOverview();
+  backToPreviousView();
 });
 byId("backFromReadiness").addEventListener("click", () => {
-  byId("readinessView").hidden = true;
-  byId("overviewView").hidden = false;
-  void loadOverview();
+  backToPreviousView();
 });
 byId("closeCreate").addEventListener("click", () => byId("createDialog").close());
 byId("backToStrategies").addEventListener("click", () => {
-  chartRequest += 1;
-  resetPriceChart();
-  selectedStrategyId = null;
-  selectedStrategy = null;
-  selectedStrategyData = null;
-  byId("detailView").hidden = true;
-  byId("comparisonView").hidden = true;
-  byId("marketCandidatesView").hidden = true;
-  byId("newsView").hidden = true;
-  byId("overviewView").hidden = false;
-  void loadOverview();
+  backToPreviousView();
 });
 byId("showActive").addEventListener("click", () => {
   showingArchived = false;
@@ -1055,7 +1045,7 @@ byId("resetStrategy").addEventListener("click", async () => {
   if (!selectedStrategyId || !confirm("განულებისას მიმდინარე ციკლი არქივში გადავა და შეიქმნება ახალი სუფთა SIMULATION სტრატეგია. გავაგრძელოთ?")) return;
   try {
     const result = await api(`/api/strategies/${selectedStrategyId}/reset`, { method: "POST" });
-    await openDetail(result.strategy.id);
+    await openDetail(result.strategy.id, { historyMode: "replace" });
   } catch (error) { showError(error); }
 });
 byId("withdrawProfit").addEventListener("click", async () => {
@@ -1078,14 +1068,7 @@ byId("archiveStrategy").addEventListener("click", async () => {
   if (!selectedStrategyId || !confirm("სტრატეგია დასრულდება და არქივში გადავა. ისტორია არ წაიშლება. გავაგრძელოთ?")) return;
   try {
     await api(`/api/strategies/${selectedStrategyId}/archive`, { method: "POST" });
-    selectedStrategyId = null;
-    chartRequest += 1;
-    resetPriceChart();
-    selectedStrategy = null;
-    selectedStrategyData = null;
-    byId("detailView").hidden = true;
-    byId("overviewView").hidden = false;
-    await loadOverview();
+    showOverview({ historyMode: "replace" });
   } catch (error) { showError(error); }
 });
 byId("createForm").addEventListener("submit", async (event) => {
@@ -1165,6 +1148,16 @@ byId("deleteTemplate").addEventListener("click", async () => {
 
 applyTheme(document.documentElement.dataset.theme, false);
 try { applyCandidateLayout(localStorage.getItem("spot-candidate-layout"), false); } catch { applyCandidateLayout("columns", false); }
+window.history.replaceState({ ...(window.history.state ?? {}), appView: "overviewView", strategyId: null }, "", window.location.href);
+window.addEventListener("popstate", (event) => {
+  const view = event.state?.appView ?? "overviewView";
+  if (view === "detailView" && Number.isInteger(Number(event.state?.strategyId))) void openDetail(Number(event.state.strategyId), { historyMode: "none" });
+  else if (view === "comparisonView") void openComparison({ historyMode: "none" });
+  else if (view === "marketCandidatesView") openMarketCandidates({ historyMode: "none" });
+  else if (view === "newsView") openNews({ historyMode: "none" });
+  else if (view === "readinessView") openReadiness({ historyMode: "none" });
+  else showOverview({ historyMode: "none" });
+});
 api("/api/session").then(({ user }) => {
   sessionUser = user;
   byId("currentUser").textContent = user.username;
