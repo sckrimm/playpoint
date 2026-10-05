@@ -576,6 +576,8 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
   .metrics { grid-template-columns: 1fr; }
   .metrics article { border-right: 0; }
   .budget-panel, .rules-panel, .account-panel, .panel { padding: 16px; }
+  .account-panel > .section-title { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .account-panel #accountStatus { max-width: 100%; align-self: flex-start; white-space: nowrap; }
   .chart-head { align-items: stretch; flex-direction: column; }
   .chart-range { display: flex; width: 100%; }
   .chart-range button { flex: 1; min-width: 0; padding: 0 7px; }
