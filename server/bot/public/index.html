@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>Spot სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
-    <link rel="stylesheet" href="styles.css?v=20261005-1" />
+    <link rel="stylesheet" href="styles.css?v=20261005-2" />
   </head>
   <body>
     <header class="topbar">
@@ -259,7 +259,10 @@
       <button id="createInvite" class="primary-button submit-button" type="button">მოწვევის კოდის შექმნა</button>
       <div id="inviteResult" class="invite-result" hidden></div>
     </dialog>
+    <dialog id="newsDialog" class="news-dialog" aria-label="კრიპტო სიახლის დეტალები">
+      <article id="newsDetail" class="news-detail"></article>
+    </dialog>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
-    <script src="app.js?v=20261005-1" defer></script>
+    <script src="app.js?v=20261005-2" defer></script>
   </body>
 </html>

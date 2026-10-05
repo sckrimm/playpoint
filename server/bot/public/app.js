@@ -375,11 +375,12 @@ function renderNews() {
   const sentiment = byId("newsSentiment").value;
   const filtered = newsItems.filter((item) => (source === "ALL" || item.source === source) && (sentiment === "ALL" || item.sentiment === sentiment));
   byId("newsList").innerHTML = filtered.length ? filtered.map((item) => {
+    const newsIndex = newsItems.indexOf(item);
     const articleUrl = safeHttpUrl(item.url);
     const imageUrl = safeHttpUrl(item.imageUrl);
     const image = imageUrl ? `<img class="news-image" src="${escapeHtml(imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : '<div class="news-image news-image-placeholder" aria-hidden="true"></div>';
     const sentimentClass = item.sentiment.toLowerCase();
-    return `<article class="news-card">
+    return `<article class="news-card" data-news-index="${newsIndex}" tabindex="0" role="button" aria-label="სიახლის გახსნა: ${escapeHtml(item.title)}">
       ${image}
       <div class="news-card-body">
         <div class="news-card-meta"><strong>${escapeHtml(item.source)}</strong><time datetime="${escapeHtml(item.publishedAt)}">${new Date(item.publishedAt).toLocaleString("ka-GE", { dateStyle: "medium", timeStyle: "short" })}</time>${item.translated ? "" : '<span class="translation-warning">თარგმანი დროებით მიუწვდომელია</span>'}</div>
@@ -390,6 +391,38 @@ function renderNews() {
       </div>
     </article>`;
   }).join("") : '<p class="empty-state">ამ ფილტრით სიახლეები ვერ მოიძებნა.</p>';
+  byId("newsList").querySelectorAll("[data-news-index]").forEach((card) => {
+    const open = () => openNewsDetail(Number(card.dataset.newsIndex));
+    card.addEventListener("click", (event) => { if (!event.target.closest("a, button")) open(); });
+    card.addEventListener("keydown", (event) => {
+      if (["Enter", " "].includes(event.key)) { event.preventDefault(); open(); }
+    });
+  });
+}
+
+function openNewsDetail(index) {
+  const item = newsItems[index];
+  if (!item) return;
+  const articleUrl = safeHttpUrl(item.url);
+  const imageUrl = safeHttpUrl(item.imageUrl);
+  const sentimentClass = item.sentiment.toLowerCase();
+  byId("newsDetail").innerHTML = `
+    <div class="news-detail-hero">
+      ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="" referrerpolicy="no-referrer" />` : '<div class="news-detail-placeholder" aria-hidden="true"></div>'}
+      <div class="news-detail-overlay">
+        <div class="news-card-meta"><strong>${escapeHtml(item.source)}</strong><time datetime="${escapeHtml(item.publishedAt)}">${new Date(item.publishedAt).toLocaleString("ka-GE", { dateStyle: "medium", timeStyle: "short" })}</time></div>
+        <h2>${escapeHtml(item.title)}</h2>
+      </div>
+      <button id="closeNewsDetail" class="icon-button news-detail-close" type="button" aria-label="დახურვა">×</button>
+    </div>
+    <div class="news-detail-body">
+      ${item.translated ? "" : '<p class="translation-warning">ქართული თარგმანი დროებით მიუწვდომელია.</p>'}
+      <p class="news-detail-summary">${escapeHtml(item.summary)}</p>
+      <div class="news-tags"><span class="news-chip news-sentiment ${sentimentClass}">${newsSentimentLabel(item.sentiment)}</span>${item.coins.map((coin) => `<span class="news-chip news-coin"><strong>${escapeHtml(coin)}</strong> · ${escapeHtml(coinDisplayName(coin))}</span>`).join("")}</div>
+      ${articleUrl ? `<a class="primary-button news-detail-original" href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">ორიგინალის ნახვა ↗</a>` : ""}
+    </div>`;
+  byId("closeNewsDetail").addEventListener("click", () => byId("newsDialog").close());
+  byId("newsDialog").showModal();
 }
 
 async function loadNews() {
@@ -977,6 +1010,7 @@ byId("showSellLevels").addEventListener("click", () => showLevelView("SELL"));
 byId("themeToggle").addEventListener("click", () => applyTheme(isDarkTheme() ? "light" : "dark"));
 byId("refreshOpportunities").addEventListener("click", loadOpportunities);
 byId("refreshNews").addEventListener("click", loadNews);
+byId("newsDialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close(); });
 byId("newsSource").addEventListener("change", renderNews);
 byId("newsSentiment").addEventListener("change", renderNews);
 byId("candidateLayout").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
