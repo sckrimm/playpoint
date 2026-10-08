@@ -301,6 +301,7 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
 .level-validation-error { margin: 9px 0 0; padding: 10px 11px; color: #a92727; background: #fff1f1; border: 1px solid #e6a6a6; border-radius: 5px; font-size: 10px; font-weight: 700; line-height: 1.5; }
 .save-template-option { display: flex; align-items: center; gap: 8px; }
 .save-template-option input { width: 16px; height: 16px; }
+.auto-purchase-option { margin-top: -5px; padding: 10px 11px; border: 1px solid #dce2df; border-radius: 5px; background: #f7f9f8; line-height: 1.45; }
 .comparison-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
 .comparison-symbol { min-width: 220px; display: grid; gap: 7px; color: #68756e; font-size: 10px; font-weight: 750; }
 .comparison-symbol select { height: 40px; padding: 0 11px; border: 1px solid #cad3ce; border-radius: 5px; color: #172126; background: #fff; font-weight: 750; }
@@ -484,6 +485,7 @@ dialog input:disabled { color: #6f7974; background: #f1f4f2; }
 [data-theme="dark"] .level-editor-row input.field-invalid { color: #ff8c8c; border-color: #e34f4f; background: #2d1b20; outline-color: rgba(227, 79, 79, .2); }
 [data-theme="dark"] .level-editor-row label:has(input.field-invalid) span { color: #ff8c8c; }
 [data-theme="dark"] .level-validation-error { color: #ff9696; background: #301b20; border-color: #71323b; }
+[data-theme="dark"] .auto-purchase-option { background: #20252b; border-color: #3a414b; }
 [data-theme="dark"] dialog::backdrop { background: rgba(0, 0, 0, .7); }
 @media (max-width: 1000px) {
   .metrics { grid-template-columns: repeat(2, 1fr); }

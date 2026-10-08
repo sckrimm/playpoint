@@ -229,7 +229,8 @@
         <datalist id="symbolOptions"></datalist>
         <label>საწყისი შესვლის ფასი<input id="initialEntryPrice" name="initialEntryPrice" type="number" min="0" step="any" required /><span id="initialPriceHint" class="field-hint" hidden></span></label>
         <label>სრული ბიუჯეტი (USDT)<input name="totalBudget" type="number" min="0" step="any" required /></label>
-        <label>საწყისი შესყიდვა (USDT) — არასავალდებულო<input id="initialPurchaseAmount" name="initialPurchaseAmount" type="number" min="0" step="any" value="0" /><span id="initialPurchaseHint" class="field-hint">თუ მიუთითებ თანხას, ბოტი შექმნისთანავე იყიდის მიმდინარე ფასში. თანხა შედის სრულ ბიუჯეტში; დანარჩენი BUY დონეებზე განაწილდება.</span></label>
+        <label>საწყისი შესყიდვა (USDT) — არასავალდებულო<input id="initialPurchaseAmount" name="initialPurchaseAmount" type="number" min="0" step="any" placeholder="თანხა ან ავტომატური 50%" /><span id="initialPurchaseHint" class="field-hint">ცარიელი ველისას ბოტი პირველ BUY დონეს დაელოდება.</span></label>
+        <label class="save-template-option auto-purchase-option"><input id="autoInitialPurchase50" name="autoInitialPurchase50" type="checkbox" /> ცარიელი ველისას ბიუჯეტის 50%-ით ავტომატური საწყისი BUY</label>
         <details id="customStrategySettings" class="custom-strategy-settings">
           <summary><span><strong>ინდივიდუალური პარამეტრები</strong><small>BUY/SELL დონეების ხელით შეცვლა</small></span><i aria-hidden="true">⌄</i></summary>
           <div class="custom-settings-content">
@@ -263,6 +264,6 @@
       <article id="newsDetail" class="news-detail"></article>
     </dialog>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
-    <script src="app.js?v=20261008-2" defer></script>
+    <script src="app.js?v=20261008-3" defer></script>
   </body>
 </html>

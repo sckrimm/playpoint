@@ -243,7 +243,9 @@ function updateInitialPriceHint() {
 function updateInitialPurchaseHint() {
   const hint = byId("initialPurchaseHint");
   const totalBudget = Number(byId("createForm").elements.totalBudget.value);
-  const initialPurchase = Number(byId("initialPurchaseAmount").value || 0);
+  const rawInitialPurchase = byId("initialPurchaseAmount").value.trim();
+  const automaticHalf = byId("autoInitialPurchase50").checked && rawInitialPurchase === "";
+  const initialPurchase = automaticHalf && totalBudget > 0 ? totalBudget * 0.5 : Number(rawInitialPurchase || 0);
   if (initialPurchase > 0 && totalBudget > 0 && initialPurchase >= totalBudget) {
     hint.className = "field-hint warning";
     hint.textContent = "საწყისი შესყიდვა სრულ ბიუჯეტზე ნაკლები უნდა იყოს.";
@@ -251,9 +253,11 @@ function updateInitialPurchaseHint() {
   }
   const remaining = totalBudget > 0 ? totalBudget - initialPurchase : null;
   hint.className = "field-hint";
-  hint.textContent = initialPurchase > 0 && remaining !== null
+  hint.textContent = automaticHalf && remaining !== null
+    ? `ავტომატურად დაიხარჯება ${money.format(initialPurchase)}; BUY დონეებისთვის დარჩება ${money.format(remaining)}.`
+    : initialPurchase > 0 && remaining !== null
     ? `შექმნისთანავე დაიხარჯება ${money.format(initialPurchase)}; BUY დონეებისთვის დარჩება ${money.format(Math.max(0, remaining))}.`
-    : "არასავალდებულოა. 0-ის შემთხვევაში ბოტი პირველ BUY დონეს დაელოდება.";
+    : "ცარიელი ველისას ბოტი პირველ BUY დონეს დაელოდება.";
 }
 
 async function useCurrentSymbolPrice() {
@@ -925,6 +929,8 @@ function prepareCreateForm(strategy = null) {
     : "მხოლოდ აქტიური Binance Spot USDT წყვილები";
   byId("formSubmit").textContent = strategy ? "ცვლილებების შენახვა" : "სტრატეგიის შექმნა";
   byId("saveAsTemplate").checked = false;
+  byId("autoInitialPurchase50").checked = false;
+  byId("autoInitialPurchase50").disabled = Boolean(strategy);
   byId("templateNameLabel").hidden = true;
   byId("templateName").value = "";
   byId("customStrategySettings").open = Boolean(strategy);
@@ -1055,6 +1061,7 @@ byId("symbolSearch").addEventListener("blur", () => { void useCurrentSymbolPrice
 byId("initialEntryPrice").addEventListener("input", updateInitialPriceHint);
 byId("executionEnvironment").addEventListener("change", () => { void useCurrentSymbolPrice(); });
 byId("initialPurchaseAmount").addEventListener("input", updateInitialPurchaseHint);
+byId("autoInitialPurchase50").addEventListener("change", updateInitialPurchaseHint);
 byId("createForm").elements.totalBudget.addEventListener("input", updateInitialPurchaseHint);
 byId("toggleStatus").addEventListener("click", async () => {
   if (!selectedStrategyId) return;
@@ -1122,7 +1129,7 @@ byId("createForm").addEventListener("submit", async (event) => {
     if (!editingStrategyId && executionEnvironment === "TESTNET" && !confirm("ეს სტრატეგია Binance Spot Testnet-ზე რეალურ API ორდერებს გაგზავნის სატესტო თანხით. გაგრძელდეს?")) return;
     const result = await api(endpoint, {
       method: editingStrategyId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symbol: form.get("symbol"), initialEntryPrice: form.get("initialEntryPrice"), totalBudget: form.get("totalBudget"), initialPurchaseAmount: form.get("initialPurchaseAmount") || 0, executionEnvironment, buyLevels, sellLevels, finalReservePercent }),
+      body: JSON.stringify({ symbol: form.get("symbol"), initialEntryPrice: form.get("initialEntryPrice"), totalBudget: form.get("totalBudget"), initialPurchaseAmount: form.get("initialPurchaseAmount"), autoInitialPurchase50: form.get("autoInitialPurchase50") === "on", executionEnvironment, buyLevels, sellLevels, finalReservePercent }),
     });
     byId("createDialog").close();
     event.currentTarget.reset();

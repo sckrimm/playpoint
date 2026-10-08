@@ -568,7 +568,10 @@ async function createStrategy(body: unknown, user: DashboardUser | null) {
   const input = body as Record<string, unknown>;
   const symbol = String(input.symbol ?? "").toUpperCase();
   const totalBudget = Number(input.totalBudget);
-  const initialPurchaseAmount = Number(input.initialPurchaseAmount ?? 0);
+  const hasInitialPurchaseAmount = input.initialPurchaseAmount !== undefined && input.initialPurchaseAmount !== null && input.initialPurchaseAmount !== "";
+  const initialPurchaseAmount = hasInitialPurchaseAmount
+    ? Number(input.initialPurchaseAmount)
+    : input.autoInitialPurchase50 === true ? totalBudget * 0.5 : 0;
   const executionEnvironment = String(input.executionEnvironment ?? "SIMULATION").toUpperCase();
   if (executionEnvironment === "LIVE") throw new Error("LIVE რეჟიმი უსაფრთხოების მიზნით დაბლოკილია");
   if (executionEnvironment !== "SIMULATION" && executionEnvironment !== "TESTNET") throw new Error("გარემო უნდა იყოს SIMULATION ან TESTNET");
