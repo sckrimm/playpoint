@@ -1,15 +1,22 @@
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
-const smallPrice = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 6, maximumFractionDigits: 8 });
-const tinyPrice = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 8, maximumFractionDigits: 8 });
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 8 });
-const formatPrice = (value) => {
+const decimalPlaces = (step) => {
+  const numeric = Number(step);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  const value = numeric.toFixed(12).replace(/0+$/, "");
+  return Math.max(0, Math.min(8, (value.split(".")[1] ?? "").length));
+};
+const formatPrice = (value, tickSize = null) => {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return "—";
   const absoluteValue = Math.abs(numericValue);
-  if (absoluteValue === 0 || absoluteValue >= 0.01) return money.format(numericValue);
-  return (absoluteValue >= 0.0001 ? smallPrice : tinyPrice).format(numericValue);
+  const tickPrecision = decimalPlaces(tickSize);
+  const precision = tickPrecision ?? (absoluteValue >= 1_000 ? 2 : absoluteValue >= 1 ? 4 : absoluteValue >= 0.01 ? 6 : 8);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD", minimumFractionDigits: precision, maximumFractionDigits: precision,
+  }).format(numericValue);
 };
-const formatSignedPrice = (value) => `${value >= 0 ? "+" : "-"}${formatPrice(Math.abs(value))}`;
+const formatSignedPrice = (value, tickSize = null) => `${value >= 0 ? "+" : "-"}${formatPrice(Math.abs(value), tickSize)}`;
 const formatSignedMoney = (value) => `${value >= 0 ? "+" : "-"}${money.format(Math.abs(value))}`;
 const formatDrawdown = (value) => value == null ? "—" : `${value >= 0.005 ? "-" : ""}${value.toFixed(2)}%`;
 const performanceClass = (value) => value > 0 ? "positive" : value < 0 ? "negative" : "neutral";
@@ -679,7 +686,7 @@ function openReadiness({ historyMode = "push" } = {}) {
   void loadReadiness();
 }
 
-function renderMarket(market) {
+function renderMarket(market, tickSize = null) {
   const priceElement = byId("currentPrice");
   const changeElement = byId("priceChange");
   if (!market) {
@@ -688,7 +695,7 @@ function renderMarket(market) {
     changeElement.className = "price-change neutral";
     return;
   }
-  priceElement.textContent = formatPrice(market.price);
+  priceElement.textContent = formatPrice(market.price, tickSize);
   if (previousMarketPrice !== null) {
     const difference = market.price - previousMarketPrice;
     const percent = previousMarketPrice === 0 ? 0 : difference / previousMarketPrice * 100;
@@ -697,13 +704,14 @@ function renderMarket(market) {
     const sign = difference > 0 ? "+" : "";
     priceElement.className = direction === "neutral" ? "" : direction;
     changeElement.className = `price-change ${direction}`;
-    changeElement.textContent = `${marker} ${formatSignedPrice(difference)} (${sign}${percent.toFixed(3)}%)`;
+    changeElement.textContent = `${marker} ${formatSignedPrice(difference, tickSize)} (${sign}${percent.toFixed(3)}%)`;
   }
   previousMarketPrice = market.price;
 }
 
 function renderDetail(data) {
   const { strategy, orders } = data;
+  const tickSize = data.symbolRules?.tickSize ?? null;
   const levels = data.levels.filter((level) => level.side === "BUY");
   const sellLevels = data.levels.filter((level) => level.side === "SELL");
   selectedStrategyStatus = strategy.status;
@@ -717,11 +725,11 @@ function renderDetail(data) {
   byId("strategyActions").hidden = strategy.status === "COMPLETED";
   byId("strategyEnvironment").textContent = `სტრატეგიის გარემო: ${strategy.executionEnvironment}`;
   byId("resetStrategy").hidden = strategy.executionEnvironment !== "SIMULATION";
-  byId("initialPrice").textContent = formatPrice(strategy.initialEntryPrice);
-  renderMarket(data.market);
+  byId("initialPrice").textContent = formatPrice(strategy.initialEntryPrice, tickSize);
+  renderMarket(data.market, tickSize);
   updateLiveChart(data.market);
   byId("marketStatus").textContent = data.market ? `Binance · ${new Date(data.market.updatedAt).toLocaleTimeString("ka-GE")}` : "WebSocket ელოდება";
-  byId("averageEntry").textContent = strategy.averageEntryPrice ? formatPrice(strategy.averageEntryPrice) : "—";
+  byId("averageEntry").textContent = strategy.averageEntryPrice ? formatPrice(strategy.averageEntryPrice, tickSize) : "—";
   byId("invested").textContent = money.format(strategy.totalInvested);
   byId("remaining").textContent = money.format(data.remainingBudget);
   byId("totalBudget").textContent = `სულ ${money.format(strategy.totalBudget)}`;
@@ -779,11 +787,11 @@ function renderDetail(data) {
 
   const executed = levels.filter((level) => level.status === "EXECUTED").length;
   byId("levelCount").textContent = `${executed} / ${levels.length}`;
-  byId("levels").innerHTML = levels.map((level) => `<div class="level"><span class="level-badge buy-drop">-${level.levelPercent}%</span><div class="level-info"><strong>${formatPrice(level.triggerPrice)}</strong><span>დარჩენილი ბიუჯეტის ${level.allocationPercent}%</span></div><span class="level-state ${level.status.toLowerCase()}">${labelStatus(level.status)}</span></div>`).join("");
+  byId("levels").innerHTML = levels.map((level) => `<div class="level"><span class="level-badge buy-drop">-${level.levelPercent}%</span><div class="level-info"><strong>${formatPrice(level.triggerPrice, tickSize)}</strong><span>დარჩენილი ბიუჯეტის ${level.allocationPercent}%</span></div><span class="level-state ${level.status.toLowerCase()}">${labelStatus(level.status)}</span></div>`).join("");
   const executedSells = sellLevels.filter((level) => level.status === "EXECUTED").length;
   byId("sellLevelCount").textContent = `${executedSells} / ${sellLevels.length}`;
-  byId("sellLevels").innerHTML = sellLevels.map((level) => `<div class="level"><span class="level-badge sell-gain">+${level.levelPercent}%</span><div class="level-info"><strong>${formatPrice(level.triggerPrice)}</strong><span>ნაყიდი რაოდენობის ${level.allocationPercent}%</span></div><span class="level-state ${level.status.toLowerCase()}">${labelStatus(level.status)}</span></div>`).join("");
-  byId("orders").innerHTML = orders.length ? orders.map((order) => `<tr><td><span class="order-environment">${order.executionEnvironment}</span></td><td><span class="${order.side === "BUY" ? "buy" : "sell"}">${order.levelPercent === 0 ? (order.side === "BUY" ? "საწყისი ყიდვა" : "მოგების აღება") : `${order.side === "BUY" ? "ყიდვა" : "გაყიდვა"} ${order.side === "BUY" ? "-" : "+"}${order.levelPercent}%`}</span></td><td>${formatPrice(order.marketPrice)}</td><td>${money.format(order.quoteAmount)}</td><td class="quantity-cell ${order.side === "BUY" ? "positive" : "negative"}">${order.side === "BUY" ? "+" : "-"}${number.format(order.assetQuantity)}</td><td>${new Date(order.createdAt).toLocaleString("ka-GE", { dateStyle: "short", timeStyle: "short" })}</td></tr>`).join("") : '<tr><td colspan="6" class="empty">ორდერები ჯერ არ არის</td></tr>';
+  byId("sellLevels").innerHTML = sellLevels.map((level) => `<div class="level"><span class="level-badge sell-gain">+${level.levelPercent}%</span><div class="level-info"><strong>${formatPrice(level.triggerPrice, tickSize)}</strong><span>ნაყიდი რაოდენობის ${level.allocationPercent}%</span></div><span class="level-state ${level.status.toLowerCase()}">${labelStatus(level.status)}</span></div>`).join("");
+  byId("orders").innerHTML = orders.length ? orders.map((order) => `<tr><td><span class="order-environment">${order.executionEnvironment}</span></td><td><span class="${order.side === "BUY" ? "buy" : "sell"}">${order.levelPercent === 0 ? (order.side === "BUY" ? "საწყისი ყიდვა" : "მოგების აღება") : `${order.side === "BUY" ? "ყიდვა" : "გაყიდვა"} ${order.side === "BUY" ? "-" : "+"}${order.levelPercent}%`}</span></td><td>${formatPrice(order.marketPrice, tickSize)}</td><td>${money.format(order.quoteAmount)}</td><td class="quantity-cell ${order.side === "BUY" ? "positive" : "negative"}">${order.side === "BUY" ? "+" : "-"}${number.format(order.assetQuantity)}</td><td>${new Date(order.createdAt).toLocaleString("ka-GE", { dateStyle: "short", timeStyle: "short" })}</td></tr>`).join("") : '<tr><td colspan="6" class="empty">ორდერები ჯერ არ არის</td></tr>';
   byId("updatedAt").textContent = `განახლდა ${new Date(data.generatedAt).toLocaleTimeString("ka-GE")}`;
 }
 
