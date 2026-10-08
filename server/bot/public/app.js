@@ -11,9 +11,11 @@ const formatPrice = (value, tickSize = null) => {
   if (!Number.isFinite(numericValue)) return "—";
   const absoluteValue = Math.abs(numericValue);
   const tickPrecision = decimalPlaces(tickSize);
-  const precision = tickPrecision ?? (absoluteValue >= 1_000 ? 2 : absoluteValue >= 1 ? 4 : absoluteValue >= 0.01 ? 6 : 8);
+  const adaptivePrecision = absoluteValue >= 1_000 ? 2 : absoluteValue >= 1 ? 4 : 8;
+  const minimumPrecision = tickPrecision ?? 2;
+  const maximumPrecision = Math.max(minimumPrecision, adaptivePrecision);
   return new Intl.NumberFormat("en-US", {
-    style: "currency", currency: "USD", minimumFractionDigits: precision, maximumFractionDigits: precision,
+    style: "currency", currency: "USD", minimumFractionDigits: minimumPrecision, maximumFractionDigits: maximumPrecision,
   }).format(numericValue);
 };
 const formatSignedPrice = (value, tickSize = null) => `${value >= 0 ? "+" : "-"}${formatPrice(Math.abs(value), tickSize)}`;
