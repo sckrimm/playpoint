@@ -49,6 +49,7 @@ export interface StrategyRecord {
   finalReservePercent: number;
   totalInvested: number;
   totalPurchasedQuantity: number;
+  cyclePurchasedQuantity: number;
   totalAssetQuantity: number;
   totalSoldQuantity: number;
   totalSaleProceeds: number;

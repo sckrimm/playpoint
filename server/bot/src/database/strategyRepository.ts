@@ -6,7 +6,7 @@ import type { SymbolRules } from "../binance/binanceService.js";
 type StrategyRow = {
   id: number; symbol: string; initial_entry_price: number; total_budget: number; initial_purchase_amount: number; final_reserve_percent: number; total_invested: number;
   base_asset: string; quote_asset: string;
-  total_purchased_quantity: number; total_asset_quantity: number; total_sold_quantity: number;
+  total_purchased_quantity: number; cycle_purchased_quantity: number; total_asset_quantity: number; total_sold_quantity: number;
   total_sale_proceeds: number; realized_profit: number; withdrawn_profit: number; remaining_cost_basis: number;
   average_entry_price: number; status: StrategyRecord["status"];
   execution_environment: StrategyRecord["executionEnvironment"];
@@ -210,13 +210,14 @@ export class StrategyRepository implements StrategyStore {
       }
       const totalInvested = strategy.total_invested + quoteAmount;
       const totalPurchasedQuantity = strategy.total_purchased_quantity + assetQuantity;
+      const cyclePurchasedQuantity = strategy.cycle_purchased_quantity + assetQuantity;
       const totalAssetQuantity = strategy.total_asset_quantity + assetQuantity;
       const remainingCostBasis = strategy.remaining_cost_basis + quoteAmount;
       const averageEntryPrice = totalAssetQuantity === 0 ? 0 : remainingCostBasis / totalAssetQuantity;
       const now = new Date().toISOString();
       this.db.prepare(`UPDATE strategies SET total_invested = ?, total_purchased_quantity = ?,
-        total_asset_quantity = ?, remaining_cost_basis = ?, average_entry_price = ?, updated_at = ? WHERE id = ?`)
-        .run(totalInvested, totalPurchasedQuantity, totalAssetQuantity, remainingCostBasis, averageEntryPrice, now, strategyId);
+        cycle_purchased_quantity = ?, total_asset_quantity = ?, remaining_cost_basis = ?, average_entry_price = ?, updated_at = ? WHERE id = ?`)
+        .run(totalInvested, totalPurchasedQuantity, cyclePurchasedQuantity, totalAssetQuantity, remainingCostBasis, averageEntryPrice, now, strategyId);
       this.db.prepare(`INSERT INTO orders (strategy_id, external_order_id, side, level_percent,
         market_price, quote_amount, asset_quantity, mode, execution_environment, created_at)
         VALUES (?, ?, 'BUY', ?, ?, ?, ?, ?, ?, ?)`)
@@ -225,6 +226,15 @@ export class StrategyRepository implements StrategyStore {
       this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTED', executed_at = ?, error_message = NULL
         WHERE strategy_id = ? AND side = 'BUY' AND level_percent = ? AND status IN ('EXECUTING', 'FAILED')`)
         .run(now, strategyId, levelPercent);
+      const sellState = this.db.prepare(`SELECT COUNT(*) AS total,
+        SUM(CASE WHEN status = 'EXECUTED' THEN 1 ELSE 0 END) AS executed
+        FROM executed_levels WHERE strategy_id = ? AND side = 'SELL'`)
+        .get(strategyId) as { total: number; executed: number | null };
+      if (sellState.total > 0 && sellState.executed === sellState.total) {
+        this.db.prepare(`UPDATE executed_levels SET status = 'WAITING', executed_at = NULL,
+          error_message = NULL, client_order_id = NULL, execution_started_at = NULL
+          WHERE strategy_id = ? AND side = 'SELL'`).run(strategyId);
+      }
     });
     transaction();
   }
@@ -260,6 +270,14 @@ export class StrategyRepository implements StrategyStore {
       this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTED', executed_at = ?, error_message = NULL
         WHERE strategy_id = ? AND side = 'SELL' AND level_percent = ? AND status IN ('EXECUTING', 'FAILED')`)
         .run(now, strategyId, levelPercent);
+      const remainingSells = (this.db.prepare(`SELECT COUNT(*) AS count FROM executed_levels
+        WHERE strategy_id = ? AND side = 'SELL' AND status <> 'EXECUTED'`).get(strategyId) as { count: number }).count;
+      if (remainingSells === 0) {
+        this.db.prepare(`UPDATE executed_levels SET status = 'WAITING', executed_at = NULL,
+          error_message = NULL, client_order_id = NULL, execution_started_at = NULL
+          WHERE strategy_id = ? AND side = 'BUY'`).run(strategyId);
+        this.db.prepare(`UPDATE strategies SET cycle_purchased_quantity = 0 WHERE id = ?`).run(strategyId);
+      }
     });
     transaction();
   }
@@ -388,6 +406,7 @@ export class StrategyRepository implements StrategyStore {
       totalBudget: row.total_budget, initialPurchaseAmount: row.initial_purchase_amount,
       finalReservePercent: row.final_reserve_percent, totalInvested: row.total_invested,
       totalPurchasedQuantity: row.total_purchased_quantity,
+      cyclePurchasedQuantity: row.cycle_purchased_quantity ?? 0,
       totalAssetQuantity: row.total_asset_quantity, totalSoldQuantity: row.total_sold_quantity,
       totalSaleProceeds: row.total_sale_proceeds, realizedProfit: row.realized_profit,
       withdrawnProfit: row.withdrawn_profit ?? 0,

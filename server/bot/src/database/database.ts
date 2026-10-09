@@ -20,6 +20,7 @@ export function openDatabase(filename: string): Database.Database {
       final_reserve_percent REAL NOT NULL DEFAULT 10,
       total_invested REAL NOT NULL DEFAULT 0,
       total_purchased_quantity REAL NOT NULL DEFAULT 0,
+      cycle_purchased_quantity REAL NOT NULL DEFAULT 0,
       total_asset_quantity REAL NOT NULL DEFAULT 0,
       total_sold_quantity REAL NOT NULL DEFAULT 0,
       total_sale_proceeds REAL NOT NULL DEFAULT 0,
@@ -111,6 +112,7 @@ export function openDatabase(filename: string): Database.Database {
   ensureColumn(db, "strategies", "final_reserve_percent", "REAL NOT NULL DEFAULT 10");
   ensureColumn(db, "strategies", "initial_purchase_amount", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "strategies", "total_purchased_quantity", "REAL NOT NULL DEFAULT 0");
+  ensureColumn(db, "strategies", "cycle_purchased_quantity", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "strategies", "total_sold_quantity", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "strategies", "total_sale_proceeds", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "strategies", "realized_profit", "REAL NOT NULL DEFAULT 0");
@@ -130,6 +132,20 @@ export function openDatabase(filename: string): Database.Database {
       WHERE base_asset = '' AND symbol LIKE '%USDT';
     UPDATE strategies SET total_purchased_quantity = total_asset_quantity
       WHERE total_purchased_quantity = 0 AND total_asset_quantity > 0;
+    UPDATE strategies SET cycle_purchased_quantity = total_purchased_quantity
+      WHERE cycle_purchased_quantity = 0 AND total_purchased_quantity > 0
+        AND EXISTS (SELECT 1 FROM executed_levels
+          WHERE executed_levels.strategy_id = strategies.id AND side = 'SELL' AND status <> 'EXECUTED');
+    UPDATE executed_levels SET status = 'WAITING', executed_at = NULL, error_message = NULL,
+      client_order_id = NULL, execution_started_at = NULL
+      WHERE side = 'BUY' AND strategy_id IN (
+        SELECT strategies.id FROM strategies
+        WHERE EXISTS (SELECT 1 FROM executed_levels AS sells
+          WHERE sells.strategy_id = strategies.id AND sells.side = 'SELL')
+          AND NOT EXISTS (SELECT 1 FROM executed_levels AS pending_sells
+            WHERE pending_sells.strategy_id = strategies.id AND pending_sells.side = 'SELL'
+              AND pending_sells.status <> 'EXECUTED')
+      );
     UPDATE strategies SET remaining_cost_basis = average_entry_price * total_asset_quantity
       WHERE remaining_cost_basis = 0 AND total_asset_quantity > 0;
     UPDATE executed_levels SET allocation_percent = CASE level_percent

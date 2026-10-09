@@ -96,11 +96,16 @@ export class StrategyEngine {
 
     let executedAny = false;
     for (const level of eligibleBuys) {
+      const current = await this.repository.getById(strategy.id);
+      const retainedProfit = Math.max(0, current.realizedProfit - current.withdrawnProfit);
+      const levelBudget = current.totalBudget + retainedProfit - current.initialPurchaseAmount;
+      const availableQuote = Math.max(0,
+        current.totalBudget + current.totalSaleProceeds - current.totalInvested - current.withdrawnProfit);
+      const quoteAmount = Math.min(availableQuote, levelBudget * (level.allocationPercent / 100));
+      if (quoteAmount <= 0) continue;
       const clientOrderId = this.clientOrderId(strategy.id, "BUY", level.levelPercent);
       if (!await this.repository.claimLevel(strategy.id, "BUY", level.levelPercent, clientOrderId)) continue;
       executedAny = true;
-      const levelBudget = strategy.totalBudget - strategy.initialPurchaseAmount;
-      const quoteAmount = levelBudget * (level.allocationPercent / 100);
       try {
         const order = await this.orders.buy(strategy.symbol, price, quoteAmount, clientOrderId);
         await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
@@ -135,7 +140,7 @@ export class StrategyEngine {
 
     for (const level of eligibleSells) {
       const current = await this.repository.getById(strategy.id);
-      const assetQuantity = current.totalPurchasedQuantity * (level.allocationPercent / 100);
+      const assetQuantity = current.cyclePurchasedQuantity * (level.allocationPercent / 100);
       if (assetQuantity <= 0 || current.totalAssetQuantity - assetQuantity + 1e-12 < minimumReserveQuantity) continue;
       const clientOrderId = this.clientOrderId(strategy.id, "SELL", level.levelPercent);
       if (!await this.repository.claimLevel(strategy.id, "SELL", level.levelPercent, clientOrderId)) continue;

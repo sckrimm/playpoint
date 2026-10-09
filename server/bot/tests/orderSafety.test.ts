@@ -31,7 +31,7 @@ function config(environment: "SIMULATION" | "TESTNET" = "SIMULATION"): StrategyC
     initialPurchaseAmount: 0,
     finalReservePercent: 20,
     buyLevels: [{ dropPercent: 10, budgetPercent: 100 }],
-    sellLevels: [{ gainPercent: 10, allocationPercent: 50 }],
+    sellLevels: [{ gainPercent: 10, allocationPercent: 80 }],
   };
 }
 
@@ -62,7 +62,7 @@ describe("order duplication protection", () => {
     assert.equal(await store.countOrders(strategy.id), 1);
   });
 
-  test("strategy engine executes each BUY and SELL level only once", async () => {
+  test("completed SELL cycle rearms BUY without repeating SELL at the high price", async () => {
     const store = repository();
     const engine = new StrategyEngine(config(), store, new SimulationOrderService(), false);
     const strategyId = await engine.initialize();
@@ -75,7 +75,39 @@ describe("order duplication protection", () => {
     const orders = await store.getOrders(strategyId);
     assert.equal(orders.filter((order) => order.side === "BUY").length, 1);
     assert.equal(orders.filter((order) => order.side === "SELL").length, 1);
-    assert.equal((await store.getLevels(strategyId)).every((level) => level.status === "EXECUTED"), true);
+    const levels = await store.getLevels(strategyId);
+    assert.equal(levels.find((level) => level.side === "BUY")!.status, "WAITING");
+    assert.equal(levels.find((level) => level.side === "SELL")!.status, "EXECUTED");
+  });
+
+  test("second cycle compounds retained profit and preserves the cumulative reserve", async () => {
+    const store = repository();
+    const compoundingConfig = {
+      ...config(),
+      finalReservePercent: 0,
+      sellLevels: [{ gainPercent: 10, allocationPercent: 100 }],
+    };
+    const engine = new StrategyEngine(compoundingConfig, store, new SimulationOrderService(), false);
+    const strategyId = await engine.initialize();
+
+    await engine.onPrice(90);
+    await engine.onPrice(111);
+    const afterFirstCycle = await store.getById(strategyId);
+    assert.ok(afterFirstCycle.realizedProfit > 0);
+    assert.equal(afterFirstCycle.cyclePurchasedQuantity, 0);
+
+    await engine.onPrice(90);
+    const buyOrders = (await store.getOrders(strategyId)).filter((order) => order.side === "BUY");
+    assert.ok(Math.max(...buyOrders.map((order) => order.quoteAmount)) > 1_000,
+      "retained profit must increase the next cycle budget");
+
+    await engine.onPrice(111);
+    const orders = await store.getOrders(strategyId);
+    assert.equal(orders.filter((order) => order.side === "BUY").length, 2);
+    assert.equal(orders.filter((order) => order.side === "SELL").length, 2);
+    const current = await store.getById(strategyId);
+    const cumulativeReserve = current.totalPurchasedQuantity * current.finalReservePercent / 100;
+    assert.ok(current.totalAssetQuantity + 1e-10 >= cumulativeReserve);
   });
 
   test("SELL cannot consume the configured permanent reserve", async () => {

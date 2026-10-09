@@ -6,7 +6,7 @@ import type { SymbolRules } from "../binance/binanceService.js";
 type PgStrategyRow = {
   id: number; symbol: string; initial_entry_price: string; total_budget: string; initial_purchase_amount: string; final_reserve_percent: string; total_invested: string;
   base_asset: string; quote_asset: string;
-  total_purchased_quantity: string; total_asset_quantity: string; total_sold_quantity: string;
+  total_purchased_quantity: string; cycle_purchased_quantity: string; total_asset_quantity: string; total_sold_quantity: string;
   total_sale_proceeds: string; realized_profit: string; withdrawn_profit: string; remaining_cost_basis: string;
   average_entry_price: string; status: StrategyRecord["status"];
   execution_environment: StrategyRecord["executionEnvironment"];
@@ -29,7 +29,8 @@ export class PostgresStrategyRepository implements StrategyStore {
         total_budget NUMERIC NOT NULL, initial_purchase_amount NUMERIC NOT NULL DEFAULT 0,
         final_reserve_percent NUMERIC NOT NULL DEFAULT 10,
         total_invested NUMERIC NOT NULL DEFAULT 0,
-        total_purchased_quantity NUMERIC NOT NULL DEFAULT 0, total_asset_quantity NUMERIC NOT NULL DEFAULT 0,
+        total_purchased_quantity NUMERIC NOT NULL DEFAULT 0, cycle_purchased_quantity NUMERIC NOT NULL DEFAULT 0,
+        total_asset_quantity NUMERIC NOT NULL DEFAULT 0,
         total_sold_quantity NUMERIC NOT NULL DEFAULT 0, total_sale_proceeds NUMERIC NOT NULL DEFAULT 0,
         realized_profit NUMERIC NOT NULL DEFAULT 0, withdrawn_profit NUMERIC NOT NULL DEFAULT 0,
         remaining_cost_basis NUMERIC NOT NULL DEFAULT 0,
@@ -79,6 +80,7 @@ export class PostgresStrategyRepository implements StrategyStore {
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS final_reserve_percent NUMERIC NOT NULL DEFAULT 10`);
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS initial_purchase_amount NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS total_purchased_quantity NUMERIC NOT NULL DEFAULT 0`);
+    await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS cycle_purchased_quantity NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS total_sold_quantity NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS total_sale_proceeds NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_strategies ADD COLUMN IF NOT EXISTS realized_profit NUMERIC NOT NULL DEFAULT 0`);
@@ -97,6 +99,20 @@ export class PostgresStrategyRepository implements StrategyStore {
       WHERE base_asset = '' AND symbol LIKE '%USDT'`);
     await this.pool.query(`UPDATE bot_strategies SET total_purchased_quantity = total_asset_quantity
       WHERE total_purchased_quantity = 0 AND total_asset_quantity > 0`);
+    await this.pool.query(`UPDATE bot_strategies SET cycle_purchased_quantity = total_purchased_quantity
+      WHERE cycle_purchased_quantity = 0 AND total_purchased_quantity > 0
+        AND EXISTS (SELECT 1 FROM bot_executed_levels
+          WHERE bot_executed_levels.strategy_id = bot_strategies.id AND side = 'SELL' AND status <> 'EXECUTED')`);
+    await this.pool.query(`UPDATE bot_executed_levels SET status = 'WAITING', executed_at = NULL,
+      error_message = NULL, client_order_id = NULL, execution_started_at = NULL
+      WHERE side = 'BUY' AND strategy_id IN (
+        SELECT bot_strategies.id FROM bot_strategies
+        WHERE EXISTS (SELECT 1 FROM bot_executed_levels AS sells
+          WHERE sells.strategy_id = bot_strategies.id AND sells.side = 'SELL')
+          AND NOT EXISTS (SELECT 1 FROM bot_executed_levels AS pending_sells
+            WHERE pending_sells.strategy_id = bot_strategies.id AND pending_sells.side = 'SELL'
+              AND pending_sells.status <> 'EXECUTED')
+      )`);
     await this.pool.query(`UPDATE bot_strategies SET remaining_cost_basis = average_entry_price * total_asset_quantity
       WHERE remaining_cost_basis = 0 AND total_asset_quantity > 0`);
     await this.pool.query(`UPDATE bot_executed_levels SET allocation_percent = CASE level_percent
@@ -325,14 +341,15 @@ export class PostgresStrategyRepository implements StrategyStore {
       }
       const totalInvested = strategy.totalInvested + quoteAmount;
       const totalPurchasedQuantity = strategy.totalPurchasedQuantity + assetQuantity;
+      const cyclePurchasedQuantity = strategy.cyclePurchasedQuantity + assetQuantity;
       const totalAssetQuantity = strategy.totalAssetQuantity + assetQuantity;
       const remainingCostBasis = strategy.remainingCostBasis + quoteAmount;
       const averageEntryPrice = remainingCostBasis / totalAssetQuantity;
       const now = new Date();
       await client.query(`UPDATE bot_strategies SET total_invested = $1, total_purchased_quantity = $2,
-        total_asset_quantity = $3, remaining_cost_basis = $4, average_entry_price = $5,
-        updated_at = $6 WHERE id = $7`,
-      [totalInvested, totalPurchasedQuantity, totalAssetQuantity, remainingCostBasis, averageEntryPrice, now, strategyId]);
+        cycle_purchased_quantity = $3, total_asset_quantity = $4, remaining_cost_basis = $5, average_entry_price = $6,
+        updated_at = $7 WHERE id = $8`,
+      [totalInvested, totalPurchasedQuantity, cyclePurchasedQuantity, totalAssetQuantity, remainingCostBasis, averageEntryPrice, now, strategyId]);
       await client.query(`INSERT INTO bot_orders (strategy_id, external_order_id, side, level_percent,
         market_price, quote_amount, asset_quantity, mode, execution_environment, created_at)
         VALUES ($1, $2, 'BUY', $3, $4, $5, $6, $7, $7, $8)`,
@@ -340,6 +357,14 @@ export class PostgresStrategyRepository implements StrategyStore {
       await client.query(`UPDATE bot_executed_levels SET status = 'EXECUTED', executed_at = $1, error_message = NULL
         WHERE strategy_id = $2 AND side = 'BUY' AND level_percent = $3 AND status IN ('EXECUTING', 'FAILED')`,
       [now, strategyId, levelPercent]);
+      const sellState = await client.query<{ total: number; executed: number }>(`SELECT COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status = 'EXECUTED')::int AS executed
+        FROM bot_executed_levels WHERE strategy_id = $1 AND side = 'SELL'`, [strategyId]);
+      if (sellState.rows[0]!.total > 0 && sellState.rows[0]!.executed === sellState.rows[0]!.total) {
+        await client.query(`UPDATE bot_executed_levels SET status = 'WAITING', executed_at = NULL,
+          error_message = NULL, client_order_id = NULL, execution_started_at = NULL
+          WHERE strategy_id = $1 AND side = 'SELL'`, [strategyId]);
+      }
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -385,6 +410,14 @@ export class PostgresStrategyRepository implements StrategyStore {
       await client.query(`UPDATE bot_executed_levels SET status = 'EXECUTED', executed_at = $1, error_message = NULL
         WHERE strategy_id = $2 AND side = 'SELL' AND level_percent = $3 AND status IN ('EXECUTING', 'FAILED')`,
       [now, strategyId, levelPercent]);
+      const remainingSells = await client.query<{ count: number }>(`SELECT COUNT(*)::int AS count
+        FROM bot_executed_levels WHERE strategy_id = $1 AND side = 'SELL' AND status <> 'EXECUTED'`, [strategyId]);
+      if (remainingSells.rows[0]!.count === 0) {
+        await client.query(`UPDATE bot_executed_levels SET status = 'WAITING', executed_at = NULL,
+          error_message = NULL, client_order_id = NULL, execution_started_at = NULL
+          WHERE strategy_id = $1 AND side = 'BUY'`, [strategyId]);
+        await client.query(`UPDATE bot_strategies SET cycle_purchased_quantity = 0 WHERE id = $1`, [strategyId]);
+      }
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -549,6 +582,7 @@ export class PostgresStrategyRepository implements StrategyStore {
       finalReservePercent: Number(row.final_reserve_percent),
       totalInvested: Number(row.total_invested),
       totalPurchasedQuantity: Number(row.total_purchased_quantity),
+      cyclePurchasedQuantity: Number(row.cycle_purchased_quantity ?? 0),
       totalAssetQuantity: Number(row.total_asset_quantity), totalSoldQuantity: Number(row.total_sold_quantity),
       totalSaleProceeds: Number(row.total_sale_proceeds), realizedProfit: Number(row.realized_profit),
       withdrawnProfit: Number(row.withdrawn_profit ?? 0),
