@@ -63,6 +63,9 @@ export class PostgresStrategyRepository implements StrategyStore {
       CREATE TABLE IF NOT EXISTS bot_account_balances (
         asset TEXT PRIMARY KEY, free TEXT NOT NULL, locked TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS bot_account_balance_history (
+        recorded_at TIMESTAMPTZ PRIMARY KEY, balance NUMERIC NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS bot_binance_connection_state (
         id INTEGER PRIMARY KEY CHECK (id = 1), status TEXT NOT NULL,
         message TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL
@@ -535,6 +538,13 @@ export class PostgresStrategyRepository implements StrategyStore {
           locked = EXCLUDED.locked, updated_at = EXCLUDED.updated_at`,
         [balance.asset, balance.free, balance.locked, balance.updatedAt]);
       }
+      const usdt = balances.find((balance) => balance.asset === "USDT");
+      if (usdt) {
+        const minute = new Date(Math.floor(Date.parse(usdt.updatedAt) / 60_000) * 60_000);
+        await client.query(`INSERT INTO bot_account_balance_history (recorded_at, balance)
+          VALUES ($1, $2) ON CONFLICT (recorded_at) DO NOTHING`, [minute, Number(usdt.free) + Number(usdt.locked)]);
+        await client.query("DELETE FROM bot_account_balance_history WHERE recorded_at < NOW() - INTERVAL '35 days'");
+      }
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -542,6 +552,13 @@ export class PostgresStrategyRepository implements StrategyStore {
     } finally {
       client.release();
     }
+  }
+
+  async getAccountBalanceReference(targetTime: Date): Promise<number | null> {
+    const result = await this.pool.query(`SELECT balance::float8 AS balance FROM bot_account_balance_history
+      WHERE recorded_at <= $1 AND recorded_at >= $2 ORDER BY recorded_at DESC LIMIT 1`,
+    [targetTime, new Date(targetTime.getTime() - 5 * 60_000)]);
+    return result.rows[0]?.balance ?? null;
   }
 
   async getAccountBalances(assets: string[]): Promise<AccountBalance[]> {

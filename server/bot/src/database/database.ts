@@ -88,6 +88,10 @@ export function openDatabase(filename: string): Database.Database {
       locked TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS account_balance_history (
+      recorded_at TEXT PRIMARY KEY,
+      balance REAL NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS binance_connection_state (
       id INTEGER PRIMARY KEY CHECK (id = 1),

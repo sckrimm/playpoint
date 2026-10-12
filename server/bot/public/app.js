@@ -59,17 +59,21 @@ let sessionUser = null;
 let newsItems = [];
 let overviewAccountBalance = null;
 let overviewAccountChange = 0;
+let overviewAccountPercent = null;
+let portfolioPeriodHours = 24;
+let overviewRequest = 0;
+const formatPercent = (value) => Number.isFinite(value) ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}%` : "—";
 
 function updateOverviewAccount(account) {
   const balance = account?.balance;
   if (!Number.isFinite(balance)) {
     overviewAccountBalance = null;
     overviewAccountChange = 0;
+    overviewAccountPercent = null;
     return;
   }
-  if (overviewAccountBalance !== null && balance !== overviewAccountBalance) {
-    overviewAccountChange = balance - overviewAccountBalance;
-  }
+  overviewAccountChange = account.change ?? 0;
+  overviewAccountPercent = account.percent ?? null;
   overviewAccountBalance = balance;
 }
 
@@ -363,27 +367,33 @@ async function api(url, options) {
 
 function renderPortfolioSummary(strategies) {
   const positioned = strategies.filter((strategy) => strategy.totalInvested > 0);
-  const priced = positioned.filter((strategy) => Number.isFinite(strategy.performance?.totalPnl));
+  const priced = positioned.filter((strategy) => Number.isFinite(strategy.performance?.period?.change));
   const complete = priced.length === positioned.length;
-  const winners = priced.filter((strategy) => strategy.performance.totalPnl > 0);
-  const losers = priced.filter((strategy) => strategy.performance.totalPnl < 0);
-  const sumPnl = (items) => items.reduce((sum, strategy) => sum + strategy.performance.totalPnl, 0);
+  const winners = priced.filter((strategy) => strategy.performance.period.change > 0);
+  const losers = priced.filter((strategy) => strategy.performance.period.change < 0);
+  const sumPnl = (items) => items.reduce((sum, strategy) => sum + strategy.performance.period.change, 0);
+  const percentFor = (items) => {
+    const base = items.reduce((sum, strategy) => sum + strategy.performance.period.startingEquity, 0);
+    return base > 0 ? sumPnl(items) / base * 100 : null;
+  };
   const pnl = sumPnl(priced);
-  const balance = strategies.reduce((sum, strategy) => sum + strategy.totalBudget - (strategy.withdrawnProfit || 0), 0) + pnl;
+  const balanceComplete = positioned.every((strategy) => Number.isFinite(strategy.performance?.totalPnl));
+  const balance = strategies.reduce((sum, strategy) => sum + strategy.totalBudget - (strategy.withdrawnProfit || 0) + (strategy.performance?.totalPnl ?? 0), 0);
   const arrow = (value) => value > 0 ? "↑" : value < 0 ? "↓" : "→";
   const resultClass = complete ? performanceClass(pnl) : "neutral";
   byId("portfolioSummary").innerHTML = `
     <div class="portfolio-results">
       <div class="portfolio-count-line"><span class="portfolio-label">${showingArchived ? "არქივის ბოტები" : "სულ ბოტი"}</span><strong class="portfolio-count">${strategies.length}</strong></div>
-      <strong class="portfolio-total ${resultClass}">${complete ? `${arrow(pnl)} ${formatSignedMoney(pnl)}` : "—"}</strong>
-      <div class="portfolio-group positive"><strong>↑ ${formatSignedMoney(sumPnl(winners))}</strong><span>${winners.length} ბოტი</span></div>
-      <div class="portfolio-group negative"><strong>↓ ${formatSignedMoney(sumPnl(losers))}</strong><span>${losers.length} ბოტი</span></div>
+      <div class="portfolio-total-line ${resultClass}"><strong class="portfolio-total">${complete ? `${arrow(pnl)} ${formatSignedMoney(pnl)}` : "—"}</strong><small>${complete ? formatPercent(percentFor(priced)) : "—"}</small></div>
+      <div class="portfolio-group positive"><strong>↑ ${priced.length || !positioned.length ? formatSignedMoney(sumPnl(winners)) : "—"}</strong><small>${formatPercent(percentFor(winners))}</small><span>${winners.length} ბოტი</span></div>
+      <div class="portfolio-group negative"><strong>↓ ${priced.length || !positioned.length ? formatSignedMoney(sumPnl(losers)) : "—"}</strong><small>${formatPercent(percentFor(losers))}</small><span>${losers.length} ბოტი</span></div>
+      ${complete ? "" : `<span class="portfolio-label">${positioned.length - priced.length} ბოტის ისტორია არასრულია</span>`}
     </div>
     <div class="portfolio-balance">
       <span class="portfolio-label">Binance Spot · USDT</span>
-      <strong class="portfolio-balance-value ${performanceClass(overviewAccountChange)}">${overviewAccountBalance === null ? "—" : `${arrow(overviewAccountChange)} ${money.format(overviewAccountBalance)}`}</strong>
+      <div class="portfolio-total-line ${performanceClass(overviewAccountChange)}"><strong class="portfolio-balance-value">${overviewAccountBalance === null ? "—" : `${arrow(overviewAccountChange)} ${money.format(overviewAccountBalance)}`}</strong><small title="USDT ბალანსის ცვლილება; მოიცავს ჩარიცხვებსა და გატანებს">${formatPercent(overviewAccountPercent)}</small></div>
       ${overviewAccountBalance === null ? '<span class="portfolio-label">ბალანსი მიუწვდომელია</span>' : ""}
-      <span class="portfolio-bot-balance">ბოტების ბალანსი <strong class="${resultClass}">${complete ? money.format(balance) : "—"}</strong></span>
+      <span class="portfolio-bot-balance">ბოტების ბალანსი <strong>${balanceComplete ? money.format(balance) : "—"}</strong> <small class="${resultClass}">${complete ? formatPercent(percentFor(priced)) : "—"}</small></span>
     </div>`;
 }
 
@@ -446,11 +456,13 @@ function renderOverview(strategies) {
 }
 
 async function loadOverview() {
+  const request = ++overviewRequest;
   try {
-    const endpoint = showingArchived ? "/api/strategies/archived" : "/api/strategies";
+    const endpoint = `${showingArchived ? "/api/strategies/archived" : "/api/strategies"}?hours=${portfolioPeriodHours}`;
     const [overview, account] = await Promise.all([
-      api(endpoint), api("/api/account-summary").catch(() => null),
+      api(endpoint), api(`/api/account-summary?hours=${portfolioPeriodHours}`).catch(() => null),
     ]);
+    if (request !== overviewRequest) return;
     const strategies = overview.strategies;
     updateOverviewAccount(account);
     if (!showingArchived) activeStrategies = strategies;
@@ -1255,6 +1267,22 @@ byId("deleteTemplate").addEventListener("click", async () => {
 });
 
 applyTheme(document.documentElement.dataset.theme, false);
+try { portfolioPeriodHours = [24, 168, 720].includes(Number(localStorage.getItem("spot-portfolio-period"))) ? Number(localStorage.getItem("spot-portfolio-period")) : 24; } catch {}
+byId("portfolioPeriod").querySelectorAll("button").forEach((button) => {
+  const selected = Number(button.dataset.hours) === portfolioPeriodHours;
+  button.classList.toggle("selected", selected);
+  button.setAttribute("aria-pressed", String(selected));
+  button.addEventListener("click", () => {
+    portfolioPeriodHours = Number(button.dataset.hours);
+    try { localStorage.setItem("spot-portfolio-period", String(portfolioPeriodHours)); } catch {}
+    byId("portfolioPeriod").querySelectorAll("button").forEach((item) => {
+      const active = item === button;
+      item.classList.toggle("selected", active);
+      item.setAttribute("aria-pressed", String(active));
+    });
+    void loadOverview();
+  });
+});
 try { applyStrategyLayout(localStorage.getItem("spot-strategy-layout"), false); } catch { applyStrategyLayout("columns", false); }
 byId("strategyLayout").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => applyStrategyLayout(button.dataset.layout)));
 try { applyCandidateLayout(localStorage.getItem("spot-candidate-layout"), false); } catch { applyCandidateLayout("columns", false); }

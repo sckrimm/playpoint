@@ -366,7 +366,22 @@ export class StrategyRepository implements StrategyStore {
       locked = excluded.locked, updated_at = excluded.updated_at`);
     this.db.transaction(() => {
       for (const balance of balances) statement.run(balance.asset, balance.free, balance.locked, balance.updatedAt);
+      const usdt = balances.find((balance) => balance.asset === "USDT");
+      if (usdt) {
+        const minute = new Date(Math.floor(Date.parse(usdt.updatedAt) / 60_000) * 60_000).toISOString();
+        this.db.prepare("INSERT OR IGNORE INTO account_balance_history (recorded_at, balance) VALUES (?, ?)")
+          .run(minute, Number(usdt.free) + Number(usdt.locked));
+        this.db.prepare("DELETE FROM account_balance_history WHERE recorded_at < ?")
+          .run(new Date(Date.now() - 35 * 24 * 60 * 60_000).toISOString());
+      }
     })();
+  }
+
+  async getAccountBalanceReference(targetTime: Date): Promise<number | null> {
+    const row = this.db.prepare(`SELECT balance FROM account_balance_history
+      WHERE recorded_at <= ? AND recorded_at >= ? ORDER BY recorded_at DESC LIMIT 1`)
+      .get(targetTime.toISOString(), new Date(targetTime.getTime() - 5 * 60_000).toISOString()) as { balance: number } | undefined;
+    return row?.balance ?? null;
   }
 
   async getAccountBalances(assets: string[]): Promise<AccountBalance[]> {

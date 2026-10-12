@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
-    <link rel="stylesheet" href="styles.css?v=20261012-4" />
+    <link rel="stylesheet" href="styles.css?v=20261012-5" />
   </head>
   <body>
     <header class="topbar">
@@ -26,6 +26,7 @@
     <main>
       <section id="overviewView">
         <div class="overview-head">
+          <div id="portfolioPeriod" class="view-switch portfolio-period" role="group" aria-label="შედეგების პერიოდი"><button type="button" data-hours="24" aria-pressed="true" class="selected">24 საათი</button><button type="button" data-hours="168" aria-pressed="false">7 დღე</button><button type="button" data-hours="720" aria-pressed="false" title="ბოლო 30 დღე">1 თვე</button></div>
           <div id="portfolioSummary" class="portfolio-summary" aria-live="polite" aria-label="ბოტების საერთო შედეგები"><p class="muted">ბალანსი იტვირთება...</p></div>
           <div class="overview-actions">
             <div class="view-switch" role="tablist"><button id="showActive" class="selected" type="button">აქტიური</button><button id="showArchived" type="button">არქივი</button></div>
@@ -265,6 +266,6 @@
       <article id="newsDetail" class="news-detail"></article>
     </dialog>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
-    <script src="app.js?v=20261012-4" defer></script>
+    <script src="app.js?v=20261012-5" defer></script>
   </body>
 </html>

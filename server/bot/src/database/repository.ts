@@ -31,6 +31,7 @@ export interface StrategyStore {
   getSymbolRules(symbol: string): Promise<SymbolRules | null>;
   saveAccountBalances(balances: AccountBalance[]): Promise<void>;
   getAccountBalances(assets: string[]): Promise<AccountBalance[]>;
+  getAccountBalanceReference(targetTime: Date): Promise<number | null>;
   saveBinanceConnectionState(state: BinanceConnectionState): Promise<void>;
   getBinanceConnectionState(): Promise<BinanceConnectionState | null>;
   resetSimulationStrategy(symbol: string): Promise<number>;

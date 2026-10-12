@@ -46,6 +46,10 @@ main { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 50
 .portfolio-group strong { font-size: 13px; overflow-wrap: anywhere; }
 .portfolio-bot-balance { color: #738078; font-size: 11px; line-height: 1.6; }
 .portfolio-bot-balance strong { font-weight: 650; }
+.portfolio-period { align-self: flex-start; }
+.portfolio-period button { height: 28px; font-size: 11px; padding: 0 10px; white-space: nowrap; flex: 0 0 auto; }
+.portfolio-total-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+.portfolio-total-line small, .portfolio-group small, .portfolio-bot-balance small { font-size: 10px; font-weight: 600; }
 .portfolio-balance-value { font-size: 36px; line-height: 1.25; overflow-wrap: anywhere; }
 [data-theme="dark"] .portfolio-summary, [data-theme="dark"] .portfolio-balance { border-color: #3a414b; }
 [data-theme="dark"] .portfolio-label { color: #a0aca5; }

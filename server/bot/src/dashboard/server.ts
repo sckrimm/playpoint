@@ -16,6 +16,7 @@ import { CryptoNewsService } from "../services/cryptoNewsService.js";
 import type { BuyLevelConfig, OrderRecord, SellLevelConfig, StrategyConfig, StrategyRecord } from "../types/strategy.js";
 import { UserAuthStore, type DashboardUser } from "../auth/userAuthStore.js";
 import { telegramAlerts } from "../services/telegramAlertService.js";
+import { periodPerformance } from "../services/portfolioPerformance.js";
 
 const port = Number(process.env.DASHBOARD_PORT ?? process.env.PORT ?? 4173);
 const publicDir = path.resolve("public");
@@ -38,6 +39,7 @@ if (userAuthStore) {
 }
 const exchangeInfo = new BinanceExchangeInfoService();
 const marketHistory = new BinanceMarketHistoryService();
+const testnetMarketHistory = new BinanceMarketHistoryService("https://testnet.binance.vision");
 const marketOpportunities = new MarketOpportunityService();
 const cryptoNews = new CryptoNewsService();
 let catalogCache: { items: SpotSymbolCatalogItem[]; expiresAt: number } | null = null;
@@ -165,17 +167,17 @@ async function getHourlyReference(symbol: string): Promise<HistoricalPrice | nul
   return getHistoricalReference(symbol, 1);
 }
 
-async function getHistoricalReference(symbol: string, hours: number): Promise<HistoricalPrice | null> {
-  const cacheKey = `${symbol}:${hours}`;
+async function getHistoricalReference(symbol: string, hours: number, environment = "SIMULATION"): Promise<HistoricalPrice | null> {
+  const cacheKey = `${environment}:${symbol}:${hours}`;
   const cached = hourlyPriceCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   try {
-    const value = await marketHistory.getPriceHoursAgo(symbol, hours);
+    const value = await (environment === "TESTNET" ? testnetMarketHistory : marketHistory).getPriceHoursAgo(symbol, hours);
     hourlyPriceCache.set(cacheKey, { value, expiresAt: Date.now() + 60_000 });
     return value;
   } catch (error) {
     console.error(`Hourly price unavailable for ${symbol}:`, error instanceof Error ? error.message : error);
-    return cached?.value ?? null;
+    return null;
   }
 }
 
@@ -368,7 +370,7 @@ async function withdrawStrategyProfit(id: number, body: unknown, user: Dashboard
   }
 }
 
-async function getStrategiesOverview(archived = false, user: DashboardUser | null = null) {
+async function getStrategiesOverview(archived = false, user: DashboardUser | null = null, periodHours = 24) {
   const repository = await createStore();
   try {
     const allStrategies = archived ? await repository.listArchivedStrategies() : await repository.listStrategies();
@@ -386,6 +388,10 @@ async function getStrategiesOverview(archived = false, user: DashboardUser | nul
       const totalPnl = market
         ? strategy.totalAssetQuantity * market.price + strategy.totalSaleProceeds - strategy.totalInvested
         : null;
+      const orders = await repository.getOrders(strategy.id);
+      const reference = await getHistoricalReference(strategy.symbol, periodHours, strategy.executionEnvironment);
+      const period = periodPerformance(strategy, orders, totalPnl, reference?.price ?? null,
+        reference ? Date.parse(reference.timestamp) : Date.now() - periodHours * 60 * 60_000);
       return {
         ...strategy,
         market,
@@ -395,6 +401,7 @@ async function getStrategiesOverview(archived = false, user: DashboardUser | nul
           sellLevelCount: sellLevels.length,
         },
         performance: {
+          period,
           hourlyPnl,
           hourlyPercent: market && hourlyReference ? (market.price / hourlyReference.price - 1) * 100 : null,
           hourlyReferencePrice: hourlyReference?.price ?? null,
@@ -687,6 +694,11 @@ function json(response: ServerResponse, status: number, value: unknown): void {
   response.end(JSON.stringify(value));
 }
 
+function overviewPeriodHours(request: IncomingMessage): number {
+  const hours = Number(new URL(request.url ?? "/", "http://localhost").searchParams.get("hours"));
+  return [24, 168, 720].includes(hours) ? hours : 24;
+}
+
 async function handleApi(request: IncomingMessage, response: ServerResponse, pathname: string, user: DashboardUser | null): Promise<boolean> {
   if (request.method === "GET" && pathname === "/api/session") {
     json(response, 200, { user: user ?? { username: dashboardUsername, role: "ADMIN" } });
@@ -704,8 +716,13 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
       const usdt = balances[0];
       const fresh = usdt && Date.now() - new Date(usdt.updatedAt).getTime() < 120_000;
       const value = usdt ? Number(usdt.free) + Number(usdt.locked) : null;
+      const hours = overviewPeriodHours(request);
+      const reference = await repository.getAccountBalanceReference(new Date(Date.now() - hours * 60 * 60_000));
+      const validBalance = connection?.status === "CONNECTED" && fresh && Number.isFinite(value) ? value : null;
       json(response, 200, {
-        balance: connection?.status === "CONNECTED" && fresh && Number.isFinite(value) ? value : null,
+        balance: validBalance,
+        change: validBalance !== null && reference !== null ? validBalance - reference : null,
+        percent: validBalance !== null && reference !== null && reference > 0 ? (validBalance - reference) / reference * 100 : null,
         status: connection?.status ?? "NOT_CONFIGURED",
       });
     } finally {
@@ -787,11 +804,11 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     return true;
   }
   if (request.method === "GET" && pathname === "/api/strategies") {
-    json(response, 200, { strategies: await getStrategiesOverview(false, user) });
+    json(response, 200, { strategies: await getStrategiesOverview(false, user, overviewPeriodHours(request)) });
     return true;
   }
   if (request.method === "GET" && pathname === "/api/strategies/archived") {
-    json(response, 200, { strategies: await getStrategiesOverview(true, user) });
+    json(response, 200, { strategies: await getStrategiesOverview(true, user, overviewPeriodHours(request)) });
     return true;
   }
   if (request.method === "GET" && pathname === "/api/strategies/comparison") {

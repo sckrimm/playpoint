@@ -16,10 +16,11 @@ export interface HistoricalPrice {
 }
 
 export class BinanceMarketHistoryService {
+  constructor(private readonly apiOrigin = "https://api.binance.com") {}
   async getCandles(symbol: string, interval: BinanceCandleInterval, limit: number): Promise<BinanceCandle[]> {
     const safeLimit = Math.min(1_000, Math.max(1, Math.floor(limit)));
     const params = new URLSearchParams({ symbol, interval, limit: String(safeLimit) });
-    const response = await fetch(`https://api.binance.com/api/v3/klines?${params}`, {
+    const response = await fetch(`${this.apiOrigin}/api/v3/klines?${params}`, {
       signal: AbortSignal.timeout(12_000),
     });
     if (!response.ok) throw new Error(`Binance candle request failed with HTTP ${response.status}`);
@@ -43,7 +44,7 @@ export class BinanceMarketHistoryService {
         endTime: String(endTime),
         limit: "1000",
       });
-      const response = await fetch(`https://api.binance.com/api/v3/klines?${params}`, {
+      const response = await fetch(`${this.apiOrigin}/api/v3/klines?${params}`, {
         signal: AbortSignal.timeout(12_000),
       });
       if (!response.ok) throw new Error(`Binance candle request failed with HTTP ${response.status}`);
@@ -76,7 +77,7 @@ export class BinanceMarketHistoryService {
       startTime: String(targetTime),
       limit: "1",
     });
-    const response = await fetch(`https://api.binance.com/api/v3/klines?${params}`, {
+    const response = await fetch(`${this.apiOrigin}/api/v3/klines?${params}`, {
       signal: AbortSignal.timeout(8_000),
     });
     if (!response.ok) throw new Error(`Binance market history request failed with HTTP ${response.status}`);
@@ -84,6 +85,7 @@ export class BinanceMarketHistoryService {
     const candle = payload[0];
     const price = Number(candle?.[4]);
     if (!candle || !Number.isFinite(price) || price <= 0) throw new Error(`Binance returned no historical reference price for ${symbol}`);
+    if (Math.abs(Number(candle[0]) - targetTime) > 60_000) throw new Error(`Historical reference is outside the requested period for ${symbol}`);
     return { price, timestamp: new Date(candle[0]).toISOString() };
   }
 }
