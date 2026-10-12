@@ -692,6 +692,27 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     json(response, 200, { user: user ?? { username: dashboardUsername, role: "ADMIN" } });
     return true;
   }
+  if (request.method === "GET" && pathname === "/api/account-summary") {
+    if (user && user.role !== "ADMIN") {
+      json(response, 200, { balance: null, status: "NOT_CONFIGURED" });
+      return true;
+    }
+    const repository = await createStore();
+    try {
+      const connection = await repository.getBinanceConnectionState();
+      const balances = await repository.getAccountBalances(["USDT"]);
+      const usdt = balances[0];
+      const fresh = usdt && Date.now() - new Date(usdt.updatedAt).getTime() < 120_000;
+      const value = usdt ? Number(usdt.free) + Number(usdt.locked) : null;
+      json(response, 200, {
+        balance: connection?.status === "CONNECTED" && fresh && Number.isFinite(value) ? value : null,
+        status: connection?.status ?? "NOT_CONFIGURED",
+      });
+    } finally {
+      await repository.close();
+    }
+    return true;
+  }
   if (request.method === "GET" && pathname === "/api/market-opportunities") {
     json(response, 200, await marketOpportunities.scan());
     return true;

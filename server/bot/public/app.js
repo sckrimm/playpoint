@@ -57,6 +57,21 @@ let comparisonSelection = new Set();
 let backtestDays = 30;
 let sessionUser = null;
 let newsItems = [];
+let overviewAccountBalance = null;
+let overviewAccountChange = 0;
+
+function updateOverviewAccount(account) {
+  const balance = account?.balance;
+  if (!Number.isFinite(balance)) {
+    overviewAccountBalance = null;
+    overviewAccountChange = 0;
+    return;
+  }
+  if (overviewAccountBalance !== null && balance !== overviewAccountBalance) {
+    overviewAccountChange = balance - overviewAccountBalance;
+  }
+  overviewAccountBalance = balance;
+}
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
@@ -359,16 +374,16 @@ function renderPortfolioSummary(strategies) {
   const resultClass = complete ? performanceClass(pnl) : "neutral";
   byId("portfolioSummary").innerHTML = `
     <div class="portfolio-results">
-      <span class="portfolio-label">${showingArchived ? "არქივის ბოტები" : "სულ ბოტი"}</span>
-      <strong class="portfolio-count">${strategies.length}</strong>
+      <div class="portfolio-count-line"><span class="portfolio-label">${showingArchived ? "არქივის ბოტები" : "სულ ბოტი"}</span><strong class="portfolio-count">${strategies.length}</strong></div>
       <strong class="portfolio-total ${resultClass}">${complete ? `${arrow(pnl)} ${formatSignedMoney(pnl)}` : "—"}</strong>
-      <div class="portfolio-group positive"><span>↑ პლიუსში · ${winners.length} ბოტი</span><strong>${formatSignedMoney(sumPnl(winners))}</strong></div>
-      <div class="portfolio-group negative"><span>↓ მინუსში · ${losers.length} ბოტი</span><strong>${formatSignedMoney(sumPnl(losers))}</strong></div>
+      <div class="portfolio-group positive"><strong>↑ ${formatSignedMoney(sumPnl(winners))}</strong><span>${winners.length} ბოტი</span></div>
+      <div class="portfolio-group negative"><strong>↓ ${formatSignedMoney(sumPnl(losers))}</strong><span>${losers.length} ბოტი</span></div>
     </div>
     <div class="portfolio-balance">
-      <span class="portfolio-label">ბოტების ბალანსი</span>
-      <strong class="portfolio-balance-value ${resultClass}">${complete ? `${arrow(pnl)} ${money.format(balance)}` : "—"}</strong>
-      <span class="portfolio-label">${complete ? "USDT" : "ფასი მიუწვდომელია"}</span>
+      <span class="portfolio-label">Binance Spot · USDT</span>
+      <strong class="portfolio-balance-value ${performanceClass(overviewAccountChange)}">${overviewAccountBalance === null ? "—" : `${arrow(overviewAccountChange)} ${money.format(overviewAccountBalance)}`}</strong>
+      ${overviewAccountBalance === null ? '<span class="portfolio-label">ბალანსი მიუწვდომელია</span>' : ""}
+      <span class="portfolio-bot-balance">ბოტების ბალანსი <strong class="${resultClass}">${complete ? money.format(balance) : "—"}</strong></span>
     </div>`;
 }
 
@@ -433,7 +448,11 @@ function renderOverview(strategies) {
 async function loadOverview() {
   try {
     const endpoint = showingArchived ? "/api/strategies/archived" : "/api/strategies";
-    const strategies = (await api(endpoint)).strategies;
+    const [overview, account] = await Promise.all([
+      api(endpoint), api("/api/account-summary").catch(() => null),
+    ]);
+    const strategies = overview.strategies;
+    updateOverviewAccount(account);
     if (!showingArchived) activeStrategies = strategies;
     renderOverview(strategies);
     byId("error").hidden = true;

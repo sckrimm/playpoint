@@ -35,21 +35,25 @@ main { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 50
 .overview-actions { display: flex; align-items: center; gap: 10px; }
 .overview-actions button { font-size: 12px; white-space: nowrap; }
 #overviewView > .overview-head { flex-direction: column; align-items: stretch; }
-.portfolio-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; padding-bottom: 24px; border-bottom: 1px solid #dce2df; }
+.portfolio-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; padding-bottom: 18px; border-bottom: 1px solid #dce2df; }
 .portfolio-results, .portfolio-balance { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
 .portfolio-balance { border-left: 1px solid #dce2df; padding-left: 24px; }
 .portfolio-label { font-size: 12px; color: #738078; }
-.portfolio-count { font-size: 32px; line-height: 1.2; }
+.portfolio-count-line { display: flex; align-items: baseline; gap: 8px; }
+.portfolio-count { font-size: 16px; line-height: 1.2; }
 .portfolio-total { font-size: 20px; overflow-wrap: anywhere; }
-.portfolio-group { display: flex; flex-direction: column; gap: 3px; margin-top: 9px; font-size: 12px; }
-.portfolio-group strong { font-size: 16px; overflow-wrap: anywhere; }
+.portfolio-group { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.portfolio-group strong { font-size: 13px; overflow-wrap: anywhere; }
+.portfolio-bot-balance { color: #738078; font-size: 11px; line-height: 1.6; }
+.portfolio-bot-balance strong { font-weight: 650; }
 .portfolio-balance-value { font-size: 36px; line-height: 1.25; overflow-wrap: anywhere; }
 [data-theme="dark"] .portfolio-summary, [data-theme="dark"] .portfolio-balance { border-color: #3a414b; }
 [data-theme="dark"] .portfolio-label { color: #a0aca5; }
+[data-theme="dark"] .portfolio-bot-balance { color: #a0aca5; }
 @media (max-width: 640px) {
   .portfolio-summary { gap: 12px; padding-bottom: 20px; }
   .portfolio-balance { padding-left: 12px; }
-  .portfolio-count { font-size: 28px; }
+  .portfolio-count { font-size: 16px; }
   .portfolio-total { font-size: 18px; }
   .portfolio-balance-value { font-size: 24px; }
 }
