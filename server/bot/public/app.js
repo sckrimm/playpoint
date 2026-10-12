@@ -851,32 +851,24 @@ function renderDetail(data) {
   byId("progressLabel").textContent = `${data.progressPercent.toFixed(0)}%`;
   byId("progressBar").style.width = `${Math.min(100, data.progressPercent)}%`;
 
-  const rules = data.symbolRules;
-  byId("rulePair").textContent = `${strategy.baseAsset} / ${strategy.quoteAsset}`;
-  byId("ruleStatus").textContent = rules?.status === "TRADING" ? "ვაჭრობა აქტიურია" : rules?.status ?? "ელოდება";
-  byId("minQty").textContent = rules?.minQty ?? "—";
-  byId("stepSize").textContent = rules?.stepSize ?? "—";
-  byId("tickSize").textContent = rules?.tickSize ?? "—";
-  byId("minNotional").textContent = rules ? `${rules.minNotional} ${strategy.quoteAsset}` : "—";
-
   const balances = data.account?.balances ?? [];
   const quoteBalance = balances.find((balance) => balance.asset === strategy.quoteAsset);
   const coinBalance = balances.find((balance) => balance.asset === strategy.baseAsset);
   const connection = data.account?.connection;
-  byId("accountTitle").textContent = strategy.executionEnvironment === "TESTNET" ? "Binance Spot Testnet ანგარიში" : "Binance Spot ანგარიში";
-  byId("accountSubtitle").textContent = strategy.executionEnvironment === "TESTNET" ? "სატესტო თანხის ბალანსები და შესრულებული ორდერები" : "ბალანსები მხოლოდ წაკითხვის რეჟიმში";
+  byId("accountTitle").textContent = strategy.executionEnvironment === "TESTNET" ? "Binance Testnet" : "Binance Spot";
   const isConnected = connection?.status === "CONNECTED";
   const accountPanel = document.querySelector(".account-panel");
   accountPanel.classList.toggle("connected", isConnected);
   accountPanel.classList.toggle("connection-error", Boolean(connection && !["CONNECTED", "CONNECTING", "NOT_CONFIGURED"].includes(connection.status)));
   byId("accountStatus").textContent = isConnected ? "დაკავშირებულია" : connection ? labelConnection(connection.status) : "არ არის დაკავშირებული";
-  byId("quoteBalanceLabel").textContent = `${strategy.quoteAsset} ხელმისაწვდომი ბალანსი`;
+  byId("quoteBalanceLabel").textContent = `${strategy.quoteAsset} ხელმისაწვდომი`;
   byId("availableUsdt").textContent = quoteBalance ? `${number.format(Number(quoteBalance.free))} ${quoteBalance.asset}` : "—";
   byId("quoteLocked").textContent = quoteBalance ? `დაბლოკილი: ${number.format(Number(quoteBalance.locked))}` : "დაბლოკილი: —";
-  byId("coinBalanceLabel").textContent = `${strategy.baseAsset} ხელმისაწვდომი ბალანსი`;
+  byId("coinBalanceLabel").textContent = `${strategy.baseAsset} ხელმისაწვდომი`;
   byId("coinBalance").textContent = coinBalance ? `${number.format(Number(coinBalance.free))} ${coinBalance.asset}` : "—";
   byId("coinLocked").textContent = coinBalance ? `დაბლოკილი: ${number.format(Number(coinBalance.locked))}` : "დაბლოკილი: —";
   byId("connectionMessage").textContent = connection?.message ?? "—";
+  byId("connectionMessage").hidden = !accountPanel.classList.contains("connection-error");
   byId("balanceUpdated").textContent = connection ? `განახლდა ${new Date(connection.updatedAt).toLocaleTimeString("ka-GE")}` : "განახლებას ელოდება";
 
   const executed = levels.filter((level) => level.status === "EXECUTED").length;

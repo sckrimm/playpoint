@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
-    <link rel="stylesheet" href="styles.css?v=20261012-6" />
+    <link rel="stylesheet" href="styles.css?v=20261012-7" />
   </head>
   <body>
     <header class="topbar">
@@ -168,23 +168,14 @@
         <div class="progress"><span id="progressBar"></span></div>
       </section>
 
-      <section class="rules-panel">
-        <div class="section-title"><div><h2>Binance-ის სიმბოლოს წესები</h2><p id="rulePair">ბირჟის ფილტრები</p></div><span id="ruleStatus" class="count">ელოდება</span></div>
-        <div class="rules-grid">
-          <div><span>მინ. რაოდენობა (minQty)</span><strong id="minQty">—</strong></div>
-          <div><span>რაოდენობის ბიჯი (stepSize)</span><strong id="stepSize">—</strong></div>
-          <div><span>ფასის ბიჯი (tickSize)</span><strong id="tickSize">—</strong></div>
-          <div><span>მინ. ღირებულება (minNotional)</span><strong id="minNotional">—</strong></div>
-        </div>
-      </section>
-
       <section class="account-panel">
-        <div class="section-title"><div><h2 id="accountTitle">Binance Spot ანგარიში</h2><p id="accountSubtitle">ბალანსები მხოლოდ წაკითხვის რეჟიმში</p></div><span id="accountStatus" class="count">არ არის დაკავშირებული</span></div>
+        <div class="section-title"><h2 id="accountTitle">Binance Spot</h2><span id="accountStatus" class="count">არ არის დაკავშირებული</span></div>
         <div class="account-grid">
           <div><span id="quoteBalanceLabel">საბაზო ვალუტა</span><strong id="availableUsdt">—</strong><small id="quoteLocked">დაბლოკილი: —</small></div>
           <div><span id="coinBalanceLabel">ძირითადი აქტივი</span><strong id="coinBalance">—</strong><small id="coinLocked">დაბლოკილი: —</small></div>
-          <div><span>კავშირი</span><strong id="connectionMessage">—</strong><small id="balanceUpdated">განახლებას ელოდება</small></div>
         </div>
+        <small id="balanceUpdated" class="account-updated">განახლებას ელოდება</small>
+        <p id="connectionMessage" class="account-error" hidden></p>
       </section>
 
       <section class="panel strategy-levels-panel">
@@ -266,6 +257,6 @@
       <article id="newsDetail" class="news-detail"></article>
     </dialog>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
-    <script src="app.js?v=20261012-5" defer></script>
+    <script src="app.js?v=20261012-7" defer></script>
   </body>
 </html>
