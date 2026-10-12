@@ -34,6 +34,25 @@ main { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 50
 .overview-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .overview-actions { display: flex; align-items: center; gap: 10px; }
 .overview-actions button { font-size: 12px; white-space: nowrap; }
+#overviewView > .overview-head { flex-direction: column; align-items: stretch; }
+.portfolio-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; padding-bottom: 24px; border-bottom: 1px solid #dce2df; }
+.portfolio-results, .portfolio-balance { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+.portfolio-balance { border-left: 1px solid #dce2df; padding-left: 24px; }
+.portfolio-label { font-size: 12px; color: #738078; }
+.portfolio-count { font-size: 32px; line-height: 1.2; }
+.portfolio-total { font-size: 20px; overflow-wrap: anywhere; }
+.portfolio-group { display: flex; flex-direction: column; gap: 3px; margin-top: 9px; font-size: 12px; }
+.portfolio-group strong { font-size: 16px; overflow-wrap: anywhere; }
+.portfolio-balance-value { font-size: 36px; line-height: 1.25; overflow-wrap: anywhere; }
+[data-theme="dark"] .portfolio-summary, [data-theme="dark"] .portfolio-balance { border-color: #3a414b; }
+[data-theme="dark"] .portfolio-label { color: #a0aca5; }
+@media (max-width: 640px) {
+  .portfolio-summary { gap: 12px; padding-bottom: 20px; }
+  .portfolio-balance { padding-left: 12px; }
+  .portfolio-count { font-size: 28px; }
+  .portfolio-total { font-size: 18px; }
+  .portfolio-balance-value { font-size: 24px; }
+}
 .view-switch { display: inline-flex; padding: 3px; border: 1px solid #d7dedb; border-radius: 6px; background: #eef2f0; }
 .view-switch button { height: 32px; padding: 0 12px; border: 0; border-radius: 4px; color: #66716b; background: transparent; font-weight: 750; }
 .view-switch button.selected { color: #172126; background: #fff; box-shadow: 0 1px 3px rgba(20, 30, 25, .12); }
@@ -73,6 +92,28 @@ main { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 50
 .readiness-strategy dt { color: #738078; font-size: 9px; }
 .readiness-strategy dd { margin: 0; font-size: 12px; font-weight: 800; }
 .strategy-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.strategy-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.strategy-list-toolbar > span { font-size: 12px; }
+.strategy-list-toolbar button { font-size: 12px; }
+.strategy-name { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.strategy-card-head .strategy-hot { display: inline-flex; flex-shrink: 0; color: #d97416; }
+[data-theme="dark"] .strategy-card-head .strategy-hot { color: #ffc15b; }
+.strategy-list[data-layout="rows"] { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.strategy-list[data-layout="rows"] .strategy-card { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 12px 16px; }
+.strategy-list[data-layout="rows"] .strategy-card-metrics { margin: 0; padding: 0; border: 0; gap: 10px 16px; }
+.strategy-list[data-layout="rows"] .strategy-card-foot { flex-direction: column; align-items: flex-end; }
+@media (max-width: 1000px) {
+  .strategy-list[data-layout="rows"] .strategy-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  .strategy-list[data-layout="rows"] .strategy-card-foot { grid-column: 1 / -1; flex-direction: row; align-items: center; }
+}
+@media (max-width: 640px) {
+  .strategy-list[data-layout="rows"] .strategy-card { padding: 12px; gap: 10px; }
+  .strategy-list[data-layout="rows"] .strategy-card-head { gap: 8px; }
+  .strategy-list[data-layout="rows"] .strategy-card-head strong { font-size: 13px; }
+  .strategy-list[data-layout="rows"] .strategy-card-metrics { gap: 10px; }
+  .strategy-list[data-layout="rows"] .strategy-card-metrics strong { font-size: 12px; }
+  .strategy-list[data-layout="rows"] .strategy-card-head .bot-result { font-size: 11px; }
+}
 .strategy-card { padding: 18px; border: 1px solid #dce2df; border-radius: 8px; background: #fff; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
 .strategy-card:hover, .strategy-card:focus-visible { border-color: #b8c2bd; box-shadow: 0 4px 14px rgba(28, 40, 34, .07); outline: none; }
 .strategy-card-head, .strategy-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

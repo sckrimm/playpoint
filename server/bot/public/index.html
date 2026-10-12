@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
-    <link rel="stylesheet" href="styles.css?v=20261005-5" />
+    <link rel="stylesheet" href="styles.css?v=20261012-2" />
   </head>
   <body>
     <header class="topbar">
@@ -26,7 +26,7 @@
     <main>
       <section id="overviewView">
         <div class="overview-head">
-          <div><p class="eyebrow">პორტფელის ავტომატიზაცია</p><h1>სტრატეგიები</h1><p class="muted">დამოუკიდებელი Spot USDT სიმულაციური სტრატეგიები</p></div>
+          <div id="portfolioSummary" class="portfolio-summary" aria-live="polite" aria-label="ბოტების საერთო შედეგები"><p class="muted">ბალანსი იტვირთება...</p></div>
           <div class="overview-actions">
             <div class="view-switch" role="tablist"><button id="showActive" class="selected" type="button">აქტიური</button><button id="showArchived" type="button">არქივი</button></div>
             <button id="openReadiness" class="secondary-button" type="button">მზადყოფნის მონიტორი</button>
@@ -36,6 +36,7 @@
             <button id="openCreate" class="primary-button" type="button">+ სტრატეგიის შექმნა</button>
           </div>
         </div>
+        <div class="strategy-list-toolbar"><span class="muted">მოგების მიხედვით</span><div id="strategyLayout" class="view-switch" role="group" aria-label="სტრატეგიების განლაგება"><button type="button" data-layout="rows" aria-pressed="false">რიგები</button><button type="button" data-layout="columns" aria-pressed="true">სვეტები</button></div></div>
         <div id="strategyList" class="strategy-list"><p class="empty-state">სტრატეგიები იტვირთება...</p></div>
       </section>
 
@@ -264,6 +265,6 @@
       <article id="newsDetail" class="news-detail"></article>
     </dialog>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
-    <script src="app.js?v=20261008-3" defer></script>
+    <script src="app.js?v=20261012-2" defer></script>
   </body>
 </html>

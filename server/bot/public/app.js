@@ -92,6 +92,29 @@ function isDarkTheme() {
   return document.documentElement.dataset.theme === "dark";
 }
 
+function applyStrategyLayout(layout, persist = true) {
+  const normalized = layout === "rows" ? "rows" : "columns";
+  byId("strategyList").dataset.layout = normalized;
+  byId("strategyLayout").querySelectorAll("button").forEach((button) => {
+    const selected = button.dataset.layout === normalized;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+  if (persist) {
+    try { localStorage.setItem("spot-strategy-layout", normalized); } catch {}
+  }
+}
+
+function strategyIsHot(strategy) {
+  const performance = strategy.performance;
+  return strategy.status === "ACTIVE" && strategy.totalInvested > 0 &&
+    [performance?.totalPnl, performance?.hourlyPnl, performance?.dailyPnl]
+      .every((value) => Number.isFinite(value) && value > 0);
+}
+
+// Lucide Flame icon (ISC license).
+const flameIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>';
+
 function chartTheme() {
   return isDarkTheme()
     ? { background: "#1e2329", text: "#a7b2ac", grid: "#2b3139", border: "#3a414b", crosshair: "#707a86" }
@@ -323,7 +346,34 @@ async function api(url, options) {
   return payload;
 }
 
+function renderPortfolioSummary(strategies) {
+  const positioned = strategies.filter((strategy) => strategy.totalInvested > 0);
+  const priced = positioned.filter((strategy) => Number.isFinite(strategy.performance?.totalPnl));
+  const complete = priced.length === positioned.length;
+  const winners = priced.filter((strategy) => strategy.performance.totalPnl > 0);
+  const losers = priced.filter((strategy) => strategy.performance.totalPnl < 0);
+  const sumPnl = (items) => items.reduce((sum, strategy) => sum + strategy.performance.totalPnl, 0);
+  const pnl = sumPnl(priced);
+  const balance = strategies.reduce((sum, strategy) => sum + strategy.totalBudget - (strategy.withdrawnProfit || 0), 0) + pnl;
+  const arrow = (value) => value > 0 ? "↑" : value < 0 ? "↓" : "→";
+  const resultClass = complete ? performanceClass(pnl) : "neutral";
+  byId("portfolioSummary").innerHTML = `
+    <div class="portfolio-results">
+      <span class="portfolio-label">${showingArchived ? "არქივის ბოტები" : "სულ ბოტი"}</span>
+      <strong class="portfolio-count">${strategies.length}</strong>
+      <strong class="portfolio-total ${resultClass}">${complete ? `${arrow(pnl)} ${formatSignedMoney(pnl)}` : "—"}</strong>
+      <div class="portfolio-group positive"><span>↑ პლიუსში · ${winners.length} ბოტი</span><strong>${formatSignedMoney(sumPnl(winners))}</strong></div>
+      <div class="portfolio-group negative"><span>↓ მინუსში · ${losers.length} ბოტი</span><strong>${formatSignedMoney(sumPnl(losers))}</strong></div>
+    </div>
+    <div class="portfolio-balance">
+      <span class="portfolio-label">ბოტების ბალანსი</span>
+      <strong class="portfolio-balance-value ${resultClass}">${complete ? `${arrow(pnl)} ${money.format(balance)}` : "—"}</strong>
+      <span class="portfolio-label">${complete ? "USDT" : "ფასი მიუწვდომელია"}</span>
+    </div>`;
+}
+
 function renderOverview(strategies) {
+  renderPortfolioSummary(strategies);
   const list = byId("strategyList");
   if (!strategies.length) {
     list.innerHTML = showingArchived
@@ -331,7 +381,14 @@ function renderOverview(strategies) {
       : '<div class="empty-state"><strong>სტრატეგიები ჯერ არ არის</strong><span>დასაწყებად შექმენი SIMULATION სტრატეგია.</span></div>';
     return;
   }
-  list.innerHTML = strategies.map((strategy) => {
+  const rankedStrategies = [...strategies].sort((a, b) => {
+    const aPnl = a.totalInvested > 0 ? a.performance?.totalPnl : 0;
+    const bPnl = b.totalInvested > 0 ? b.performance?.totalPnl : 0;
+    const aRank = Number.isFinite(aPnl) ? aPnl : -Infinity;
+    const bRank = Number.isFinite(bPnl) ? bPnl : -Infinity;
+    return aRank === bRank ? a.id - b.id : bRank - aRank;
+  });
+  list.innerHTML = rankedStrategies.map((strategy) => {
     const totalPnl = strategy.performance?.totalPnl;
     const hasPosition = strategy.totalInvested > 0;
     const botResultClass = !hasPosition || totalPnl == null ? "neutral" : performanceClass(totalPnl);
@@ -342,9 +399,9 @@ function renderOverview(strategies) {
       ? ` (${strategy.performance.totalPnlPercent >= 0 ? "+" : ""}${strategy.performance.totalPnlPercent.toFixed(2)}%)`
       : "";
     return `
-    <article class="strategy-card" data-id="${strategy.id}" tabindex="0">
+    <article class="strategy-card${strategyIsHot(strategy) ? " is-hot" : ""}" data-id="${strategy.id}" tabindex="0">
       <div class="strategy-card-head">
-        <div class="strategy-identity"><strong>${strategy.symbol}</strong><span>${strategy.baseAsset} / ${strategy.quoteAsset}</span><span class="strategy-profile">შესვლა -${strategy.profile?.firstBuyDropPercent ?? "—"}% · ${strategy.profile?.buyLevelCount ?? 0} BUY / ${strategy.profile?.sellLevelCount ?? 0} SELL</span><span class="bot-result ${botResultClass}">${botResultText}${botResultPercent}</span></div>
+        <div class="strategy-identity"><strong class="strategy-name">${strategy.symbol}${strategyIsHot(strategy) ? `<span class="strategy-hot" title="საერთო შედეგი, 1 საათი და 24 საათი პლიუსშია" aria-label="სამივე შედეგი პლიუსშია">${flameIcon}</span>` : ""}</strong><span>${strategy.baseAsset} / ${strategy.quoteAsset}</span><span class="strategy-profile">შესვლა -${strategy.profile?.firstBuyDropPercent ?? "—"}% · ${strategy.profile?.buyLevelCount ?? 0} BUY / ${strategy.profile?.sellLevelCount ?? 0} SELL</span><span class="bot-result ${botResultClass}">${botResultText}${botResultPercent}</span></div>
         <div class="card-performance">
           <span class="card-status ${strategy.status.toLowerCase()}" data-status="${strategy.status}">${labelStatus(strategy.status)}</span>
           <span class="performance-line ${strategy.performance?.hourlyPnl == null ? "neutral" : performanceClass(strategy.performance.hourlyPnl)}"><small>1 საათში</small><strong>${strategy.performance?.hourlyPnl == null ? "—" : formatSignedMoney(strategy.performance.hourlyPnl)}</strong>${strategy.performance?.hourlyPercent == null ? "" : `<em>${strategy.performance.hourlyPercent >= 0 ? "+" : ""}${strategy.performance.hourlyPercent.toFixed(2)}%</em>`}</span>
@@ -1179,6 +1236,8 @@ byId("deleteTemplate").addEventListener("click", async () => {
 });
 
 applyTheme(document.documentElement.dataset.theme, false);
+try { applyStrategyLayout(localStorage.getItem("spot-strategy-layout"), false); } catch { applyStrategyLayout("columns", false); }
+byId("strategyLayout").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => applyStrategyLayout(button.dataset.layout)));
 try { applyCandidateLayout(localStorage.getItem("spot-candidate-layout"), false); } catch { applyCandidateLayout("columns", false); }
 window.history.replaceState({ ...(window.history.state ?? {}), appView: "overviewView", strategyId: null }, "", window.location.href);
 window.addEventListener("popstate", (event) => {
