@@ -93,8 +93,9 @@ export class PostgresStrategyRepository implements StrategyStore {
     await this.pool.query(`ALTER TABLE bot_executed_levels ADD COLUMN IF NOT EXISTS allocation_percent NUMERIC NOT NULL DEFAULT 0`);
     await this.pool.query(`ALTER TABLE bot_executed_levels ADD COLUMN IF NOT EXISTS client_order_id TEXT`);
     await this.pool.query(`ALTER TABLE bot_executed_levels ADD COLUMN IF NOT EXISTS execution_started_at TIMESTAMPTZ`);
-    await this.pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS bot_orders_external_order_unique
-      ON bot_orders (execution_environment, external_order_id)`);
+    await this.pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS bot_orders_strategy_external_unique
+      ON bot_orders (strategy_id, execution_environment, external_order_id)`);
+    await this.pool.query("DROP INDEX IF EXISTS bot_orders_external_order_unique");
     await this.pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS bot_levels_client_order_unique
       ON bot_executed_levels (client_order_id) WHERE client_order_id IS NOT NULL`);
     await this.pool.query(`UPDATE bot_strategies SET quote_asset = 'USDT' WHERE quote_asset = ''`);
@@ -265,13 +266,13 @@ export class PostgresStrategyRepository implements StrategyStore {
     }));
   }
 
-  async createStrategyTemplate(template: Omit<StrategyTemplateRecord, "id" | "builtIn" | "createdAt">): Promise<StrategyTemplateRecord> {
+  async createStrategyTemplate(template: Omit<StrategyTemplateRecord, "id" | "builtIn" | "createdAt">, ownerUserId?: number): Promise<StrategyTemplateRecord> {
     const now = new Date();
     const result = await this.pool.query(`INSERT INTO bot_strategy_templates
-      (name, buy_levels_json, sell_levels_json, final_reserve_percent, created_at, updated_at)
-      VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $5) RETURNING id`,
+      (name, buy_levels_json, sell_levels_json, final_reserve_percent, created_at, updated_at${ownerUserId ? ", owner_user_id" : ""})
+      VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $5${ownerUserId ? ", $6" : ""}) RETURNING id`,
     [template.name, JSON.stringify(template.buyLevels), JSON.stringify(template.sellLevels),
-      template.finalReservePercent, now]);
+      template.finalReservePercent, now, ...(ownerUserId ? [ownerUserId] : [])]);
     return { ...template, id: Number(result.rows[0].id), builtIn: false, createdAt: now.toISOString() };
   }
 
@@ -315,6 +316,7 @@ export class PostgresStrategyRepository implements StrategyStore {
     const result = await this.pool.query(`UPDATE bot_executed_levels SET status = 'EXECUTING', error_message = NULL,
       client_order_id = $4, execution_started_at = NOW()
       WHERE strategy_id = $1 AND side = $2 AND level_percent = $3
+        AND EXISTS (SELECT 1 FROM bot_strategies WHERE bot_strategies.id = bot_executed_levels.strategy_id AND bot_strategies.status = 'ACTIVE')
         AND (status = 'WAITING' OR (status = 'FAILED' AND error_message NOT LIKE '[NO_AUTO_RETRY]%'))`,
     [strategyId, side, levelPercent, clientOrderId]);
     return result.rowCount === 1;
@@ -334,8 +336,8 @@ export class PostgresStrategyRepository implements StrategyStore {
       const locked = await client.query<PgStrategyRow>("SELECT * FROM bot_strategies WHERE id = $1 FOR UPDATE", [strategyId]);
       if (!locked.rows[0]) throw new Error(`Strategy ${strategyId} not found`);
       const strategy = this.map(locked.rows[0]);
-      const existing = await client.query("SELECT 1 FROM bot_orders WHERE execution_environment = $1 AND external_order_id = $2",
-        [strategy.executionEnvironment, externalOrderId]);
+      const existing = await client.query("SELECT 1 FROM bot_orders WHERE strategy_id = $1 AND execution_environment = $2 AND external_order_id = $3",
+        [strategyId, strategy.executionEnvironment, externalOrderId]);
       if (existing.rows[0]) {
         await client.query(`UPDATE bot_executed_levels SET status = 'EXECUTED', executed_at = COALESCE(executed_at, NOW()), error_message = NULL
           WHERE strategy_id = $1 AND side = 'BUY' AND level_percent = $2`, [strategyId, levelPercent]);
@@ -385,8 +387,8 @@ export class PostgresStrategyRepository implements StrategyStore {
       const row = result.rows[0];
       if (!row) throw new Error(`Strategy ${strategyId} not found`);
       const strategy = this.map(row);
-      const existing = await client.query("SELECT 1 FROM bot_orders WHERE execution_environment = $1 AND external_order_id = $2",
-        [strategy.executionEnvironment, externalOrderId]);
+      const existing = await client.query("SELECT 1 FROM bot_orders WHERE strategy_id = $1 AND execution_environment = $2 AND external_order_id = $3",
+        [strategyId, strategy.executionEnvironment, externalOrderId]);
       if (existing.rows[0]) {
         await client.query(`UPDATE bot_executed_levels SET status = 'EXECUTED', executed_at = COALESCE(executed_at, NOW()), error_message = NULL
           WHERE strategy_id = $1 AND side = 'SELL' AND level_percent = $2`, [strategyId, levelPercent]);
@@ -438,8 +440,8 @@ export class PostgresStrategyRepository implements StrategyStore {
       const row = result.rows[0];
       if (!row) throw new Error(`Strategy ${strategyId} not found`);
       const strategy = this.map(row);
-      const existing = await client.query("SELECT 1 FROM bot_orders WHERE execution_environment = $1 AND external_order_id = $2",
-        [strategy.executionEnvironment, externalOrderId]);
+      const existing = await client.query("SELECT 1 FROM bot_orders WHERE strategy_id = $1 AND execution_environment = $2 AND external_order_id = $3",
+        [strategyId, strategy.executionEnvironment, externalOrderId]);
       if (existing.rows[0]) {
         await client.query("COMMIT");
         return;

@@ -331,7 +331,7 @@ const labelStatus = (status) => statusLabels[status] ?? status;
 const labelConnection = (status) => connectionLabels[status] ?? status;
 
 const appBasePath = window.location.pathname === "/bot" || window.location.pathname.startsWith("/bot/") ? "/bot" : "";
-const appViews = ["overviewView", "detailView", "comparisonView", "marketCandidatesView", "newsView", "readinessView"];
+const appViews = ["overviewView", "detailView", "comparisonView", "marketCandidatesView", "newsView", "readinessView", "profileView", "sharedView"];
 
 function setVisibleView(view) {
   appViews.forEach((id) => { byId(id).hidden = id !== view; });
@@ -815,8 +815,9 @@ function renderDetail(data) {
   byId("symbol").textContent = strategy.symbol;
   byId("status").textContent = labelStatus(strategy.status);
   byId("toggleStatus").classList.toggle("paused", strategy.status === "PAUSED");
-  byId("toggleStatus").hidden = strategy.status === "COMPLETED";
-  byId("strategyActions").hidden = strategy.status === "COMPLETED";
+  byId("toggleStatus").hidden = strategy.status === "COMPLETED" || data.canManage === false;
+  byId("strategyActions").hidden = strategy.status === "COMPLETED" || data.canManage === false;
+  byId("shareStrategy").checked = Boolean(data.shared);
   byId("strategyEnvironment").textContent = `სტრატეგიის გარემო: ${strategy.executionEnvironment}`;
   byId("resetStrategy").hidden = strategy.executionEnvironment !== "SIMULATION";
   byId("initialPrice").textContent = formatPrice(strategy.initialEntryPrice, tickSize);
@@ -1061,6 +1062,86 @@ byId("openCreate").addEventListener("click", async () => {
   byId("createDialog").showModal();
   try { await Promise.all([loadSymbols(), loadTemplates()]); prepareCreateForm(); } catch (error) { byId("formError").textContent = error.message; byId("formError").hidden = false; }
 });
+
+async function openProfile({ historyMode = "push" } = {}) {
+  selectedStrategyId = null;
+  setVisibleView("profileView");
+  if (historyMode !== "none") updateNavigationState("profileView", null, historyMode);
+  byId("profileMessage").textContent = "";
+  try {
+    const { profile, legacyLive, legacyTestnet } = await api("/api/profile");
+    byId("profileUsername").value = profile.username;
+    byId("profileForm").elements.displayName.value = profile.displayName;
+    const ready = (environment, legacy) => profile.credentials.some((item) => item.environment === environment) ? "პირადი გასაღები შენახულია" : legacy ? "არსებული კავშირი" : "არ არის დამატებული";
+    byId("credentialStatus").textContent = `Testnet: ${ready("TESTNET", legacyTestnet)} · Spot: ${ready("LIVE", legacyLive)}`;
+    byId("credentialsForm").querySelector("button").disabled = !profile.encryptionReady;
+    if (!profile.encryptionReady) byId("profileMessage").textContent = "პირადი გასაღებების ჩასართავად სერვერის დაშიფვრის კონფიგურაცია საჭიროა.";
+  } catch (error) { byId("profileMessage").textContent = error.message; }
+}
+
+async function openShared({ historyMode = "push" } = {}) {
+  selectedStrategyId = null;
+  setVisibleView("sharedView");
+  if (historyMode !== "none") updateNavigationState("sharedView", null, historyMode);
+  try {
+    const { strategies } = await api("/api/shared-strategies");
+    byId("sharedList").innerHTML = strategies.length ? strategies.map((item) => `<article class="shared-strategy"><strong>${escapeHtml(item.symbol)}</strong><span>${escapeHtml(item.displayName || item.username)}</span><p>BUY: ${item.buyLevels.map((level) => `−${level.dropPercent}%`).join(" · ")}</p><p>SELL: ${item.sellLevels.map((level) => `+${level.gainPercent}%`).join(" · ")}</p><p>რეზერვი: ${item.finalReservePercent}%</p><button class="secondary-button" type="button" data-clone="${item.id}">ჩემთვის კლონირება</button></article>`).join("") : '<p class="empty-state">გაზიარებული სტრატეგიები ჯერ არ არის</p>';
+    byId("sharedList").querySelectorAll("[data-clone]").forEach((button) => button.addEventListener("click", async () => {
+      const item = strategies.find((strategy) => strategy.id === Number(button.dataset.clone));
+      try {
+        await Promise.all([loadSymbols(), loadTemplates()]);
+        prepareCreateForm();
+        const form = byId("createForm");
+        form.elements.symbol.value = item.symbol;
+        form.elements.totalBudget.value = "";
+        form.elements.initialPurchaseAmount.value = "";
+        form.elements.initialEntryPrice.value = "";
+        form.elements.executionEnvironment.value = "SIMULATION";
+        byId("templateSelect").value = "custom";
+        applyTemplate({ ...item, builtIn: true });
+        byId("customStrategySettings").open = true;
+        byId("createDialog").showModal();
+        void useCurrentSymbolPrice();
+      } catch (error) { showError(error); }
+    }));
+  } catch (error) { byId("sharedList").textContent = error.message; }
+}
+byId("openProfile").addEventListener("click", () => void openProfile());
+byId("openShared").addEventListener("click", () => void openShared());
+byId("refreshShared").addEventListener("click", () => void openShared({ historyMode: "none" }));
+byId("backFromProfile").addEventListener("click", backToPreviousView);
+byId("backFromShared").addEventListener("click", backToPreviousView);
+byId("profileForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await api("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ displayName: event.target.elements.displayName.value }) });
+    byId("profileMessage").textContent = "შენახულია";
+  } catch (error) { byId("profileMessage").textContent = error.message; }
+});
+byId("credentialsForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const button = form.querySelector("button");
+  button.disabled = true;
+  try {
+    const values = new FormData(form);
+    await api("/api/profile/credentials", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Object.fromEntries(values)) });
+    form.elements.apiKey.value = "";
+    form.elements.apiSecret.value = "";
+    await openProfile({ historyMode: "none" });
+    byId("profileMessage").textContent = "გასაღებები შემოწმდა და დაშიფრულად შენახულია";
+  } catch (error) { byId("profileMessage").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+byId("shareStrategy").addEventListener("change", async (event) => {
+  const checkbox = event.target;
+  try { await api(`/api/strategies/${selectedStrategyId}/sharing`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shared: checkbox.checked }) }); }
+  catch (error) { checkbox.checked = !checkbox.checked; showError(error); }
+});
+byId("logout").addEventListener("click", async () => {
+  try { await api("/api/logout", { method: "POST" }); window.location.assign(`${appBasePath}/login`); }
+  catch (error) { byId("profileMessage").textContent = error.message; }
+});
 byId("brandHome").addEventListener("click", () => {
   if (!byId("overviewView").hidden) void loadOverview();
   else showOverview();
@@ -1122,7 +1203,15 @@ byId("openUsers").addEventListener("click", async () => {
   byId("inviteResult").hidden = true;
   try {
     const { users } = await api("/api/admin/users");
-    byId("usersList").innerHTML = users.map((user) => `<div class="user-row"><strong>${user.username}</strong><span>${user.role} · ${user.strategyCount} სტრატეგია</span></div>`).join("");
+    byId("usersList").innerHTML = users.map((user) => `<div class="user-row"><strong>${escapeHtml(user.username)}</strong><span>${user.role} · ${user.strategyCount} სტრატეგია</span><button type="button" class="secondary-button" data-user="${user.id}">სტრატეგიები</button><div class="admin-strategies" id="adminStrategies-${user.id}"></div></div>`).join("");
+    byId("usersList").querySelectorAll("[data-user]").forEach((button) => button.addEventListener("click", async () => {
+      try {
+        const { strategies } = await api(`/api/admin/users/${button.dataset.user}/strategies`);
+        const list = byId(`adminStrategies-${button.dataset.user}`);
+        list.innerHTML = strategies.length ? strategies.map((strategy) => `<button type="button" class="secondary-button" data-strategy="${strategy.id}">${escapeHtml(strategy.symbol)} · ${strategy.executionEnvironment} · ${labelStatus(strategy.status)}</button>`).join("") : "სტრატეგიები ჯერ არ არის";
+        list.querySelectorAll("[data-strategy]").forEach((item) => item.addEventListener("click", () => { byId("usersDialog").close(); void openDetail(Number(item.dataset.strategy)); }));
+      } catch (error) { showError(error); }
+    }));
   } catch (error) { showError(error); }
 });
 byId("closeUsers").addEventListener("click", () => byId("usersDialog").close());
@@ -1286,12 +1375,15 @@ window.addEventListener("popstate", (event) => {
   else if (view === "marketCandidatesView") openMarketCandidates({ historyMode: "none" });
   else if (view === "newsView") openNews({ historyMode: "none" });
   else if (view === "readinessView") openReadiness({ historyMode: "none" });
+  else if (view === "profileView") void openProfile({ historyMode: "none" });
+  else if (view === "sharedView") void openShared({ historyMode: "none" });
   else showOverview({ historyMode: "none" });
 });
 api("/api/session").then(({ user }) => {
   sessionUser = user;
   byId("currentUser").textContent = user.username;
   byId("openUsers").hidden = user.role !== "ADMIN";
+  if (new URLSearchParams(window.location.search).get("setup") === "1") void openProfile();
 }).catch(showError);
 loadOverview();
 setInterval(() => {

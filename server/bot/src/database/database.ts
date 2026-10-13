@@ -126,8 +126,9 @@ export function openDatabase(filename: string): Database.Database {
   ensureColumn(db, "executed_levels", "allocation_percent", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "executed_levels", "client_order_id", "TEXT");
   ensureColumn(db, "executed_levels", "execution_started_at", "TEXT");
-  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS orders_external_order_unique
-    ON orders (execution_environment, external_order_id)`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS orders_strategy_external_unique
+    ON orders (strategy_id, execution_environment, external_order_id);
+    DROP INDEX IF EXISTS orders_external_order_unique;`);
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS levels_client_order_unique
     ON executed_levels (client_order_id) WHERE client_order_id IS NOT NULL`);
   db.exec(`

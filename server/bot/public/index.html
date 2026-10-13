@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
-    <link rel="stylesheet" href="styles.css?v=20261012-8" />
+    <link rel="stylesheet" href="styles.css?v=20261013-accounts" />
   </head>
   <body>
     <header class="topbar">
@@ -16,6 +16,7 @@
       </button>
       <div class="top-actions">
         <span id="currentUser" class="connection">—</span>
+        <button id="openProfile" class="secondary-button" type="button">პროფილი</button>
         <button id="openUsers" class="secondary-button" type="button" title="მომხმარებლები" hidden><span class="wide-label">მომხმარებლები</span><span class="compact-label" aria-hidden="true">ადმინი</span></button>
         <span class="connection"><i></i> SQLite დაკავშირებულია</span>
         <button id="themeToggle" class="theme-toggle" type="button" role="switch" aria-checked="false" title="ფერის თემის შეცვლა"><span>ღია</span><i></i><span>მუქი</span></button>
@@ -34,11 +35,28 @@
             <button id="openNews" class="secondary-button" type="button">კრიპტო სიახლეები</button>
             <button id="openMarketCandidates" class="secondary-button" type="button">ბაზრის კანდიდატები</button>
             <button id="openComparison" class="secondary-button" type="button">სტრატეგიების შედარება</button>
+            <button id="openShared" class="secondary-button" type="button">გაზიარებული სტრატეგიები</button>
             <button id="openCreate" class="primary-button" type="button">+ სტრატეგიის შექმნა</button>
           </div>
         </div>
         <div class="strategy-list-toolbar"><span class="muted">მოგების მიხედვით</span><div id="strategyLayout" class="view-switch" role="group" aria-label="სტრატეგიების განლაგება"><button type="button" data-layout="rows" aria-pressed="false">რიგები</button><button type="button" data-layout="columns" aria-pressed="true">სვეტები</button></div></div>
         <div id="strategyList" class="strategy-list"><p class="empty-state">სტრატეგიები იტვირთება...</p></div>
+      </section>
+
+      <section id="profileView" hidden>
+        <button id="backFromProfile" class="back-button" type="button">← სტრატეგიები</button>
+        <div class="overview-head"><h1>ჩემი პროფილი</h1><button id="logout" class="secondary-button" type="button">გასვლა</button></div>
+        <div class="profile-forms">
+          <form id="profileForm"><label>მომხმარებელი<input id="profileUsername" readonly /></label><label>სახელი<input name="displayName" maxlength="60" /></label><button class="primary-button" type="submit">შენახვა</button></form>
+          <form id="credentialsForm"><h2>Binance API</h2><div id="credentialStatus" class="muted"></div><label>გარემო<select name="environment"><option value="TESTNET">Testnet</option><option value="LIVE">Spot · მხოლოდ ბალანსი</option></select></label><label>API Key<input name="apiKey" type="password" autocomplete="off" required /></label><label>API Secret<input name="apiSecret" type="password" autocomplete="off" required /></label><button class="primary-button" type="submit">შემოწმება და შენახვა</button></form>
+        </div>
+        <p id="profileMessage" role="status"></p>
+      </section>
+
+      <section id="sharedView" hidden>
+        <button id="backFromShared" class="back-button" type="button">← სტრატეგიები</button>
+        <div class="overview-head"><h1>გაზიარებული სტრატეგიები</h1><button id="refreshShared" class="secondary-button" type="button">განახლება</button></div>
+        <div id="sharedList" class="strategy-list"></div>
       </section>
 
       <section id="readinessView" hidden>
@@ -123,6 +141,7 @@
         </div>
       </section>
       <div id="strategyActions" class="strategy-actions">
+        <label class="share-strategy"><input id="shareStrategy" type="checkbox" />გაზიარება</label>
         <button id="withdrawProfit" class="profit-action" type="button">მოგების აღება</button>
         <span id="withdrawnProfitTotal" class="withdrawn-profit-total">სულ აღებული: —</span>
         <button id="editStrategy" type="button">რედაქტირება</button>
@@ -257,6 +276,6 @@
       <article id="newsDetail" class="news-detail"></article>
     </dialog>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
-    <script src="app.js?v=20261012-7" defer></script>
+    <script src="app.js?v=20261013-accounts" defer></script>
   </body>
 </html>

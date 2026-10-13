@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { Pool } from "pg";
+import { CredentialVault, type BinanceCredentials } from "./credentialVault.js";
 
 const scrypt = promisify(scryptCallback);
 
@@ -27,9 +28,10 @@ async function verifyPassword(password: string, salt: string, expectedHex: strin
 
 export class UserAuthStore {
   private readonly pool: Pool;
+  readonly vault = new CredentialVault();
 
-  constructor(connectionString: string) {
-    this.pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 3 });
+  constructor(connectionString: string, pool?: Pool) {
+    this.pool = pool ?? new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 3 });
   }
 
   async initialize(adminUsername: string, adminPassword: string): Promise<void> {
@@ -62,6 +64,20 @@ export class UserAuthStore {
         is_shared BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS bot_user_credentials (
+        user_id BIGINT NOT NULL REFERENCES bot_users(id) ON DELETE CASCADE,
+        environment TEXT NOT NULL CHECK (environment IN ('LIVE', 'TESTNET')),
+        encrypted_credentials TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, environment)
+      );
+      CREATE TABLE IF NOT EXISTS bot_user_balance_history (
+        user_id BIGINT NOT NULL REFERENCES bot_users(id) ON DELETE CASCADE,
+        recorded_at TIMESTAMPTZ NOT NULL, balance NUMERIC NOT NULL,
+        PRIMARY KEY (user_id, recorded_at)
+      );
+      ALTER TABLE bot_users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
+      ALTER TABLE bot_strategy_templates ADD COLUMN IF NOT EXISTS owner_user_id BIGINT REFERENCES bot_users(id);
     `);
     const existing = await this.pool.query<{
       id: string;
@@ -84,9 +100,12 @@ export class UserAuthStore {
       await this.pool.query("DELETE FROM bot_user_sessions WHERE user_id = $1", [adminId]);
     }
     await this.pool.query(`INSERT INTO bot_strategy_owners (strategy_id, user_id)
-      SELECT id, $1 FROM bot_strategies s
-      WHERE NOT EXISTS (SELECT 1 FROM bot_strategy_owners o WHERE o.strategy_id = s.id)`, [adminId]);
+      SELECT s.id, $1::bigint FROM bot_strategies s LEFT JOIN bot_strategy_owners o ON o.strategy_id = s.id
+      WHERE o.strategy_id IS NULL ON CONFLICT (strategy_id) DO NOTHING`, [adminId]);
     await this.pool.query("DELETE FROM bot_user_sessions WHERE expires_at <= NOW()");
+    await this.pool.query("UPDATE bot_strategy_templates SET owner_user_id = $1 WHERE owner_user_id IS NULL", [adminId]);
+    await this.pool.query("ALTER TABLE bot_strategy_templates DROP CONSTRAINT IF EXISTS bot_strategy_templates_name_key");
+    await this.pool.query("CREATE UNIQUE INDEX IF NOT EXISTS bot_templates_owner_name_unique ON bot_strategy_templates (owner_user_id, name)");
   }
 
   async authenticate(username: string, password: string): Promise<DashboardUser | null> {
@@ -149,22 +168,22 @@ export class UserAuthStore {
 
   async assignStrategy(strategyId: number, userId: number): Promise<void> {
     await this.pool.query(`INSERT INTO bot_strategy_owners (strategy_id, user_id) VALUES ($1, $2)
-      ON CONFLICT (strategy_id) DO UPDATE SET user_id = EXCLUDED.user_id`, [strategyId, userId]);
+      ON CONFLICT (strategy_id) DO NOTHING`, [strategyId, userId]);
   }
 
-  async assertStrategyAccess(strategyId: number, user: DashboardUser): Promise<void> {
+  async assertStrategyAccess(strategyId: number, user: DashboardUser, readOnly = false): Promise<void> {
     const result = await this.pool.query("SELECT user_id FROM bot_strategy_owners WHERE strategy_id = $1", [strategyId]);
-    if (!result.rows[0] || (user.role !== "ADMIN" && Number(result.rows[0].user_id) !== user.id)) {
+    if (!result.rows[0] || (Number(result.rows[0].user_id) !== user.id && !(readOnly && user.role === "ADMIN"))) {
       throw new Error("ამ სტრატეგიაზე წვდომა არ გაქვს");
     }
   }
 
   async filterStrategyIds(ids: number[], user: DashboardUser): Promise<Set<number>> {
-    if (user.role === "ADMIN") return new Set(ids);
     if (!ids.length) return new Set();
     const result = await this.pool.query<{ strategy_id: string }>(
-      "SELECT strategy_id FROM bot_strategy_owners WHERE user_id = $1 AND strategy_id = ANY($2::bigint[])", [user.id, ids]);
-    return new Set(result.rows.map((row) => Number(row.strategy_id)));
+      "SELECT strategy_id FROM bot_strategy_owners WHERE user_id = $1", [user.id]);
+    const requested = new Set(ids);
+    return new Set(result.rows.map((row) => Number(row.strategy_id)).filter((id) => requested.has(id)));
   }
 
   async listUsers(): Promise<Array<DashboardUser & { strategyCount: number }>> {
@@ -175,4 +194,87 @@ export class UserAuthStore {
   }
 
   async close(): Promise<void> { await this.pool.end(); }
+
+  async strategyOwner(strategyId: number): Promise<DashboardUser | null> {
+    const result = await this.pool.query(`SELECT u.id, u.username, u.role FROM bot_strategy_owners o
+      JOIN bot_users u ON u.id = o.user_id WHERE o.strategy_id = $1`, [strategyId]);
+    const row = result.rows[0];
+    return row ? { id: Number(row.id), username: row.username, role: row.role } : null;
+  }
+
+  async credentials(userId: number, environment: "LIVE" | "TESTNET"): Promise<BinanceCredentials | null> {
+    const result = await this.pool.query("SELECT encrypted_credentials FROM bot_user_credentials WHERE user_id = $1 AND environment = $2", [userId, environment]);
+    return result.rows[0] ? this.vault.decrypt(result.rows[0].encrypted_credentials, userId, environment) : null;
+  }
+
+  async saveCredentials(userId: number, environment: "LIVE" | "TESTNET", credentials: BinanceCredentials): Promise<void> {
+    const encrypted = this.vault.encrypt(credentials, userId, environment);
+    await this.pool.query(`INSERT INTO bot_user_credentials (user_id, environment, encrypted_credentials) VALUES ($1, $2, $3)
+      ON CONFLICT (user_id, environment) DO UPDATE SET encrypted_credentials = EXCLUDED.encrypted_credentials, updated_at = NOW()`, [userId, environment, encrypted]);
+  }
+
+  async profile(user: DashboardUser) {
+    const result = await this.pool.query("SELECT display_name FROM bot_users WHERE id = $1", [user.id]);
+    const keys = await this.pool.query("SELECT environment, updated_at FROM bot_user_credentials WHERE user_id = $1", [user.id]);
+    return { ...user, displayName: result.rows[0]?.display_name ?? "", encryptionReady: this.vault.configured,
+      credentials: keys.rows.map((row) => ({ environment: row.environment, updatedAt: row.updated_at })) };
+  }
+
+  async saveProfile(userId: number, displayName: string): Promise<void> {
+    if (displayName.length > 60) throw new Error("სახელი მაქსიმუმ 60 სიმბოლო უნდა იყოს");
+    await this.pool.query("UPDATE bot_users SET display_name = $2 WHERE id = $1", [userId, displayName]);
+  }
+
+  async setShared(strategyId: number, userId: number, shared: boolean): Promise<void> {
+    const result = await this.pool.query("UPDATE bot_strategy_owners SET is_shared = $3 WHERE strategy_id = $1 AND user_id = $2", [strategyId, userId, shared]);
+    if (result.rowCount !== 1) throw new Error("მხოლოდ შენი სტრატეგიის გაზიარება შეგიძლია");
+  }
+
+  async sharedStrategies() {
+    const result = await this.pool.query(`SELECT s.id, s.symbol, s.final_reserve_percent::double precision AS "finalReservePercent", u.username,
+      u.display_name AS "displayName" FROM bot_strategy_owners o JOIN bot_strategies s ON s.id = o.strategy_id
+      JOIN bot_users u ON u.id = o.user_id WHERE o.is_shared = TRUE ORDER BY o.created_at DESC`);
+    return result.rows;
+  }
+
+  async strategySharing(strategyId: number): Promise<boolean> {
+    const result = await this.pool.query("SELECT is_shared FROM bot_strategy_owners WHERE strategy_id = $1", [strategyId]);
+    return result.rows[0]?.is_shared ?? false;
+  }
+
+  async templateIds(userId: number): Promise<Set<number>> {
+    const result = await this.pool.query("SELECT id FROM bot_strategy_templates WHERE owner_user_id = $1", [userId]);
+    return new Set(result.rows.map((row) => Number(row.id)));
+  }
+
+  async assignTemplate(templateId: number, userId: number): Promise<void> {
+    await this.pool.query("UPDATE bot_strategy_templates SET owner_user_id = $2 WHERE id = $1", [templateId, userId]);
+  }
+
+  async assertCredentialChangeAllowed(userId: number, environment: "LIVE" | "TESTNET"): Promise<void> {
+    const result = await this.pool.query(`SELECT s.id FROM bot_strategies s JOIN bot_strategy_owners o ON o.strategy_id = s.id
+      WHERE o.user_id = $1 AND s.execution_environment = $2 AND s.status <> 'COMPLETED'
+      AND (s.status = 'ACTIVE' OR EXISTS (SELECT 1 FROM bot_executed_levels l
+        WHERE l.strategy_id = s.id AND (l.status = 'EXECUTING' OR
+          (l.status = 'FAILED' AND l.client_order_id IS NOT NULL AND l.error_message LIKE '[NO_AUTO_RETRY]%')))) LIMIT 1`, [userId, environment]);
+    if (result.rows[0]) throw new Error("გასაღებების შეცვლამდე ამ გარემოს ბოტები შეაჩერე და მიმდინარე ორდერების დასრულებას დაელოდე");
+  }
+
+  async revokeSession(token: string | undefined): Promise<void> {
+    if (token) await this.pool.query("DELETE FROM bot_user_sessions WHERE token_hash = $1", [hashToken(token)]);
+  }
+
+  async recordAccountBalance(userId: number, balance: number): Promise<void> {
+    const minute = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+    await this.pool.query(`INSERT INTO bot_user_balance_history (user_id, recorded_at, balance)
+      VALUES ($1, $2, $3) ON CONFLICT (user_id, recorded_at) DO NOTHING`, [userId, minute, balance]);
+    await this.pool.query("DELETE FROM bot_user_balance_history WHERE user_id = $1 AND recorded_at < NOW() - INTERVAL '35 days'", [userId]);
+  }
+
+  async accountBalanceReference(userId: number, target: Date): Promise<number | null> {
+    const result = await this.pool.query(`SELECT balance FROM bot_user_balance_history
+      WHERE user_id = $1 AND recorded_at <= $2 AND recorded_at >= $3 ORDER BY recorded_at DESC LIMIT 1`,
+    [userId, target, new Date(target.getTime() - 5 * 60_000)]);
+    return result.rows[0] ? Number(result.rows[0].balance) : null;
+  }
 }

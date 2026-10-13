@@ -12,7 +12,7 @@ export interface StrategyStore {
   archiveStrategy(id: number): Promise<StrategyRecord>;
   resetSimulationStrategyById(id: number): Promise<StrategyRecord>;
   listStrategyTemplates(): Promise<StrategyTemplateRecord[]>;
-  createStrategyTemplate(template: Omit<StrategyTemplateRecord, "id" | "builtIn" | "createdAt">): Promise<StrategyTemplateRecord>;
+  createStrategyTemplate(template: Omit<StrategyTemplateRecord, "id" | "builtIn" | "createdAt">, ownerUserId?: number): Promise<StrategyTemplateRecord>;
   deleteStrategyTemplate(id: number): Promise<void>;
   getById(id: number): Promise<StrategyRecord>;
   initializeBuyLevels(strategyId: number, config: StrategyConfig): Promise<void>;

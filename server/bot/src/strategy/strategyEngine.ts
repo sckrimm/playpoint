@@ -14,6 +14,7 @@ export class StrategyEngine {
     private readonly orders: OrderExecutionService,
     private readonly verbose = true,
     strategyId?: number,
+    private readonly notify: (message: string) => Promise<boolean> = (message) => telegramAlerts.send(message),
   ) {
     this.strategyId = strategyId ?? null;
   }
@@ -58,7 +59,7 @@ export class StrategyEngine {
         const order = await this.orders.reconcileOrder(strategy.symbol, level.side, clientOrderId);
         if (!order) {
           await this.repository.releaseLevel(strategy.id, level.side, level.levelPercent, clientOrderId);
-          void telegramAlerts.send(`ორდერი უსაფრთხოდ გადამოწმდა\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\nBinance-ზე არ მოიძებნა და დონე დაბრუნდა მოლოდინში`);
+          void this.notify(`ორდერი უსაფრთხოდ გადამოწმდა\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\nBinance-ზე არ მოიძებნა და დონე დაბრუნდა მოლოდინში`);
           continue;
         }
         if (level.side === "BUY") {
@@ -69,11 +70,11 @@ export class StrategyEngine {
           await this.repository.completeSell(strategy.id, level.levelPercent, order.price, order.quoteAmount,
             order.assetQuantity, minimumReserveQuantity, order.orderId);
         }
-        void telegramAlerts.send(`ორდერი აღდგენილია restart-ის შემდეგ\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\nBinance order: ${order.orderId}`);
+        void this.notify(`ორდერი აღდგენილია restart-ის შემდეგ\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\nBinance order: ${order.orderId}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`Order reconciliation failed for ${clientOrderId}: ${message}`);
-        void telegramAlerts.send(`ორდერის reconciliation ვერ დასრულდა\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\n${message}\nდონე უსაფრთხოდ დაბლოკილი რჩება`);
+        void this.notify(`ორდერის reconciliation ვერ დასრულდა\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\n${message}\nდონე უსაფრთხოდ დაბლოკილი რჩება`);
       }
     }
   }
@@ -87,6 +88,7 @@ export class StrategyEngine {
     if (!Number.isFinite(price) || price <= 0) throw new Error("Price must be a positive number");
     if (this.strategyId === null) throw new Error("Strategy engine is not initialized");
     const strategy = await this.repository.getById(this.strategyId);
+    if (strategy.status !== "ACTIVE") return;
     if (this.verbose) console.log(`\n${strategy.symbol} | Current: ${money(price)} | Initial: ${money(strategy.initialEntryPrice)} | Average: ${money(strategy.averageEntryPrice)}`);
 
     const storedLevels = await this.repository.getLevels(strategy.id);
@@ -109,7 +111,7 @@ export class StrategyEngine {
       try {
         const order = await this.orders.buy(strategy.symbol, price, quoteAmount, clientOrderId);
         await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
-        void telegramAlerts.send([
+        void this.notify([
           `BUY შესრულდა [${this.orders.environment}]`,
           `${strategy.symbol} · სტრატეგია #${strategy.id}`,
           `დონე: -${level.levelPercent}%`,
@@ -127,7 +129,7 @@ export class StrategyEngine {
       } catch (error) {
         await this.repository.failLevel(strategy.id, "BUY", level.levelPercent, error);
         const message = error instanceof Error ? error.message : String(error);
-        void telegramAlerts.send(`BUY შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: -${level.levelPercent}%\n${message}`);
+        void this.notify(`BUY შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: -${level.levelPercent}%\n${message}`);
         console.error(`BUY -${level.levelPercent}% failed safely`, message);
       }
     }
@@ -149,7 +151,7 @@ export class StrategyEngine {
         const order = await this.orders.sell(strategy.symbol, price, assetQuantity, clientOrderId);
         await this.repository.completeSell(strategy.id, level.levelPercent, order.price, order.quoteAmount,
           order.assetQuantity, minimumReserveQuantity, order.orderId);
-        void telegramAlerts.send([
+        void this.notify([
           `SELL შესრულდა [${this.orders.environment}]`,
           `${strategy.symbol} · სტრატეგია #${strategy.id}`,
           `დონე: +${level.levelPercent}%`,
@@ -167,7 +169,7 @@ export class StrategyEngine {
       } catch (error) {
         await this.repository.failLevel(strategy.id, "SELL", level.levelPercent, error);
         const message = error instanceof Error ? error.message : String(error);
-        void telegramAlerts.send(`SELL შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: +${level.levelPercent}%\n${message}`);
+        void this.notify(`SELL შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: +${level.levelPercent}%\n${message}`);
         console.error(`SELL +${level.levelPercent}% failed safely`, message);
       }
     }

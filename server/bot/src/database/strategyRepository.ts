@@ -185,6 +185,7 @@ export class StrategyRepository implements StrategyStore {
     const result = this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTING', error_message = NULL,
       client_order_id = ?, execution_started_at = ?
       WHERE strategy_id = ? AND side = ? AND level_percent = ?
+        AND EXISTS (SELECT 1 FROM strategies WHERE strategies.id = executed_levels.strategy_id AND strategies.status = 'ACTIVE')
         AND (status = 'WAITING' OR (status = 'FAILED' AND error_message NOT LIKE '[NO_AUTO_RETRY]%'))`)
       .run(clientOrderId, new Date().toISOString(), strategyId, side, levelPercent);
     return result.changes === 1;
@@ -201,8 +202,8 @@ export class StrategyRepository implements StrategyStore {
     const transaction = this.db.transaction(() => {
       const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
       if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
-      const existing = this.db.prepare("SELECT 1 FROM orders WHERE execution_environment = ? AND external_order_id = ?")
-        .get(strategy.execution_environment, externalOrderId);
+      const existing = this.db.prepare("SELECT 1 FROM orders WHERE strategy_id = ? AND execution_environment = ? AND external_order_id = ?")
+        .get(strategyId, strategy.execution_environment, externalOrderId);
       if (existing) {
         this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTED', executed_at = COALESCE(executed_at, ?), error_message = NULL
           WHERE strategy_id = ? AND side = 'BUY' AND level_percent = ?`).run(new Date().toISOString(), strategyId, levelPercent);
@@ -243,8 +244,8 @@ export class StrategyRepository implements StrategyStore {
     const transaction = this.db.transaction(() => {
       const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
       if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
-      const existing = this.db.prepare("SELECT 1 FROM orders WHERE execution_environment = ? AND external_order_id = ?")
-        .get(strategy.execution_environment, externalOrderId);
+      const existing = this.db.prepare("SELECT 1 FROM orders WHERE strategy_id = ? AND execution_environment = ? AND external_order_id = ?")
+        .get(strategyId, strategy.execution_environment, externalOrderId);
       if (existing) {
         this.db.prepare(`UPDATE executed_levels SET status = 'EXECUTED', executed_at = COALESCE(executed_at, ?), error_message = NULL
           WHERE strategy_id = ? AND side = 'SELL' AND level_percent = ?`).run(new Date().toISOString(), strategyId, levelPercent);
@@ -286,8 +287,8 @@ export class StrategyRepository implements StrategyStore {
     const transaction = this.db.transaction(() => {
       const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
       if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
-      const existing = this.db.prepare("SELECT 1 FROM orders WHERE execution_environment = ? AND external_order_id = ?")
-        .get(strategy.execution_environment, externalOrderId);
+      const existing = this.db.prepare("SELECT 1 FROM orders WHERE strategy_id = ? AND execution_environment = ? AND external_order_id = ?")
+        .get(strategyId, strategy.execution_environment, externalOrderId);
       if (existing) return;
       const remainingQuantity = strategy.total_asset_quantity - assetQuantity;
       if (assetQuantity <= 0 || remainingQuantity + 1e-12 < minimumReserveQuantity) {

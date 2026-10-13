@@ -14,9 +14,12 @@ import { runStrategyBacktest } from "../services/strategyBacktestService.js";
 import { MarketOpportunityService } from "../services/marketOpportunityService.js";
 import { CryptoNewsService } from "../services/cryptoNewsService.js";
 import type { BuyLevelConfig, OrderRecord, SellLevelConfig, StrategyConfig, StrategyRecord } from "../types/strategy.js";
-import { UserAuthStore, type DashboardUser } from "../auth/userAuthStore.js";
+import type { DashboardUser } from "../auth/userAuthStore.js";
+import { getRuntimeUsers } from "../auth/runtimeUsers.js";
 import { telegramAlerts } from "../services/telegramAlertService.js";
 import { periodPerformance } from "../services/portfolioPerformance.js";
+import { resolveCredentials } from "../auth/accountCredentials.js";
+import { BinanceAccountService } from "../binance/binanceAccountService.js";
 
 const port = Number(process.env.DASHBOARD_PORT ?? process.env.PORT ?? 4173);
 const publicDir = path.resolve("public");
@@ -28,14 +31,9 @@ const dashboardPassword = process.env.DASHBOARD_PASSWORD ?? "";
 const dashboardSessionToken = createHash("sha256")
   .update(`${dashboardUsername}\0${dashboardPassword}`)
   .digest("hex");
-const userAuthStore = appConfig.databaseUrl ? new UserAuthStore(appConfig.databaseUrl) : null;
+const userAuthStore = await getRuntimeUsers();
 if (process.env.NODE_ENV === "production" && (!dashboardUsername || !dashboardPassword)) {
   throw new Error("Production dashboard requires DASHBOARD_USERNAME and DASHBOARD_PASSWORD");
-}
-if (userAuthStore) {
-  const migrationStore = await createStore();
-  await migrationStore.close();
-  await userAuthStore.initialize(dashboardUsername, dashboardPassword);
 }
 const exchangeInfo = new BinanceExchangeInfoService();
 const marketHistory = new BinanceMarketHistoryService();
@@ -44,6 +42,7 @@ const marketOpportunities = new MarketOpportunityService();
 const cryptoNews = new CryptoNewsService();
 let catalogCache: { items: SpotSymbolCatalogItem[]; expiresAt: number } | null = null;
 const hourlyPriceCache = new Map<string, { value: HistoricalPrice; expiresAt: number }>();
+const personalAccountCache = new Map<number, { balance: number; expiresAt: number }>();
 
 function normalizeBasePath(value: string): string {
   const trimmed = value.trim();
@@ -144,15 +143,16 @@ async function readFormBody(request: IncomingMessage): Promise<URLSearchParams> 
   return new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
 }
 
-function getTestnetService(): BinanceTestnetOrderService | null {
-  return appConfig.binanceTestnetApiKey && appConfig.binanceTestnetApiSecret
-    ? new BinanceTestnetOrderService(appConfig.binanceTestnetApiKey, appConfig.binanceTestnetApiSecret)
+async function getTestnetService(user: DashboardUser | null = null): Promise<BinanceTestnetOrderService | null> {
+  const credentials = await resolveCredentials(userAuthStore, user, "TESTNET");
+  return credentials
+    ? new BinanceTestnetOrderService(credentials.apiKey, credentials.apiSecret)
     : null;
 }
 
-function requireTestnetService(): BinanceTestnetOrderService {
-  const service = getTestnetService();
-  if (!service) throw new Error("TESTNET-ისთვის BINANCE_TESTNET_API_KEY და BINANCE_TESTNET_API_SECRET დაამატე .env ფაილში");
+async function requireTestnetService(user: DashboardUser | null): Promise<BinanceTestnetOrderService> {
+  const service = await getTestnetService(user);
+  if (!service) throw new Error("პროფილში შენი Testnet API გასაღებები დაამატე");
   return service;
 }
 
@@ -181,8 +181,8 @@ async function getHistoricalReference(symbol: string, hours: number, environment
   }
 }
 
-async function ensureStrategyAccess(id: number, user: DashboardUser | null): Promise<void> {
-  if (userAuthStore && user) await userAuthStore.assertStrategyAccess(id, user);
+async function ensureStrategyAccess(id: number, user: DashboardUser | null, readOnly = false): Promise<void> {
+  if (userAuthStore && user) await userAuthStore.assertStrategyAccess(id, user, readOnly);
 }
 
 async function visibleStrategies(strategies: StrategyRecord[], user: DashboardUser | null): Promise<StrategyRecord[]> {
@@ -202,7 +202,7 @@ async function getReadinessReport(user: DashboardUser | null) {
     const testnetStrategies = allStrategies.filter((strategy) => strategy.executionEnvironment === "TESTNET");
     const activeTestnet = testnetStrategies.filter((strategy) => strategy.status === "ACTIVE");
     const checks: Array<{ id: string; label: string; status: ReadinessStatus; detail: string }> = [];
-    const testnetService = getTestnetService();
+    const testnetService = await getTestnetService(user);
 
     if (!testnetService) {
       checks.push({ id: "connection", label: "Binance Spot Testnet კავშირი", status: "ERROR", detail: "Testnet API key და secret კონფიგურირებული არ არის" });
@@ -289,14 +289,15 @@ async function getReadinessReport(user: DashboardUser | null) {
 }
 
 async function getStrategyState(id: number, user: DashboardUser | null = null) {
-  await ensureStrategyAccess(id, user);
+  await ensureStrategyAccess(id, user, true);
   const repository = await createStore();
   try {
     const strategy = await repository.getById(id);
     const levels = await repository.getLevels(strategy.id);
     const orders = await repository.getOrders(strategy.id);
     const storedMarket = await repository.getMarketState(strategy.symbol);
-    const testnetService = strategy.executionEnvironment === "TESTNET" ? requireTestnetService() : null;
+    const owner = userAuthStore ? await userAuthStore.strategyOwner(id) : user;
+    const testnetService = strategy.executionEnvironment === "TESTNET" ? await requireTestnetService(owner) : null;
     const testnetPrice = testnetService ? await testnetService.getCurrentPrice(strategy.symbol) : null;
     const market = testnetPrice === null ? storedMarket : {
       symbol: strategy.symbol, price: testnetPrice, eventTime: new Date().toISOString(),
@@ -305,10 +306,10 @@ async function getStrategyState(id: number, user: DashboardUser | null = null) {
     const symbolRules = await repository.getSymbolRules(strategy.symbol);
     const accountBalances = testnetService
       ? (await testnetService.getBalances()).filter((balance) => [strategy.baseAsset, strategy.quoteAsset].includes(balance.asset))
-      : await repository.getAccountBalances([strategy.baseAsset, strategy.quoteAsset]);
+      : owner?.role === "USER" ? [] : await repository.getAccountBalances([strategy.baseAsset, strategy.quoteAsset]);
     const connection = testnetService
       ? { status: "CONNECTED" as const, message: "Binance Spot Testnet დაკავშირებულია; გამოიყენება მხოლოდ სატესტო თანხა", updatedAt: new Date().toISOString() }
-      : await repository.getBinanceConnectionState();
+      : owner?.role === "USER" ? null : await repository.getBinanceConnectionState();
     const totalPnl = market
       ? strategy.totalAssetQuantity * market.price + strategy.totalSaleProceeds - strategy.totalInvested
       : null;
@@ -323,6 +324,8 @@ async function getStrategyState(id: number, user: DashboardUser | null = null) {
       market,
       symbolRules,
       account: { connection, balances: accountBalances },
+      canManage: !userAuthStore || owner?.id === user?.id,
+      shared: userAuthStore ? await userAuthStore.strategySharing(id) : false,
       profitWithdrawal: { totalPnl, availableProfit, withdrawnProfit: strategy.withdrawnProfit },
       generatedAt: new Date().toISOString(),
     };
@@ -338,7 +341,7 @@ async function withdrawStrategyProfit(id: number, body: unknown, user: Dashboard
     const strategy = await repository.getById(id);
     if (strategy.executionEnvironment === "LIVE") throw new Error("LIVE რეჟიმი დაბლოკილია");
     if (strategy.totalAssetQuantity <= 0) throw new Error("გასაყიდი აქტივი არ არის");
-    const testnetService = strategy.executionEnvironment === "TESTNET" ? requireTestnetService() : null;
+    const testnetService = strategy.executionEnvironment === "TESTNET" ? await requireTestnetService(user) : null;
     const storedMarket = await repository.getMarketState(strategy.symbol);
     const price = testnetService
       ? await testnetService.getCurrentPrice(strategy.symbol)
@@ -363,7 +366,7 @@ async function withdrawStrategyProfit(id: number, body: unknown, user: Dashboard
     const order = await (testnetService ?? new SimulationOrderService()).sell(strategy.symbol, price, assetQuantity);
     await repository.withdrawProfit(strategy.id, order.price, order.quoteAmount, order.assetQuantity,
       minimumReserveQuantity, order.orderId);
-    void telegramAlerts.send(`მოგების აღება [${strategy.executionEnvironment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nმიღებული: ${order.quoteAmount.toFixed(2)} ${strategy.quoteAsset}\nგაყიდული: ${order.assetQuantity} ${strategy.baseAsset}`);
+    if (!user || user.role === "ADMIN") void telegramAlerts.send(`მოგების აღება [${strategy.executionEnvironment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nმიღებული: ${order.quoteAmount.toFixed(2)} ${strategy.quoteAsset}\nგაყიდული: ${order.assetQuantity} ${strategy.baseAsset}`);
     return await repository.getById(strategy.id);
   } finally {
     await repository.close();
@@ -582,10 +585,7 @@ async function createStrategy(body: unknown, user: DashboardUser | null) {
   const executionEnvironment = String(input.executionEnvironment ?? "SIMULATION").toUpperCase();
   if (executionEnvironment === "LIVE") throw new Error("LIVE რეჟიმი უსაფრთხოების მიზნით დაბლოკილია");
   if (executionEnvironment !== "SIMULATION" && executionEnvironment !== "TESTNET") throw new Error("გარემო უნდა იყოს SIMULATION ან TESTNET");
-  if (userAuthStore && user?.role !== "ADMIN" && executionEnvironment === "TESTNET") {
-    throw new Error("TESTNET ჩაირთვება პირადი API გასაღებების დამატების შემდეგ; ამ ეტაპზე გამოიყენე SIMULATION");
-  }
-  const testnetService = executionEnvironment === "TESTNET" ? requireTestnetService() : null;
+  const testnetService = executionEnvironment === "TESTNET" ? await requireTestnetService(user) : null;
   if (!Number.isFinite(totalBudget) || totalBudget <= 0) throw new Error("სრული ბიუჯეტი ნულზე მეტი უნდა იყოს");
   const catalogItem = (await getCatalog()).find((item) => item.symbol === symbol);
   if (!catalogItem) throw new Error(`${symbol || "სიმბოლო"} აქტიური Spot USDT წყვილი არ არის`);
@@ -615,6 +615,7 @@ async function createStrategy(body: unknown, user: DashboardUser | null) {
   const repository = await createStore();
   try {
     let strategy = await repository.createStrategy(config);
+    await repository.setStrategyStatus(strategy.id, "PAUSED");
     if (userAuthStore && user) await userAuthStore.assignStrategy(strategy.id, user.id);
     await repository.saveSymbolRules(rules);
     if (initialPurchaseAmount > 0) {
@@ -622,10 +623,10 @@ async function createStrategy(body: unknown, user: DashboardUser | null) {
         ? await testnetService.getCurrentPrice(symbol) : await exchangeInfo.getCurrentPrice(symbol);
       const order = await (testnetService ?? new SimulationOrderService()).buy(symbol, currentPrice, initialPurchaseAmount);
       await repository.completeBuy(strategy.id, 0, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
-      void telegramAlerts.send(`საწყისი BUY [${executionEnvironment}]\n${symbol} · სტრატეგია #${strategy.id}\nფასი: ${order.price}\nთანხა: ${order.quoteAmount.toFixed(2)} ${catalogItem.quoteAsset}`);
+      if (!user || user.role === "ADMIN") void telegramAlerts.send(`საწყისი BUY [${executionEnvironment}]\n${symbol} · სტრატეგია #${strategy.id}\nფასი: ${order.price}\nთანხა: ${order.quoteAmount.toFixed(2)} ${catalogItem.quoteAsset}`);
       strategy = await repository.getById(strategy.id);
     }
-    return strategy;
+    return await repository.setStrategyStatus(strategy.id, "ACTIVE");
   } finally {
     await repository.close();
   }
@@ -649,16 +650,17 @@ function parseSellLevels(value: unknown): SellLevelConfig[] | null {
   });
 }
 
-async function getStrategyTemplates() {
+async function getStrategyTemplates(user: DashboardUser | null) {
   const repository = await createStore();
   try {
-    return [...BUILT_IN_STRATEGY_TEMPLATES, ...await repository.listStrategyTemplates()];
+    const ownIds = userAuthStore && user ? await userAuthStore.templateIds(user.id) : null;
+    return [...BUILT_IN_STRATEGY_TEMPLATES, ...(await repository.listStrategyTemplates()).filter((template) => !ownIds || ownIds.has(template.id!))];
   } finally {
     await repository.close();
   }
 }
 
-async function createStrategyTemplate(body: unknown) {
+async function createStrategyTemplate(body: unknown, user: DashboardUser | null) {
   const input = body as Record<string, unknown>;
   const name = String(input.name ?? "").trim();
   if (name.length < 2 || name.length > 60) throw new Error("შაბლონის სახელი 2-60 სიმბოლო უნდა იყოს");
@@ -672,7 +674,8 @@ async function createStrategyTemplate(body: unknown) {
   });
   const repository = await createStore();
   try {
-    return await repository.createStrategyTemplate({ name, buyLevels, sellLevels, finalReservePercent });
+    const template = await repository.createStrategyTemplate({ name, buyLevels, sellLevels, finalReservePercent }, userAuthStore && user ? user.id : undefined);
+    return template;
   } finally {
     await repository.close();
   }
@@ -704,10 +707,100 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     json(response, 200, { user: user ?? { username: dashboardUsername, role: "ADMIN" } });
     return true;
   }
-  if (request.method === "GET" && pathname === "/api/account-summary") {
-    if (user && user.role !== "ADMIN") {
-      json(response, 200, { balance: null, status: "NOT_CONFIGURED" });
+  if (pathname === "/api/profile") {
+    if (!userAuthStore || !user) throw new Error("პროფილებისთვის PostgreSQL კონფიგურაცია საჭიროა");
+    if (request.method === "GET") {
+      const profile = await userAuthStore.profile(user);
+      json(response, 200, { profile, legacyLive: user.role === "ADMIN" && Boolean(appConfig.binanceApiKey && appConfig.binanceApiSecret),
+        legacyTestnet: user.role === "ADMIN" && Boolean(appConfig.binanceTestnetApiKey && appConfig.binanceTestnetApiSecret) });
       return true;
+    }
+    if (request.method === "PATCH") {
+      const body = await readJson(request) as { displayName?: unknown };
+      await userAuthStore.saveProfile(user.id, String(body.displayName ?? "").trim());
+      json(response, 200, { saved: true });
+      return true;
+    }
+  }
+  if (request.method === "PUT" && pathname === "/api/profile/credentials") {
+    if (!userAuthStore || !user) throw new Error("პროფილი მიუწვდომელია");
+    if (!userAuthStore.vault.configured) throw new Error("სერვერზე BOT_CREDENTIALS_ENCRYPTION_KEY ჯერ დასამატებელია");
+    const body = await readJson(request) as { environment?: string; apiKey?: string; apiSecret?: string };
+    if (body.environment !== "LIVE" && body.environment !== "TESTNET") throw new Error("გარემო არასწორია");
+    const credentials = { apiKey: String(body.apiKey ?? "").trim(), apiSecret: String(body.apiSecret ?? "").trim() };
+    if (!/^[a-zA-Z0-9]{16,256}$/.test(credentials.apiKey) || !/^[a-zA-Z0-9]{16,256}$/.test(credentials.apiSecret)) throw new Error("API გასაღები და secret არასწორია");
+    await userAuthStore.assertCredentialChangeAllowed(user.id, body.environment);
+    try {
+      if (body.environment === "TESTNET") await new BinanceTestnetOrderService(credentials.apiKey, credentials.apiSecret).getBalances();
+      else await new BinanceAccountService(credentials.apiKey, credentials.apiSecret).getBalances();
+    } catch { throw new Error("Binance-თან შემოწმება ვერ შესრულდა; გადაამოწმე გარემო, გასაღებები და API უფლებები"); }
+    await userAuthStore.assertCredentialChangeAllowed(user.id, body.environment);
+    await userAuthStore.saveCredentials(user.id, body.environment, credentials);
+    personalAccountCache.delete(user.id);
+    json(response, 200, { saved: true });
+    return true;
+  }
+  if (request.method === "POST" && pathname === "/api/logout") {
+    if (userAuthStore) await userAuthStore.revokeSession(getCookie(request, "dashboard_session"));
+    response.writeHead(200, { "Content-Type": "application/json", "Set-Cookie": `dashboard_session=; Path=${basePath ? `${basePath}/` : "/"}; HttpOnly; SameSite=Strict; Max-Age=0` });
+    response.end(JSON.stringify({ loggedOut: true }));
+    return true;
+  }
+  if (request.method === "GET" && pathname === "/api/shared-strategies") {
+    if (!userAuthStore || !user) throw new Error("გაზიარება მიუწვდომელია");
+    const repository = await createStore();
+    try {
+      const shared = await userAuthStore.sharedStrategies();
+      const strategies = await Promise.all(shared.map(async (item) => {
+        const levels = await repository.getLevels(Number(item.id));
+        return { id: Number(item.id), symbol: item.symbol, username: item.username, displayName: item.displayName,
+          finalReservePercent: item.finalReservePercent,
+          buyLevels: levels.filter((level) => level.side === "BUY").map((level) => ({ dropPercent: level.levelPercent, budgetPercent: level.allocationPercent })),
+          sellLevels: levels.filter((level) => level.side === "SELL").map((level) => ({ gainPercent: level.levelPercent, allocationPercent: level.allocationPercent })) };
+      }));
+      json(response, 200, { strategies });
+    } finally { await repository.close(); }
+    return true;
+  }
+  const shareMatch = pathname.match(/^\/api\/strategies\/(\d+)\/sharing$/);
+  if (request.method === "PATCH" && shareMatch) {
+    if (!userAuthStore || !user) throw new Error("გაზიარება მიუწვდომელია");
+    const body = await readJson(request) as { shared?: unknown };
+    if (typeof body.shared !== "boolean") throw new Error("გაზიარების მნიშვნელობა არასწორია");
+    await userAuthStore.setShared(Number(shareMatch[1]), user.id, body.shared);
+    json(response, 200, { shared: body.shared });
+    return true;
+  }
+  const adminStrategiesMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/strategies$/);
+  if (request.method === "GET" && adminStrategiesMatch) {
+    if (!userAuthStore || user?.role !== "ADMIN") throw new Error("ადმინისტრატორის წვდომა საჭიროა");
+    const repository = await createStore();
+    try {
+      const all = [...await repository.listStrategies(), ...await repository.listArchivedStrategies()];
+      const ids = await userAuthStore.filterStrategyIds(all.map((strategy) => strategy.id), { id: Number(adminStrategiesMatch[1]), username: "", role: "USER" });
+      json(response, 200, { strategies: all.filter((strategy) => ids.has(strategy.id)).map((strategy) => ({ id: strategy.id, symbol: strategy.symbol, status: strategy.status, executionEnvironment: strategy.executionEnvironment })) });
+    } finally { await repository.close(); }
+    return true;
+  }
+  if (request.method === "GET" && pathname === "/api/account-summary") {
+    if (userAuthStore && user) {
+      const ownCredentials = await userAuthStore.credentials(user.id, "LIVE");
+      if (ownCredentials || user.role !== "ADMIN") {
+        if (!ownCredentials) { json(response, 200, { balance: null, status: "NOT_CONFIGURED" }); return true; }
+        let cached = personalAccountCache.get(user.id);
+        if (!cached || cached.expiresAt <= Date.now()) {
+          const balances = await new BinanceAccountService(ownCredentials.apiKey, ownCredentials.apiSecret).getBalances();
+          const usdt = balances.find((balance) => balance.asset === "USDT");
+          cached = { balance: Number(usdt?.free ?? 0) + Number(usdt?.locked ?? 0), expiresAt: Date.now() + 30_000 };
+          personalAccountCache.set(user.id, cached);
+          await userAuthStore.recordAccountBalance(user.id, cached.balance);
+        }
+        const reference = await userAuthStore.accountBalanceReference(user.id, new Date(Date.now() - overviewPeriodHours(request) * 60 * 60_000));
+        json(response, 200, { balance: cached.balance, status: "CONNECTED",
+          percent: reference !== null && reference > 0 ? (cached.balance - reference) / reference * 100 : null,
+          change: reference !== null ? cached.balance - reference : null });
+        return true;
+      }
     }
     const repository = await createStore();
     try {
@@ -749,10 +842,11 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     return true;
   }
   if (request.method === "GET" && pathname === "/api/telegram/status") {
-    json(response, 200, telegramAlerts.getStatus());
+    json(response, 200, user?.role === "USER" ? { configured: false, lastError: null, lastSentAt: null } : telegramAlerts.getStatus());
     return true;
   }
   if (request.method === "POST" && pathname === "/api/telegram/test") {
+    if (user?.role === "USER") throw new Error("პირადი Telegram კავშირი ჯერ არ არის გამართული");
     const sent = await telegramAlerts.send("PlayPoint სატესტო შეტყობინება\nTelegram კავშირი გამართულად მუშაობს");
     json(response, 200, { sent, ...telegramAlerts.getStatus() });
     return true;
@@ -768,15 +862,16 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     return true;
   }
   if (request.method === "GET" && pathname === "/api/strategy-templates") {
-    json(response, 200, { templates: await getStrategyTemplates() });
+    json(response, 200, { templates: await getStrategyTemplates(user) });
     return true;
   }
   if (request.method === "POST" && pathname === "/api/strategy-templates") {
-    json(response, 201, { template: await createStrategyTemplate(await readJson(request)) });
+    json(response, 201, { template: await createStrategyTemplate(await readJson(request), user) });
     return true;
   }
   const templateDeleteMatch = pathname.match(/^\/api\/strategy-templates\/(\d+)$/);
   if (request.method === "DELETE" && templateDeleteMatch) {
+    if (userAuthStore && user && !(await userAuthStore.templateIds(user.id)).has(Number(templateDeleteMatch[1]))) throw new Error("ეს შაბლონი შენ არ გეკუთვნის");
     const repository = await createStore();
     try {
       await repository.deleteStrategyTemplate(Number(templateDeleteMatch[1]));
@@ -799,7 +894,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     const environment = requestUrl.searchParams.get("environment")?.toUpperCase();
     if (environment === "LIVE") throw new Error("LIVE რეჟიმი უსაფრთხოების მიზნით დაბლოკილია");
     const price = environment === "TESTNET"
-      ? await requireTestnetService().getCurrentPrice(symbol) : await exchangeInfo.getCurrentPrice(symbol);
+      ? await (await requireTestnetService(user)).getCurrentPrice(symbol) : await exchangeInfo.getCurrentPrice(symbol);
     json(response, 200, { symbol, price, source: environment === "TESTNET" ? "BINANCE_TESTNET" : "BINANCE" });
     return true;
   }
@@ -841,7 +936,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
       : range === "30d" ? { interval: "1h" as const, limit: 720 } : { interval: "1h" as const, limit: 168 };
     const repository = await createStore();
     try {
-      await ensureStrategyAccess(strategyId, user);
+      await ensureStrategyAccess(strategyId, user, true);
       const strategy = await repository.getById(strategyId);
       json(response, 200, {
         symbol: strategy.symbol,
@@ -977,7 +1072,7 @@ const server = http.createServer(async (request, response) => {
       const token = await userAuthStore.createSession(user.id);
       const cookiePath = `${basePath}/` || "/";
       const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-      response.writeHead(303, { Location: cookiePath, "Set-Cookie": `dashboard_session=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=604800${secure}` });
+      response.writeHead(303, { Location: `${cookiePath}?setup=1`, "Set-Cookie": `dashboard_session=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=604800${secure}` });
       return response.end();
     } catch (error) {
       response.writeHead(400, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
@@ -1020,7 +1115,10 @@ server.listen(port, "0.0.0.0", () => {
   console.log(`Mode: ${appConfig.tradingMode} | Database: ${appConfig.databaseUrl ? "PostgreSQL" : appConfig.databasePath}`);
 });
 
-setInterval(() => void getReadinessReport(null).then((report) => {
+setInterval(() => void (async () => {
+  const admin = userAuthStore ? (await userAuthStore.listUsers()).find((user) => user.username === dashboardUsername) ?? null : null;
+  return getReadinessReport(admin);
+})().then((report) => {
   const message = report.overall === "READY"
     ? "Testnet მზადყოფნა: READY\nყველა აუცილებელი შემოწმება გავლილია"
     : report.overall === "BLOCKED"

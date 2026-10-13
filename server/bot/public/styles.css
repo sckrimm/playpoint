@@ -33,6 +33,25 @@ a { touch-action: manipulation; }
 main { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 50px; }
 .overview-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .overview-actions { display: flex; align-items: center; gap: 10px; }
+.overview-actions { flex-wrap: wrap; }
+.profile-forms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.profile-forms form { display: grid; align-content: start; gap: 16px; }
+.profile-forms label { display: grid; gap: 6px; font-size: 12px; }
+.profile-forms input, .profile-forms select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #cfd8d3; border-radius: 5px; color: inherit; background: transparent; }
+.profile-forms h2 { margin: 0; font-size: 18px; }
+.profile-forms button { justify-self: start; font-size: 12px; }
+#profileMessage { font-size: 12px; overflow-wrap: anywhere; }
+.shared-strategy { padding: 18px; border: 1px solid #cfd8d3; border-radius: 8px; }
+.shared-strategy > strong { font-size: 18px; }
+.shared-strategy > span { display: block; margin-top: 6px; font-size: 12px; }
+.shared-strategy p { font-size: 12px; }
+.share-strategy { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.admin-strategies { grid-column: 1 / -1; display: grid; gap: 8px; }
+.admin-strategies button { white-space: normal; }
+@media (max-width: 640px) {
+  .profile-forms { grid-template-columns: minmax(0, 1fr); }
+  #openProfile { font-size: 10px; min-height: 32px; padding: 0 6px; }
+}
 .overview-actions button { font-size: 12px; white-space: nowrap; }
 #overviewView > .overview-head { flex-direction: column; align-items: stretch; }
 .portfolio-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; padding-bottom: 18px; border-bottom: 1px solid #dce2df; }

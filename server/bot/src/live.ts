@@ -10,8 +10,13 @@ import { strategyRecordToConfig } from "./strategy/strategyConfig.js";
 import type { StrategyRecord } from "./types/strategy.js";
 import { money } from "./utils/format.js";
 import { telegramAlerts } from "./services/telegramAlertService.js";
+import { getRuntimeUsers } from "./auth/runtimeUsers.js";
+import { resolveCredentials } from "./auth/accountCredentials.js";
+import { createHash } from "node:crypto";
 
 const store = await createStore();
+const users = await getRuntimeUsers();
+const executorVersions = new Map<number, string>();
 const exchangeInfo = new BinanceExchangeInfoService();
 const feeds = {
   SIMULATION: new BinancePriceFeed(),
@@ -39,17 +44,28 @@ async function syncStrategies(): Promise<void> {
   strategiesByEnvironment.SIMULATION.clear();
   strategiesByEnvironment.TESTNET.clear();
   for (const strategy of active) {
+    const owner = users ? await users.strategyOwner(strategy.id) : null;
+    if (users && !owner) continue;
+    let credentials;
+    try { credentials = strategy.executionEnvironment === "TESTNET" ? await resolveCredentials(users, owner, "TESTNET") : null; }
+    catch { engines.delete(strategy.id); continue; }
+    const version = createHash("sha256").update(`${owner?.id ?? 0}:${credentials?.apiKey ?? "simulation"}:${credentials?.apiSecret ?? ""}`).digest("hex");
+    if (executorVersions.get(strategy.id) !== version) {
+      engines.delete(strategy.id);
+      executorVersions.set(strategy.id, version);
+    }
     if (!engines.has(strategy.id)) {
       const orders = strategy.executionEnvironment === "TESTNET"
-        ? appConfig.binanceTestnetApiKey && appConfig.binanceTestnetApiSecret
-          ? new BinanceTestnetOrderService(appConfig.binanceTestnetApiKey, appConfig.binanceTestnetApiSecret)
+        ? credentials
+          ? new BinanceTestnetOrderService(credentials.apiKey, credentials.apiSecret)
           : null
         : new SimulationOrderService();
       if (!orders) {
         console.error(`TESTNET strategy #${strategy.id} skipped: API credentials are not configured`);
         continue;
       }
-      const engine = new StrategyEngine(strategyRecordToConfig(strategy, await store.getLevels(strategy.id)), store, orders, false, strategy.id);
+      const engine = new StrategyEngine(strategyRecordToConfig(strategy, await store.getLevels(strategy.id)), store, orders, false, strategy.id,
+        owner?.role === "USER" ? async () => false : (message) => telegramAlerts.send(message));
       await engine.initialize();
       engines.set(strategy.id, engine);
       const rules = await exchangeInfo.getSymbolRules(strategy.symbol);
@@ -99,6 +115,25 @@ if (accountService) {
   });
 }
 
+let refreshingPersonalAccounts = false;
+async function refreshPersonalAccounts(): Promise<void> {
+  if (!users || refreshingPersonalAccounts) return;
+  refreshingPersonalAccounts = true;
+  try {
+    for (const user of await users.listUsers()) {
+      try {
+        const credentials = await users.credentials(user.id, "LIVE");
+        if (!credentials) continue;
+        const balances = await new BinanceAccountService(credentials.apiKey, credentials.apiSecret).getBalances();
+        const usdt = balances.find((balance) => balance.asset === "USDT");
+        await users.recordAccountBalance(user.id, Number(usdt?.free ?? 0) + Number(usdt?.locked ?? 0));
+      } catch { console.error(`Personal account refresh unavailable for user #${user.id}`); }
+    }
+  } finally { refreshingPersonalAccounts = false; }
+}
+void refreshPersonalAccounts();
+setInterval(() => void refreshPersonalAccounts(), 30_000).unref();
+
 await syncStrategies();
 setInterval(() => void syncStrategies().catch((error) =>
   console.error("Strategy subscription sync failed:", error instanceof Error ? error.message : error)), 5_000).unref();
@@ -128,6 +163,7 @@ startFeed("SIMULATION");
 startFeed("TESTNET");
 
 async function shutdown(signal: string): Promise<void> {
+  await users?.close();
   console.log(`${signal} received, stopping market feed`);
   feeds.SIMULATION.stop();
   feeds.TESTNET.stop();
