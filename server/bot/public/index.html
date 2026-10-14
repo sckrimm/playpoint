@@ -7,7 +7,7 @@
     <title>სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
     <link rel="stylesheet" href="styles.css?v=20261014-1" />
-    <link rel="stylesheet" href="controls.css?v=20261014-4" />
+    <link rel="stylesheet" href="controls.css?v=20261014-5" />
   </head>
   <body>
     <header class="topbar">
@@ -34,10 +34,10 @@
             <div class="view-switch" role="tablist"><button id="showActive" class="selected" type="button">აქტიური</button><button id="showArchived" type="button">არქივი</button></div>
             <button id="openReadiness" class="secondary-button" type="button" hidden>მზადყოფნის მონიტორი</button>
             <button id="openNews" class="secondary-button" type="button">კრიპტო სიახლეები</button>
-            <button id="openMarketCandidates" class="secondary-button" type="button">ბაზრის კანდიდატები</button>
+            <button id="openCreate" class="primary-button" type="button">+ სტრატეგიის შექმნა</button>
+            <button id="openMarketCandidates" class="secondary-button" type="button" hidden>ბაზრის კანდიდატები</button>
             <button id="openComparison" class="secondary-button" type="button">სტრატეგიების შედარება</button>
             <button id="openShared" class="secondary-button" type="button">გაზიარებული სტრატეგიები</button>
-            <button id="openCreate" class="primary-button" type="button">+ სტრატეგიის შექმნა</button>
           </div>
         </div>
         <div class="strategy-list-toolbar"><span class="muted">მოგების მიხედვით</span><div id="strategyLayout" class="view-switch" role="group" aria-label="სტრატეგიების განლაგება"><button type="button" data-layout="rows" aria-pressed="false">რიგები</button><button type="button" data-layout="columns" aria-pressed="true">სვეტები</button></div></div>
@@ -286,6 +286,6 @@
     </nav>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
     <script src="select-controls.js?v=20261014-2" defer></script>
-    <script src="app.js?v=20261014-4" defer></script>
+    <script src="app.js?v=20261014-5" defer></script>
   </body>
 </html>

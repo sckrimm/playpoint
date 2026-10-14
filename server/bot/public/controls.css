@@ -186,7 +186,7 @@
 .mobile-navigation { display: none; }
 @media (max-width: 640px) {
   main { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
-  .overview-actions :is(#openNews, #openComparison, #openShared, #openCreate) { display: none; }
+  .overview-actions :is(#openNews, #openComparison, #openShared) { display: none; }
   .mobile-navigation {
     position: fixed;
     z-index: 50;

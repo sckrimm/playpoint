@@ -827,6 +827,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     return true;
   }
   if (request.method === "GET" && pathname === "/api/market-opportunities") {
+    if (userAuthStore && user?.role !== "ADMIN") {
+      json(response, 403, { error: "ბაზრის კანდიდატები მხოლოდ ადმინისტრატორისთვისაა" });
+      return true;
+    }
     json(response, 200, await marketOpportunities.scan());
     return true;
   }

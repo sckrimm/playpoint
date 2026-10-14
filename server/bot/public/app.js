@@ -485,6 +485,7 @@ async function loadOverview() {
 }
 
 async function loadOpportunities() {
+  if (sessionUser?.role !== "ADMIN") return;
   const list = byId("opportunityList");
   list.innerHTML = '<p class="empty-state">Binance-ის მონაცემები იტვირთება...</p>';
   try {
@@ -731,6 +732,10 @@ async function openComparison({ historyMode = "push" } = {}) {
 }
 
 function openMarketCandidates({ historyMode = "push" } = {}) {
+  if (sessionUser?.role !== "ADMIN") {
+    showOverview({ historyMode: "replace" });
+    return;
+  }
   setVisibleView("marketCandidatesView");
   if (historyMode !== "none") updateNavigationState("marketCandidatesView", null, historyMode);
   void loadOpportunities();
@@ -1409,6 +1414,7 @@ api("/api/session").then(({ user }) => {
   byId("currentUser").textContent = user.username;
   byId("openUsers").hidden = user.role !== "ADMIN";
   byId("openReadiness").hidden = user.role !== "ADMIN";
+  byId("openMarketCandidates").hidden = user.role !== "ADMIN";
   if (new URLSearchParams(window.location.search).get("setup") === "1") void openProfile();
 }).catch(showError);
 loadOverview();
