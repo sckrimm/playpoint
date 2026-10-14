@@ -393,9 +393,11 @@ async function getStrategiesOverview(archived = false, user: DashboardUser | nul
         ? strategy.totalAssetQuantity * market.price + strategy.totalSaleProceeds - strategy.totalInvested
         : null;
       const orders = await repository.getOrders(strategy.id);
-      const reference = await getHistoricalReference(strategy.symbol, periodHours, strategy.executionEnvironment);
+      const targetTime = Date.now() - periodHours * 60 * 60_000;
+      const reference = Date.parse(strategy.createdAt) > targetTime ? null
+        : await getHistoricalReference(strategy.symbol, periodHours, strategy.executionEnvironment);
       const period = periodPerformance(strategy, orders, totalPnl, reference?.price ?? null,
-        reference ? Date.parse(reference.timestamp) : Date.now() - periodHours * 60 * 60_000);
+        reference ? Date.parse(reference.timestamp) : targetTime);
       return {
         ...strategy,
         market,

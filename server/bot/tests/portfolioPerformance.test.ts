@@ -26,9 +26,25 @@ test("historical profit withdrawal is excluded from the starting working balance
   assert.equal(result.change, 20);
 });
 
-test("missing prices and strategies younger than the chosen period have no fabricated return", () => {
+test("an existing position with missing historical price has no fabricated return", () => {
   assert.equal(periodPerformance(strategy, [buy], 50, null, target), null);
-  assert.equal(periodPerformance({ ...strategy, createdAt: "2026-10-11T12:00:00Z" }, [buy], 50, 12, target), null);
+});
+
+test("a new bot contributes its real return since creation without requiring pre-creation prices", () => {
+  const recent = { ...strategy, createdAt: "2026-10-11T12:00:00Z" };
+  const result = periodPerformance(recent, [], 50, null, target)!;
+  assert.equal(result.change, 50);
+  assert.equal(result.startingEquity, 200);
+  assert.equal(result.percent, 25);
+  assert.equal(result.sinceCreated, true);
+  assert.equal(periodPerformance(recent, [], null, null, target), null);
+});
+
+test("a strategy still holding cash at the boundary needs no historical coin price", () => {
+  const result = periodPerformance(strategy, [{ ...buy, createdAt: "2026-10-11T12:00:00Z" }], 10, null, target)!;
+  assert.equal(result.change, 10);
+  assert.equal(result.startingEquity, 200);
+  assert.equal(result.percent, 5);
 });
 
 test("account history keeps one sample per minute and refuses missing or stale references", async () => {

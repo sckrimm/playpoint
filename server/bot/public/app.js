@@ -376,6 +376,7 @@ function renderPortfolioSummary(strategies) {
   const positioned = strategies.filter((strategy) => strategy.totalInvested > 0);
   const priced = positioned.filter((strategy) => Number.isFinite(strategy.performance?.period?.change));
   const complete = priced.length === positioned.length;
+  const newBots = priced.filter((strategy) => strategy.performance.period.sinceCreated).length;
   const winners = priced.filter((strategy) => strategy.performance.period.change > 0);
   const losers = priced.filter((strategy) => strategy.performance.period.change < 0);
   const sumPnl = (items) => items.reduce((sum, strategy) => sum + strategy.performance.period.change, 0);
@@ -395,6 +396,7 @@ function renderPortfolioSummary(strategies) {
       <div class="portfolio-group positive"><strong>↑ ${priced.length || !positioned.length ? formatSignedMoney(sumPnl(winners)) : "—"}</strong><small>${formatPercent(percentFor(winners))}</small><span>${winners.length} ბოტი</span></div>
       <div class="portfolio-group negative"><strong>↓ ${priced.length || !positioned.length ? formatSignedMoney(sumPnl(losers)) : "—"}</strong><small>${formatPercent(percentFor(losers))}</small><span>${losers.length} ბოტი</span></div>
       ${complete ? "" : `<span class="portfolio-label">${positioned.length - priced.length} ბოტის ისტორია არასრულია</span>`}
+      ${newBots ? `<span class="portfolio-label">${newBots} ახალი ბოტი — შექმნიდან</span>` : ""}
     </div>
     <div class="portfolio-balance">
       <span class="portfolio-label">Binance Spot · USDT</span>
