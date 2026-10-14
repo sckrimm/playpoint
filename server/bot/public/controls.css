@@ -128,3 +128,57 @@
 @media (prefers-reduced-motion: reduce) {
   :root :is(button, input, select, textarea, a[class], summary) { transition: none; }
 }
+
+.select-control { position: relative; width: 100%; min-width: 0; }
+:root .select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  background: var(--control-field);
+  color: var(--control-text);
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+}
+.select-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.control-icon { display: inline-block; width: 16px; height: 16px; flex: 0 0 16px; vertical-align: middle; }
+.control-chevron { color: var(--control-muted); transition: transform 150ms ease; }
+.select-trigger[aria-expanded="true"] .control-chevron { transform: rotate(180deg); color: var(--control-accent); }
+:root .select-trigger:is(:focus-visible, [aria-expanded="true"]) { outline: none; border-color: var(--control-accent); box-shadow: 0 0 0 3px var(--control-ring); background: var(--control-field-focus); }
+:root .select-trigger:disabled { background: var(--control-disabled); color: var(--control-muted); }
+.select-menu {
+  position: fixed;
+  inset: auto;
+  z-index: 1000;
+  margin: 0;
+  padding: 5px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  color: var(--control-text);
+  background: var(--control-field);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
+}
+.select-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 38px; padding: 9px 10px; border-radius: 4px; font-size: 13px; font-weight: 500; line-height: 1.4; cursor: pointer; }
+.select-option > span { min-width: 0; overflow-wrap: anywhere; }
+.select-option[aria-selected="true"] { color: var(--control-accent); background: var(--control-soft); }
+.select-option.highlighted { box-shadow: inset 0 0 0 1px var(--control-border-hover); background: var(--control-soft); }
+.select-option[aria-disabled="true"] { color: var(--control-muted); opacity: .5; cursor: not-allowed; }
+:root .back-button { display: inline-flex; align-items: center; gap: 6px; }
+.custom-strategy-settings summary > i { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; }
+@media (hover: hover) {
+  :root .select-trigger:not(:disabled):hover { border-color: var(--control-border-hover); background: var(--control-field-hover); }
+  .select-option:not([aria-disabled="true"]):hover { color: var(--control-ink); background: var(--control-accent); }
+}
+@media (max-width: 640px) {
+  :root .select-trigger { font-size: 16px; }
+}

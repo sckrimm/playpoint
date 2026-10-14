@@ -996,6 +996,7 @@ function applyTemplate(template) {
   byId("deleteTemplate").hidden = template.builtIn || template.id == null;
   applyingTemplate = false;
   validateLevelEditors();
+  window.refreshSelectControls?.();
 }
 
 async function loadTemplates(force = false) {
@@ -1044,6 +1045,7 @@ function prepareCreateForm(strategy = null) {
     applyTemplate(strategyTemplates[1] ?? strategyTemplates[0]);
   }
   updateInitialPurchaseHint();
+  window.refreshSelectControls?.();
 }
 
 async function loadSymbols() {
@@ -1081,7 +1083,7 @@ async function openProfile({ historyMode = "push" } = {}) {
     byId("profileForm").elements.displayName.value = profile.displayName;
     const ready = (environment, legacy) => profile.credentials.some((item) => item.environment === environment) ? "პირადი გასაღები შენახულია" : legacy ? "არსებული კავშირი" : "არ არის დამატებული";
     byId("credentialStatus").textContent = `Testnet: ${ready("TESTNET", legacyTestnet)} · Spot: ${ready("LIVE", legacyLive)}`;
-    byId("credentialsForm").querySelector("button").disabled = !profile.encryptionReady;
+    byId("credentialsForm").querySelector('button[type="submit"]').disabled = !profile.encryptionReady;
     if (!profile.encryptionReady) byId("profileMessage").textContent = "პირადი გასაღებების ჩასართავად სერვერის დაშიფვრის კონფიგურაცია საჭიროა.";
   } catch (error) { byId("profileMessage").textContent = error.message; }
 }
@@ -1128,7 +1130,7 @@ byId("profileForm").addEventListener("submit", async (event) => {
 byId("credentialsForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
-  const button = form.querySelector("button");
+  const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
   try {
     const values = new FormData(form);
