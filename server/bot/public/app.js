@@ -335,6 +335,13 @@ const appViews = ["overviewView", "detailView", "comparisonView", "marketCandida
 
 function setVisibleView(view) {
   appViews.forEach((id) => { byId(id).hidden = id !== view; });
+  const navigation = { openProfile: "profileView", openShared: "sharedView", openComparison: "comparisonView", openMarketCandidates: "marketCandidatesView", openNews: "newsView", openReadiness: "readinessView" };
+  Object.entries(navigation).forEach(([id, target]) => {
+    const button = byId(id);
+    button.classList.toggle("is-current", target === view);
+    if (target === view) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
 }
 
 function updateNavigationState(view, strategyId = null, mode = "push") {

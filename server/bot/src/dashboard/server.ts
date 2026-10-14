@@ -81,7 +81,7 @@ function isLegacyAuthorized(request: IncomingMessage): boolean {
 function loginPage(errorMessage = ""): string {
   const action = `${basePath}/login` || "/login";
   return `<!doctype html>
-<html lang="ka">
+<html lang="ka" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -99,9 +99,10 @@ function loginPage(errorMessage = ""): string {
     button { width: 100%; margin-top: 24px; border: 0; border-radius: 6px; padding: 13px; background: #f0b90b; color: #16181d; font: inherit; font-weight: 800; cursor: pointer; }
     .error { color: #ff7378; margin: 0 0 12px; }
     a { display: block; margin-top: 18px; color: #f0b90b; text-align: center; }
+    ${fs.readFileSync(path.join(publicDir, "controls.css"), "utf8")}
   </style>
 </head>
-<body>
+<body class="auth-page">
   <main>
     <h1>ავტორიზაცია</h1>
     <p>შედი სტრატეგიების სამართავ პანელში</p>

@@ -1,0 +1,130 @@
+:root {
+  --control-accent: #f0b90b;
+  --control-accent-hover: #f8d33a;
+  --control-ink: #181a20;
+  --control-text: #202630;
+  --control-muted: #707783;
+  --control-field: #fffdf5;
+  --control-field-hover: #fff9e5;
+  --control-field-focus: #fff8df;
+  --control-border: #ded8c4;
+  --control-border-hover: #c9aa49;
+  --control-soft: #fff6d4;
+  --control-ring: rgb(240 185 11 / 16%);
+  --control-disabled: #eff1f3;
+  --control-error: #c53c3c;
+}
+
+[data-theme="dark"] {
+  --control-text: #eaecef;
+  --control-muted: #848e9c;
+  --control-field: #23231f;
+  --control-field-hover: #29271e;
+  --control-field-focus: #2e291b;
+  --control-border: #4a432d;
+  --control-border-hover: #a38a32;
+  --control-soft: #302a19;
+  --control-disabled: #23262d;
+  --control-error: #ff7474;
+}
+
+:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+  min-height: 44px;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  background-color: var(--control-field);
+  color: var(--control-text);
+  caret-color: var(--control-accent);
+  outline: none;
+  box-shadow: none;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+:root :is(input, textarea)::placeholder { color: var(--control-muted); opacity: 1; }
+:root select option { background: var(--control-field); color: var(--control-text); }
+:root input:is([type="checkbox"], [type="radio"], [type="range"]) { accent-color: var(--control-accent); }
+
+@media (hover: hover) {
+  :root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):not(:disabled):not([readonly]):hover {
+    border-color: var(--control-border-hover);
+    background-color: var(--control-field-hover);
+  }
+}
+
+:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):not(:disabled):not([readonly]):focus {
+  border-color: var(--control-accent);
+  background-color: var(--control-field-focus);
+  box-shadow: 0 0 0 3px var(--control-ring);
+}
+
+:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):is(:disabled, [readonly]) {
+  border-color: var(--control-border);
+  background-color: var(--control-disabled);
+  color: var(--control-muted);
+  cursor: default;
+}
+
+:root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):is(.field-invalid, [aria-invalid="true"]) {
+  border-color: var(--control-error);
+  box-shadow: 0 0 0 2px rgb(197 60 60 / 12%);
+}
+
+:root :is(button, a[class], summary) {
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  -webkit-tap-highlight-color: rgb(240 185 11 / 12%);
+}
+:root :is(button, a, summary, input[type="checkbox"], input[type="radio"]):focus-visible {
+  outline: 2px solid var(--control-accent);
+  outline-offset: 3px;
+}
+
+:root :is(.secondary-button, .back-button, .card-action, .comparison-open, .icon-button, .strategy-actions button) {
+  color: var(--control-text);
+  border-color: var(--control-border);
+  border-radius: 6px;
+  background-color: var(--control-field);
+}
+:root :is(.primary-button, .auth-page button) {
+  background-color: var(--control-accent);
+  color: var(--control-ink);
+  border-color: var(--control-accent);
+  border-radius: 6px;
+}
+
+@media (hover: hover) {
+  :root :is(.secondary-button, .back-button, .card-action, .comparison-open, .icon-button, .strategy-actions button, .view-switch button):not(:disabled):hover {
+    background-color: var(--control-soft);
+    border-color: var(--control-accent);
+    color: var(--control-text);
+  }
+  :root :is(.primary-button, .auth-page button):not(:disabled):hover { background-color: var(--control-accent-hover); border-color: var(--control-accent-hover); }
+  :root :is(.strategy-card, .shared-strategy, .opportunity, .news-card):hover { border-color: var(--control-border-hover); }
+  :root .comparison-choice:hover { border-color: var(--control-border-hover); }
+}
+
+:root .view-switch { background-color: var(--control-field); border-color: var(--control-border); }
+:root .view-switch button { color: var(--control-muted); box-shadow: none; }
+:root :is(.view-switch button.selected, button.is-current, button[aria-pressed="true"]) {
+  background-color: var(--control-accent);
+  border-color: var(--control-accent);
+  color: var(--control-ink);
+  box-shadow: none;
+}
+:root :is(.view-switch button.selected, button.is-current, button[aria-pressed="true"]):hover {
+  background-color: var(--control-accent-hover);
+  color: var(--control-ink);
+}
+:root :is(.secondary-button, .back-button, .card-action, .comparison-open, .icon-button, .primary-button, .strategy-actions button):not(:disabled):active {
+  background-color: var(--control-accent);
+  border-color: var(--control-accent);
+  color: var(--control-ink);
+}
+:root .strategy-actions .profit-action { color: #138a56; }
+:root .strategy-actions .danger-action { color: var(--control-error); }
+[data-theme="dark"] .strategy-actions .profit-action { color: #4dcc91; }
+:root button:disabled { cursor: not-allowed; opacity: .5; }
+:root .comparison-choice:has(input:checked) { background: var(--control-soft); border-color: var(--control-accent); color: var(--control-text); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root :is(button, input, select, textarea, a[class], summary) { transition: none; }
+}
