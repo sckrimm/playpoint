@@ -7,7 +7,7 @@
     <title>სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
     <link rel="stylesheet" href="styles.css?v=20261014-1" />
-    <link rel="stylesheet" href="controls.css?v=20261014-2" />
+    <link rel="stylesheet" href="controls.css?v=20261014-4" />
   </head>
   <body>
     <header class="topbar">
@@ -32,7 +32,7 @@
           <div id="portfolioSummary" class="portfolio-summary" aria-live="polite" aria-label="ბოტების საერთო შედეგები"><p class="muted">ბალანსი იტვირთება...</p></div>
           <div class="overview-actions">
             <div class="view-switch" role="tablist"><button id="showActive" class="selected" type="button">აქტიური</button><button id="showArchived" type="button">არქივი</button></div>
-            <button id="openReadiness" class="secondary-button" type="button">მზადყოფნის მონიტორი</button>
+            <button id="openReadiness" class="secondary-button" type="button" hidden>მზადყოფნის მონიტორი</button>
             <button id="openNews" class="secondary-button" type="button">კრიპტო სიახლეები</button>
             <button id="openMarketCandidates" class="secondary-button" type="button">ბაზრის კანდიდატები</button>
             <button id="openComparison" class="secondary-button" type="button">სტრატეგიების შედარება</button>
@@ -276,8 +276,16 @@
     <dialog id="newsDialog" class="news-dialog" aria-label="კრიპტო სიახლის დეტალები">
       <article id="newsDetail" class="news-detail"></article>
     </dialog>
+    <nav id="mobileNavigation" class="mobile-navigation" aria-label="მთავარი ნავიგაცია">
+      <!-- Icons from Lucide (ISC). -->
+      <button type="button" data-view="overviewView" data-action="brandHome" aria-current="page" title="მთავარი"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg><span>მთავარი</span></button>
+      <button type="button" data-view="comparisonView" data-action="openComparison" title="სტრატეგიების შედარება"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 14v3m5-8v8m5-13v13"/></svg><span>შედარება</span></button>
+      <button type="button" class="mobile-create" data-action="openCreate" title="სტრატეგიის შექმნა" aria-label="სტრატეგიის შექმნა"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></i><span>შექმნა</span></button>
+      <button type="button" data-view="sharedView" data-action="openShared" title="გაზიარებული სტრატეგიები"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4m-6.8 7 6.8 4"/></svg><span>გაზიარებული</span></button>
+      <button type="button" data-view="newsView" data-action="openNews" title="კრიპტო სიახლეები"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16v18H4zM8 7h8M8 11h8M8 15h4"/></svg><span>სიახლეები</span></button>
+    </nav>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
     <script src="select-controls.js?v=20261014-2" defer></script>
-    <script src="app.js?v=20261014-3" defer></script>
+    <script src="app.js?v=20261014-4" defer></script>
   </body>
 </html>

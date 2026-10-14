@@ -841,6 +841,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     return true;
   }
   if (request.method === "GET" && pathname === "/api/readiness") {
+    if (userAuthStore && user?.role !== "ADMIN") {
+      json(response, 403, { error: "მზადყოფნის მონიტორი მხოლოდ ადმინისტრატორისთვისაა" });
+      return true;
+    }
     json(response, 200, await getReadinessReport(user));
     return true;
   }

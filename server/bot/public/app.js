@@ -335,6 +335,10 @@ const appViews = ["overviewView", "detailView", "comparisonView", "marketCandida
 
 function setVisibleView(view) {
   appViews.forEach((id) => { byId(id).hidden = id !== view; });
+  byId("mobileNavigation").querySelectorAll("[data-view]").forEach((button) => {
+    if (button.dataset.view === view) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
   const navigation = { openProfile: "profileView", openShared: "sharedView", openComparison: "comparisonView", openMarketCandidates: "marketCandidatesView", openNews: "newsView", openReadiness: "readinessView" };
   Object.entries(navigation).forEach(([id, target]) => {
     const button = byId(id);
@@ -756,6 +760,7 @@ function renderReadiness(data) {
 }
 
 async function loadReadiness() {
+  if (sessionUser?.role !== "ADMIN") return;
   byId("refreshReadiness").disabled = true;
   try {
     const [readiness, telegram] = await Promise.all([api("/api/readiness"), api("/api/telegram/status")]);
@@ -784,6 +789,10 @@ async function testTelegram() {
 }
 
 function openReadiness({ historyMode = "push" } = {}) {
+  if (sessionUser?.role !== "ADMIN") {
+    showOverview({ historyMode: "replace" });
+    return;
+  }
   setVisibleView("readinessView");
   if (historyMode !== "none") updateNavigationState("readinessView", null, historyMode);
   void loadReadiness();
@@ -1068,6 +1077,11 @@ function showError(error) {
   byId("error").textContent = error.message;
   byId("error").hidden = false;
 }
+
+byId("mobileNavigation").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (button) byId(button.dataset.action).click();
+});
 
 byId("openCreate").addEventListener("click", async () => {
   byId("createDialog").showModal();
@@ -1394,6 +1408,7 @@ api("/api/session").then(({ user }) => {
   sessionUser = user;
   byId("currentUser").textContent = user.username;
   byId("openUsers").hidden = user.role !== "ADMIN";
+  byId("openReadiness").hidden = user.role !== "ADMIN";
   if (new URLSearchParams(window.location.search).get("setup") === "1") void openProfile();
 }).catch(showError);
 loadOverview();

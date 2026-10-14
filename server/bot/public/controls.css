@@ -182,3 +182,42 @@
 @media (max-width: 640px) {
   :root .select-trigger { font-size: 16px; }
 }
+
+.mobile-navigation { display: none; }
+@media (max-width: 640px) {
+  main { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+  .overview-actions :is(#openNews, #openComparison, #openShared, #openCreate) { display: none; }
+  .mobile-navigation {
+    position: fixed;
+    z-index: 50;
+    inset: auto 0 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    padding: 6px max(4px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+    border-top: 1px solid var(--control-border);
+    background: var(--control-field);
+  }
+  :root .mobile-navigation button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+    height: 64px;
+    padding: 4px 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--control-muted);
+    box-shadow: none;
+    font-size: 10px;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+  .mobile-navigation svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  :root .mobile-navigation button[aria-current="page"] { color: var(--control-accent); background: var(--control-soft); }
+  .mobile-create i { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: var(--control-ink); background: var(--control-accent); }
+  .mobile-create svg { width: 25px; height: 25px; }
+  :root .mobile-navigation button:active { background: var(--control-soft); }
+}
