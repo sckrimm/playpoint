@@ -7,7 +7,7 @@
     <title>სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
     <link rel="stylesheet" href="styles.css?v=20261014-1" />
-    <link rel="stylesheet" href="controls.css?v=20261014-5" />
+    <link rel="stylesheet" href="controls.css?v=20261015-2" />
   </head>
   <body>
     <header class="topbar">
@@ -26,6 +26,12 @@
     </header>
 
     <main>
+      <div id="environmentSwitch" class="view-switch execution-switch" role="group" aria-label="ვაჭრობის გარემო">
+        <button type="button" data-environment="SIMULATION" aria-pressed="false">SIMULATION</button>
+        <button type="button" data-environment="TESTNET" aria-pressed="true" class="selected">TESTNET</button>
+        <button type="button" data-environment="LIVE" aria-pressed="false" disabled title="LIVE წვდომას ადმინისტრატორი ანიჭებს">LIVE</button>
+      </div>
+      <p id="liveTradingNotice" class="muted" role="status" hidden>LIVE ორდერების შესრულება დაბლოკილია</p>
       <section id="overviewView">
         <div class="overview-head">
           <div id="portfolioPeriod" class="view-switch portfolio-period" role="group" aria-label="შედეგების პერიოდი"><button type="button" data-hours="24" aria-pressed="true" class="selected">24 საათი</button><button type="button" data-hours="168" aria-pressed="false">7 დღე</button><button type="button" data-hours="720" aria-pressed="false" title="ბოლო 30 დღე">1 თვე</button></div>
@@ -36,10 +42,12 @@
             <button id="openNews" class="secondary-button" type="button">კრიპტო სიახლეები</button>
             <button id="openCreate" class="primary-button" type="button">+ სტრატეგიის შექმნა</button>
             <button id="openMarketCandidates" class="secondary-button" type="button" hidden>ბაზრის კანდიდატები</button>
+            <button id="pauseAllStrategies" class="secondary-button danger-action" type="button">ყველა ბოტის შეჩერება</button>
             <button id="openComparison" class="secondary-button" type="button">სტრატეგიების შედარება</button>
             <button id="openShared" class="secondary-button" type="button">გაზიარებული სტრატეგიები</button>
           </div>
         </div>
+        <p id="pauseAllMessage" role="status" hidden></p>
         <div class="strategy-list-toolbar"><span class="muted">მოგების მიხედვით</span><div id="strategyLayout" class="view-switch" role="group" aria-label="სტრატეგიების განლაგება"><button type="button" data-layout="rows" aria-pressed="false">რიგები</button><button type="button" data-layout="columns" aria-pressed="true">სვეტები</button></div></div>
         <div id="strategyList" class="strategy-list"><p class="empty-state">სტრატეგიები იტვირთება...</p></div>
       </section>
@@ -270,6 +278,7 @@
     <dialog id="usersDialog">
       <div class="dialog-head"><div><h2>მომხმარებლები</h2><p>ანგარიშები და ერთჯერადი მოწვევები</p></div><button id="closeUsers" class="icon-button" type="button" aria-label="დახურვა">×</button></div>
       <div id="usersList" class="users-list"></div>
+      <p id="usersMessage" role="status"></p>
       <button id="createInvite" class="primary-button submit-button" type="button">მოწვევის კოდის შექმნა</button>
       <div id="inviteResult" class="invite-result" hidden></div>
     </dialog>
@@ -286,6 +295,6 @@
     </nav>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
     <script src="select-controls.js?v=20261014-2" defer></script>
-    <script src="app.js?v=20261014-5" defer></script>
+    <script src="app.js?v=20261015-2" defer></script>
   </body>
 </html>

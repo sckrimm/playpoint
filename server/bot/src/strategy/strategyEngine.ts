@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
-import type { OrderExecutionService, StrategyConfig } from "../types/strategy.js";
+import type { ExecutedLevelRecord, OrderExecutionService, StrategyConfig } from "../types/strategy.js";
 import type { StrategyStore } from "../database/repository.js";
 import { money, quantity } from "../utils/format.js";
 import { telegramAlerts } from "../services/telegramAlertService.js";
+import { isFreshMarketEvent, OrderSubmissionBlockedError } from "../services/marketSafety.js";
+
+export function needsOrderReconciliation(level: ExecutedLevelRecord): boolean {
+  return Boolean(level.clientOrderId && (level.status === "EXECUTING" ||
+    (level.status === "FAILED" && level.errorMessage?.startsWith("[NO_AUTO_RETRY]"))));
+}
 
 export class StrategyEngine {
   private evaluationQueue: Promise<void> = Promise.resolve();
@@ -41,7 +47,7 @@ export class StrategyEngine {
   }
 
   reconcilePendingOrders(): Promise<void> {
-    this.evaluationQueue = this.evaluationQueue.then(() => this.reconcilePendingOrdersNow());
+    this.evaluationQueue = this.evaluationQueue.catch(() => {}).then(() => this.reconcilePendingOrdersNow());
     return this.evaluationQueue;
   }
 
@@ -51,8 +57,7 @@ export class StrategyEngine {
     const strategyId = this.strategyId;
     const strategy = await this.repository.getById(strategyId);
     const levels = await this.repository.getLevels(strategyId);
-    const pending = levels.filter((level) => level.clientOrderId &&
-      (level.status === "EXECUTING" || (level.status === "FAILED" && level.errorMessage?.startsWith("[NO_AUTO_RETRY]"))));
+    const pending = levels.filter(needsOrderReconciliation);
     for (const level of pending) {
       const clientOrderId = level.clientOrderId!;
       try {
@@ -79,14 +84,25 @@ export class StrategyEngine {
     }
   }
 
-  onPrice(price: number): Promise<void> {
-    this.evaluationQueue = this.evaluationQueue.then(() => this.evaluate(price));
+  onPrice(price: number, eventTime?: Date): Promise<void> {
+    const timestamp = eventTime?.getTime();
+    this.evaluationQueue = this.evaluationQueue.catch(() => {}).then(() => this.evaluate(price, timestamp));
     return this.evaluationQueue;
   }
 
-  private async evaluate(price: number): Promise<void> {
+  private marketIsSafe(eventTime: number | undefined): boolean {
+    return (this.orders.environment === "SIMULATION" && eventTime === undefined) || isFreshMarketEvent(eventTime);
+  }
+
+  private async canSubmit(strategyId: number, eventTime: number | undefined): Promise<boolean> {
+    const strategy = await this.repository.getById(strategyId);
+    return strategy.status === "ACTIVE" && this.marketIsSafe(eventTime);
+  }
+
+  private async evaluate(price: number, eventTime: number | undefined): Promise<void> {
     if (!Number.isFinite(price) || price <= 0) throw new Error("Price must be a positive number");
     if (this.strategyId === null) throw new Error("Strategy engine is not initialized");
+    if (!this.marketIsSafe(eventTime)) return;
     const strategy = await this.repository.getById(this.strategyId);
     if (strategy.status !== "ACTIVE") return;
     if (this.verbose) console.log(`\n${strategy.symbol} | Current: ${money(price)} | Initial: ${money(strategy.initialEntryPrice)} | Average: ${money(strategy.averageEntryPrice)}`);
@@ -107,9 +123,13 @@ export class StrategyEngine {
       if (quoteAmount <= 0) continue;
       const clientOrderId = this.clientOrderId(strategy.id, "BUY", level.levelPercent);
       if (!await this.repository.claimLevel(strategy.id, "BUY", level.levelPercent, clientOrderId)) continue;
+      if (!await this.canSubmit(strategy.id, eventTime)) {
+        await this.repository.releaseLevel(strategy.id, "BUY", level.levelPercent, clientOrderId);
+        return;
+      }
       executedAny = true;
       try {
-        const order = await this.orders.buy(strategy.symbol, price, quoteAmount, clientOrderId);
+        const order = await this.orders.buy(strategy.symbol, price, quoteAmount, clientOrderId, () => this.canSubmit(strategy.id, eventTime));
         await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
         void this.notify([
           `BUY შესრულდა [${this.orders.environment}]`,
@@ -127,10 +147,19 @@ export class StrategyEngine {
           `Estimated asset received: ${quantity(order.assetQuantity)}`,
         ].join("\n"));
       } catch (error) {
+        if (error instanceof OrderSubmissionBlockedError) {
+          await this.repository.releaseLevel(strategy.id, "BUY", level.levelPercent, clientOrderId);
+          return;
+        }
         await this.repository.failLevel(strategy.id, "BUY", level.levelPercent, error);
         const message = error instanceof Error ? error.message : String(error);
         void this.notify(`BUY შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: -${level.levelPercent}%\n${message}`);
         console.error(`BUY -${level.levelPercent}% failed safely`, message);
+        if (this.orders.environment === "TESTNET") {
+          await this.repository.setStrategyStatus(strategy.id, "PAUSED");
+          void this.notify(`${strategy.symbol} · სტრატეგია #${strategy.id} შეჩერებულია API შეცდომის შემდეგ; განახლებამდე გადაამოწმე ორდერი`);
+          return;
+        }
       }
     }
 
@@ -146,9 +175,13 @@ export class StrategyEngine {
       if (assetQuantity <= 0 || current.totalAssetQuantity - assetQuantity + 1e-12 < minimumReserveQuantity) continue;
       const clientOrderId = this.clientOrderId(strategy.id, "SELL", level.levelPercent);
       if (!await this.repository.claimLevel(strategy.id, "SELL", level.levelPercent, clientOrderId)) continue;
+      if (!await this.canSubmit(strategy.id, eventTime)) {
+        await this.repository.releaseLevel(strategy.id, "SELL", level.levelPercent, clientOrderId);
+        return;
+      }
       executedAny = true;
       try {
-        const order = await this.orders.sell(strategy.symbol, price, assetQuantity, clientOrderId);
+        const order = await this.orders.sell(strategy.symbol, price, assetQuantity, clientOrderId, () => this.canSubmit(strategy.id, eventTime));
         await this.repository.completeSell(strategy.id, level.levelPercent, order.price, order.quoteAmount,
           order.assetQuantity, minimumReserveQuantity, order.orderId);
         void this.notify([
@@ -167,10 +200,19 @@ export class StrategyEngine {
           `Estimated proceeds: ${money(order.quoteAmount)}`,
         ].join("\n"));
       } catch (error) {
+        if (error instanceof OrderSubmissionBlockedError) {
+          await this.repository.releaseLevel(strategy.id, "SELL", level.levelPercent, clientOrderId);
+          return;
+        }
         await this.repository.failLevel(strategy.id, "SELL", level.levelPercent, error);
         const message = error instanceof Error ? error.message : String(error);
         void this.notify(`SELL შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: +${level.levelPercent}%\n${message}`);
         console.error(`SELL +${level.levelPercent}% failed safely`, message);
+        if (this.orders.environment === "TESTNET") {
+          await this.repository.setStrategyStatus(strategy.id, "PAUSED");
+          void this.notify(`${strategy.symbol} · სტრატეგია #${strategy.id} შეჩერებულია API შეცდომის შემდეგ; განახლებამდე გადაამოწმე ორდერი`);
+          return;
+        }
       }
     }
     if (!executedAny && this.verbose) console.log("No action.");

@@ -184,7 +184,16 @@
 }
 
 .mobile-navigation { display: none; }
+.execution-switch { width: max-content; max-width: 100%; margin-bottom: 20px; }
+.execution-switch button { min-height: 40px; font-size: 12px; }
+.user-row { flex-wrap: wrap; align-items: center; }
+.user-live-access { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; }
+.user-live-access input { width: 18px; height: 18px; margin: 0; accent-color: var(--control-accent); }
+:root #environmentSwitch button:disabled { background: transparent; color: var(--control-muted); }
+:root #pauseAllStrategies { color: var(--control-error); border-color: var(--control-error); }
 @media (max-width: 640px) {
+  .execution-switch { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .execution-switch button { padding: 8px 4px; font-size: 11px; }
   main { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
   .overview-actions :is(#openNews, #openComparison, #openShared) { display: none; }
   .mobile-navigation {

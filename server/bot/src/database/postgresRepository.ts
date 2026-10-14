@@ -16,8 +16,8 @@ type PgStrategyRow = {
 export class PostgresStrategyRepository implements StrategyStore {
   private readonly pool: Pool;
 
-  constructor(connectionString: string) {
-    this.pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 5 });
+  constructor(connectionString: string, pool?: Pool) {
+    this.pool = pool ?? new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 5 });
   }
 
   async initialize(): Promise<void> {
@@ -215,6 +215,13 @@ export class PostgresStrategyRepository implements StrategyStore {
       WHERE id = $2 AND status IN ('ACTIVE', 'PAUSED')`, [status, id]);
     if (result.rowCount !== 1) throw new Error(`Strategy ${id} is not active or paused`);
     return this.getById(id);
+  }
+
+  async pauseStrategies(ids: number[]): Promise<number> {
+    if (!ids.length) return 0;
+    const result = await this.pool.query(`UPDATE bot_strategies SET status = 'PAUSED', updated_at = NOW()
+      WHERE status = 'ACTIVE' AND id IN (${ids.map((_, index) => `$${index + 1}`).join(",")})`, ids);
+    return result.rowCount ?? 0;
   }
 
   async archiveStrategy(id: number): Promise<StrategyRecord> {

@@ -87,8 +87,8 @@ export interface OrderExecutionResult {
 
 export interface OrderExecutionService {
   readonly environment: Exclude<ExecutionEnvironment, "LIVE">;
-  buy(symbol: string, price: number, quoteAmount: number, clientOrderId?: string): Promise<OrderExecutionResult>;
-  sell(symbol: string, price: number, assetQuantity: number, clientOrderId?: string): Promise<OrderExecutionResult>;
+  buy(symbol: string, price: number, quoteAmount: number, clientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult>;
+  sell(symbol: string, price: number, assetQuantity: number, clientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult>;
   reconcileOrder?(symbol: string, side: LevelSide, clientOrderId: string): Promise<OrderExecutionResult | null>;
 }
 

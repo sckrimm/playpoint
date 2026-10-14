@@ -93,6 +93,13 @@ export class StrategyRepository implements StrategyStore {
     return this.getById(id);
   }
 
+  async pauseStrategies(ids: number[]): Promise<number> {
+    if (!ids.length) return 0;
+    return this.db.prepare(`UPDATE strategies SET status = 'PAUSED', updated_at = ?
+      WHERE status = 'ACTIVE' AND id IN (${ids.map(() => "?").join(",")})`)
+      .run(new Date().toISOString(), ...ids).changes;
+  }
+
   async archiveStrategy(id: number): Promise<StrategyRecord> {
     const result = this.db.prepare(`UPDATE strategies SET status = 'COMPLETED', updated_at = ?
       WHERE id = ? AND status IN ('ACTIVE', 'PAUSED')`).run(new Date().toISOString(), id);

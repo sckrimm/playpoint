@@ -33,7 +33,7 @@ test("invites, sessions and strategy ownership isolate two accounts", async () =
   const previousKey = process.env.BOT_CREDENTIALS_ENCRYPTION_KEY;
   process.env.BOT_CREDENTIALS_ENCRYPTION_KEY = "12".repeat(32);
   const db = newDb();
-  db.public.none(`CREATE TABLE bot_strategies (id BIGSERIAL PRIMARY KEY, symbol TEXT, final_reserve_percent NUMERIC, status TEXT, execution_environment TEXT);
+  db.public.none(`CREATE TABLE bot_strategies (id BIGSERIAL PRIMARY KEY, symbol TEXT, final_reserve_percent NUMERIC, status TEXT, execution_environment TEXT, updated_at TIMESTAMPTZ);
     CREATE TABLE bot_strategy_templates (id BIGSERIAL PRIMARY KEY, name TEXT UNIQUE);
     CREATE TABLE bot_executed_levels (strategy_id BIGINT, status TEXT);
     INSERT INTO bot_strategies (symbol, final_reserve_percent, status, execution_environment) VALUES ('BTCUSDT', 20, 'ACTIVE', 'SIMULATION');`);
@@ -45,6 +45,7 @@ test("invites, sessions and strategy ownership isolate two accounts", async () =
     const admin = (await users.authenticate("owner", "owner-password-test"))!;
     const invitation = await users.createInvite(admin.id);
     const friend = await users.register(invitation.code, "friend", "friend-password-test");
+    assert.equal(friend.liveAccess, false);
     await users.saveCredentials(admin.id, "TESTNET", { apiKey: "admin-api-key", apiSecret: "admin-secret" });
     await users.saveCredentials(friend.id, "TESTNET", { apiKey: "friend-api-key", apiSecret: "friend-secret" });
     assert.equal((await users.credentials(friend.id, "TESTNET"))?.apiKey, "friend-api-key");
@@ -73,6 +74,24 @@ test("invites, sessions and strategy ownership isolate two accounts", async () =
     assert.equal(shared.length, 1);
     assert.equal(shared[0].username, "friend");
     assert.ok(!("total_budget" in shared[0]) && !("apiKey" in shared[0]));
+    const liveToken = await users.createSession(friend.id);
+    assert.equal((await users.getSession(liveToken))?.liveAccess, false);
+    await assert.rejects(users.setLiveAccess(friend, friend.id, true));
+    await users.setLiveAccess(admin, friend.id, true);
+    const granted = (await users.getSession(liveToken))!;
+    assert.equal(granted.liveAccess, true);
+    assert.equal((await users.authenticate("friend", "friend-password-test"))?.liveAccess, true);
+    assert.equal((await users.listUsers()).find((user) => user.id === friend.id)?.liveAccess, true);
+    await pool.query("INSERT INTO bot_strategies (symbol, status, execution_environment) VALUES ('ETHUSDT', 'ACTIVE', 'LIVE')");
+    await users.assignStrategy(3, friend.id);
+    await users.assertStrategyAccess(3, granted);
+    await users.setLiveAccess(admin, friend.id, false);
+    const revoked = (await users.getSession(liveToken))!;
+    assert.equal(revoked.liveAccess, false);
+    await assert.rejects(users.assertStrategyAccess(3, revoked));
+    assert.equal((await pool.query("SELECT status FROM bot_strategies WHERE id = 3")).rows[0].status, "PAUSED");
+    assert.equal((await pool.query("SELECT status FROM bot_strategies WHERE id = 2")).rows[0].status, "ACTIVE");
+    assert.equal((await users.getSession(await users.createSession(admin.id)))?.liveAccess, true);
   } finally {
     await users.close();
     if (previousKey === undefined) delete process.env.BOT_CREDENTIALS_ENCRYPTION_KEY;

@@ -5,7 +5,7 @@ import { appConfig } from "./config/env.js";
 import { createStore } from "./database/createStore.js";
 import { SimulationOrderService } from "./services/simulationOrderService.js";
 import { BinanceTestnetOrderService } from "./services/binanceTestnetOrderService.js";
-import { StrategyEngine } from "./strategy/strategyEngine.js";
+import { needsOrderReconciliation, StrategyEngine } from "./strategy/strategyEngine.js";
 import { strategyRecordToConfig } from "./strategy/strategyConfig.js";
 import type { StrategyRecord } from "./types/strategy.js";
 import { money } from "./utils/format.js";
@@ -13,6 +13,7 @@ import { telegramAlerts } from "./services/telegramAlertService.js";
 import { getRuntimeUsers } from "./auth/runtimeUsers.js";
 import { resolveCredentials } from "./auth/accountCredentials.js";
 import { createHash } from "node:crypto";
+import { isFreshMarketEvent } from "./services/marketSafety.js";
 
 const store = await createStore();
 const users = await getRuntimeUsers();
@@ -36,14 +37,14 @@ if (telegramAlerts.configured) {
 }
 
 async function syncStrategies(): Promise<void> {
-  const active = (await store.listStrategies()).filter((strategy) =>
-    strategy.status === "ACTIVE" && strategy.executionEnvironment !== "LIVE");
-  const activeIds = new Set(active.map((strategy) => strategy.id));
-  for (const id of engines.keys()) if (!activeIds.has(id)) engines.delete(id);
+  const monitored = (await store.listStrategies()).filter((strategy) => strategy.executionEnvironment !== "LIVE");
+  const retainedIds = new Set<number>();
 
   strategiesByEnvironment.SIMULATION.clear();
   strategiesByEnvironment.TESTNET.clear();
-  for (const strategy of active) {
+  for (const strategy of monitored) {
+    if (strategy.status !== "ACTIVE" && !(await store.getLevels(strategy.id)).some(needsOrderReconciliation)) continue;
+    retainedIds.add(strategy.id);
     const owner = users ? await users.strategyOwner(strategy.id) : null;
     if (users && !owner) continue;
     let credentials;
@@ -72,10 +73,17 @@ async function syncStrategies(): Promise<void> {
       await store.saveSymbolRules(rules);
       console.log(`Watching ${strategy.symbol} strategy #${strategy.id}`);
     }
+    if (strategy.status !== "ACTIVE") continue;
     const environment = strategy.executionEnvironment as "SIMULATION" | "TESTNET";
     const grouped = strategiesByEnvironment[environment].get(strategy.symbol) ?? [];
     grouped.push(strategy);
     strategiesByEnvironment[environment].set(strategy.symbol, grouped);
+  }
+  for (const id of engines.keys()) {
+    if (!retainedIds.has(id)) {
+      engines.delete(id);
+      executorVersions.delete(id);
+    }
   }
   feeds.SIMULATION.setSymbols([...strategiesByEnvironment.SIMULATION.keys()]);
   feeds.TESTNET.setSymbols([...strategiesByEnvironment.TESTNET.keys()]);
@@ -121,6 +129,7 @@ async function refreshPersonalAccounts(): Promise<void> {
   refreshingPersonalAccounts = true;
   try {
     for (const user of await users.listUsers()) {
+      if (user.role !== "ADMIN" && !user.liveAccess) continue;
       try {
         const credentials = await users.credentials(user.id, "LIVE");
         if (!credentials) continue;
@@ -146,6 +155,7 @@ setInterval(() => {
 
 function startFeed(environment: "SIMULATION" | "TESTNET"): void {
   feeds[environment].start(async (symbol, price, eventTime) => {
+  if (!isFreshMarketEvent(eventTime.getTime())) return;
   const now = Date.now();
   const marketKey = `${environment}:${symbol}`;
   if (now - (lastPersistedAt.get(marketKey) ?? 0) >= 1_000) {
@@ -154,7 +164,7 @@ function startFeed(environment: "SIMULATION" | "TESTNET"): void {
     console.log(`[${environment}] ${symbol} ${money(price)}`);
   }
   for (const strategy of strategiesByEnvironment[environment].get(symbol) ?? []) {
-    await engines.get(strategy.id)?.onPrice(price);
+    await engines.get(strategy.id)?.onPrice(price, eventTime);
   }
   });
 }

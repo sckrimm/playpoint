@@ -9,6 +9,7 @@ export type DashboardUser = {
   id: number;
   username: string;
   role: "ADMIN" | "USER";
+  liveAccess?: boolean;
 };
 
 function hashToken(value: string): string {
@@ -77,6 +78,7 @@ export class UserAuthStore {
         PRIMARY KEY (user_id, recorded_at)
       );
       ALTER TABLE bot_users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
+      ALTER TABLE bot_users ADD COLUMN IF NOT EXISTS live_access BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE bot_strategy_templates ADD COLUMN IF NOT EXISTS owner_user_id BIGINT REFERENCES bot_users(id);
     `);
     const existing = await this.pool.query<{
@@ -109,11 +111,11 @@ export class UserAuthStore {
   }
 
   async authenticate(username: string, password: string): Promise<DashboardUser | null> {
-    const result = await this.pool.query<{ id: string; username: string; role: DashboardUser["role"]; password_hash: string; password_salt: string }>(
-      "SELECT id, username, role, password_hash, password_salt FROM bot_users WHERE username = $1", [username.trim()]);
+    const result = await this.pool.query<{ id: string; username: string; role: DashboardUser["role"]; live_access: boolean; password_hash: string; password_salt: string }>(
+      "SELECT id, username, role, live_access, password_hash, password_salt FROM bot_users WHERE username = $1", [username.trim()]);
     const row = result.rows[0];
     if (!row || !await verifyPassword(password, row.password_salt, row.password_hash)) return null;
-    return { id: Number(row.id), username: row.username, role: row.role };
+    return { id: Number(row.id), username: row.username, role: row.role, liveAccess: row.role === "ADMIN" || row.live_access };
   }
 
   async createSession(userId: number): Promise<string> {
@@ -125,11 +127,11 @@ export class UserAuthStore {
 
   async getSession(token: string | undefined): Promise<DashboardUser | null> {
     if (!token) return null;
-    const result = await this.pool.query<{ id: string; username: string; role: DashboardUser["role"] }>(`SELECT u.id, u.username, u.role
+    const result = await this.pool.query<{ id: string; username: string; role: DashboardUser["role"]; live_access: boolean }>(`SELECT u.id, u.username, u.role, u.live_access
       FROM bot_user_sessions s JOIN bot_users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > NOW()`, [hashToken(token)]);
     const row = result.rows[0];
-    return row ? { id: Number(row.id), username: row.username, role: row.role } : null;
+    return row ? { id: Number(row.id), username: row.username, role: row.role, liveAccess: row.role === "ADMIN" || row.live_access } : null;
   }
 
   async createInvite(adminId: number): Promise<{ code: string; expiresAt: string }> {
@@ -157,7 +159,7 @@ export class UserAuthStore {
       await client.query("UPDATE bot_invites SET used_by = $1, used_at = NOW() WHERE code_hash = $2",
         [user.id, invite.rows[0].code_hash]);
       await client.query("COMMIT");
-      return { id: Number(user.id), username: user.username, role: user.role };
+      return { id: Number(user.id), username: user.username, role: user.role, liveAccess: false };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -172,9 +174,13 @@ export class UserAuthStore {
   }
 
   async assertStrategyAccess(strategyId: number, user: DashboardUser, readOnly = false): Promise<void> {
-    const result = await this.pool.query("SELECT user_id FROM bot_strategy_owners WHERE strategy_id = $1", [strategyId]);
+    const result = await this.pool.query(`SELECT o.user_id, s.execution_environment FROM bot_strategy_owners o
+      JOIN bot_strategies s ON s.id = o.strategy_id WHERE o.strategy_id = $1`, [strategyId]);
     if (!result.rows[0] || (Number(result.rows[0].user_id) !== user.id && !(readOnly && user.role === "ADMIN"))) {
       throw new Error("ამ სტრატეგიაზე წვდომა არ გაქვს");
+    }
+    if (result.rows[0].execution_environment === "LIVE" && user.role !== "ADMIN" && !user.liveAccess) {
+      throw new Error("LIVE წვდომა ადმინისტრატორს უნდა სთხოვო");
     }
   }
 
@@ -187,19 +193,36 @@ export class UserAuthStore {
   }
 
   async listUsers(): Promise<Array<DashboardUser & { strategyCount: number }>> {
-    const result = await this.pool.query<{ id: string; username: string; role: DashboardUser["role"]; strategy_count: string }>(`SELECT u.id, u.username, u.role,
+    const result = await this.pool.query<{ id: string; username: string; role: DashboardUser["role"]; live_access: boolean; strategy_count: string }>(`SELECT u.id, u.username, u.role, u.live_access,
       COUNT(o.strategy_id)::text AS strategy_count FROM bot_users u
-      LEFT JOIN bot_strategy_owners o ON o.user_id = u.id GROUP BY u.id ORDER BY u.created_at`);
-    return result.rows.map((row) => ({ id: Number(row.id), username: row.username, role: row.role, strategyCount: Number(row.strategy_count) }));
+      LEFT JOIN bot_strategy_owners o ON o.user_id = u.id GROUP BY u.id, u.username, u.role, u.live_access, u.created_at ORDER BY u.created_at`);
+    return result.rows.map((row) => ({ id: Number(row.id), username: row.username, role: row.role, liveAccess: row.role === "ADMIN" || row.live_access, strategyCount: Number(row.strategy_count) }));
+  }
+
+  async setLiveAccess(admin: DashboardUser, userId: number, enabled: boolean): Promise<void> {
+    if (admin.role !== "ADMIN") throw new Error("LIVE წვდომას მხოლოდ ადმინისტრატორი მართავს");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query("UPDATE bot_users SET live_access = $1 WHERE id = $2 AND role = 'USER'", [enabled, userId]);
+      if (result.rowCount !== 1) throw new Error("მომხმარებელი ვერ მოიძებნა");
+      if (!enabled) await client.query(`UPDATE bot_strategies SET status = 'PAUSED', updated_at = NOW()
+        WHERE execution_environment = 'LIVE' AND status = 'ACTIVE'
+        AND id IN (SELECT strategy_id FROM bot_strategy_owners WHERE user_id = $1)`, [userId]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
   }
 
   async close(): Promise<void> { await this.pool.end(); }
 
   async strategyOwner(strategyId: number): Promise<DashboardUser | null> {
-    const result = await this.pool.query(`SELECT u.id, u.username, u.role FROM bot_strategy_owners o
+    const result = await this.pool.query(`SELECT u.id, u.username, u.role, u.live_access FROM bot_strategy_owners o
       JOIN bot_users u ON u.id = o.user_id WHERE o.strategy_id = $1`, [strategyId]);
     const row = result.rows[0];
-    return row ? { id: Number(row.id), username: row.username, role: row.role } : null;
+    return row ? { id: Number(row.id), username: row.username, role: row.role, liveAccess: row.role === "ADMIN" || row.live_access } : null;
   }
 
   async credentials(userId: number, environment: "LIVE" | "TESTNET"): Promise<BinanceCredentials | null> {

@@ -56,6 +56,7 @@ let comparisonData = null;
 let comparisonSelection = new Set();
 let backtestDays = 30;
 let sessionUser = null;
+let selectedEnvironment = "TESTNET";
 let newsItems = [];
 let overviewAccountBalance = null;
 let overviewAccountChange = 0;
@@ -354,6 +355,7 @@ function updateNavigationState(view, strategyId = null, mode = "push") {
 }
 
 function showOverview({ historyMode = "push" } = {}) {
+  updateEnvironmentControls();
   chartRequest += 1;
   resetPriceChart();
   selectedStrategyId = null;
@@ -403,7 +405,7 @@ function renderPortfolioSummary(strategies) {
       ${newBots ? `<span class="portfolio-label">${newBots} ახალი ბოტი — შექმნიდან</span>` : ""}
     </div>
     <div class="portfolio-balance">
-      <span class="portfolio-label">Binance Spot · USDT</span>
+      <span class="portfolio-label">${selectedEnvironment === "TESTNET" ? "Binance Testnet" : selectedEnvironment === "LIVE" ? "Binance Spot" : "SIMULATION"} · USDT</span>
       <div class="portfolio-total-line ${performanceClass(overviewAccountChange)}"><strong class="portfolio-balance-value">${overviewAccountBalance === null ? "—" : `${arrow(overviewAccountChange)} ${money.format(overviewAccountBalance)}`}</strong><small title="USDT ბალანსის ცვლილება; მოიცავს ჩარიცხვებსა და გატანებს">${formatPercent(overviewAccountPercent)}</small></div>
       ${overviewAccountBalance === null ? '<span class="portfolio-label">ბალანსი მიუწვდომელია</span>' : ""}
       <span class="portfolio-bot-balance">ბოტების ბალანსი <strong>${balanceComplete ? money.format(balance) : "—"}</strong> <small class="${resultClass}">${complete ? formatPercent(percentFor(priced)) : "—"}</small></span>
@@ -416,7 +418,7 @@ function renderOverview(strategies) {
   if (!strategies.length) {
     list.innerHTML = showingArchived
       ? '<div class="empty-state"><strong>არქივი ცარიელია</strong><span>დასრულებული სტრატეგიები აქ გამოჩნდება.</span></div>'
-      : '<div class="empty-state"><strong>სტრატეგიები ჯერ არ არის</strong><span>დასაწყებად შექმენი SIMULATION სტრატეგია.</span></div>';
+      : `<div class="empty-state"><strong>${selectedEnvironment} ბოტები ჯერ არ არის</strong></div>`;
     return;
   }
   const rankedStrategies = [...strategies].sort((a, b) => {
@@ -452,7 +454,7 @@ function renderOverview(strategies) {
         <div><span>ბიუჯეტი</span><strong>${money.format(strategy.totalBudget)}</strong></div>
         <div><span>ინვესტირებული</span><strong>${money.format(strategy.totalInvested)}</strong></div>
       </div>
-      <div class="strategy-card-foot"><span>${strategy.executionEnvironment}</span>${strategy.status === "COMPLETED" ? '<span class="archived-label">არქივშია</span>' : `<button class="card-action" data-action="toggle" type="button">${strategy.status === "ACTIVE" ? "შეჩერება" : "გააქტიურება"}</button>`}</div>
+      <div class="strategy-card-foot"><span>${strategy.executionEnvironment}</span>${strategy.status === "COMPLETED" ? '<span class="archived-label">არქივშია</span>' : `<button class="card-action" data-action="toggle" type="button" ${strategy.executionEnvironment === "LIVE" && strategy.status !== "ACTIVE" ? 'disabled title="LIVE ორდერების შესრულება დაბლოკილია"' : ""}>${strategy.status === "ACTIVE" ? "შეჩერება" : "გააქტიურება"}</button>`}</div>
     </article>`;
   }).join("");
 
@@ -471,12 +473,12 @@ function renderOverview(strategies) {
 async function loadOverview() {
   const request = ++overviewRequest;
   try {
-    const endpoint = `${showingArchived ? "/api/strategies/archived" : "/api/strategies"}?hours=${portfolioPeriodHours}`;
+    const endpoint = `${showingArchived ? "/api/strategies/archived" : "/api/strategies"}?hours=${portfolioPeriodHours}&environment=${selectedEnvironment}`;
     const [overview, account] = await Promise.all([
-      api(endpoint), api(`/api/account-summary?hours=${portfolioPeriodHours}`).catch(() => null),
+      api(endpoint), api(`/api/account-summary?hours=${portfolioPeriodHours}&environment=${selectedEnvironment}`).catch(() => null),
     ]);
     if (request !== overviewRequest) return;
-    const strategies = overview.strategies;
+    const strategies = overview.strategies.filter((strategy) => strategy.executionEnvironment === selectedEnvironment);
     updateOverviewAccount(account);
     if (!showingArchived) activeStrategies = strategies;
     renderOverview(strategies);
@@ -650,7 +652,7 @@ async function loadComparison(symbol) {
   byId("backtestState").className = "backtest-state";
   byId("backtestState").textContent = "აირჩიე პერიოდი და გაუშვი ისტორიული ტესტი.";
   try {
-    renderComparison(await api(`/api/strategies/comparison?symbol=${encodeURIComponent(symbol)}`));
+    renderComparison(await api(`/api/strategies/comparison?symbol=${encodeURIComponent(symbol)}&environment=${selectedEnvironment}`));
     byId("error").hidden = true;
   } catch (error) { showError(error); }
 }
@@ -688,7 +690,7 @@ async function runBacktest() {
   state.textContent = `${backtestDays} დღის Binance მონაცემები იტვირთება და სტრატეგიები მოწმდება...`;
   byId("runBacktest").disabled = true;
   try {
-    const data = await api(`/api/strategies/backtest?symbol=${encodeURIComponent(symbol)}&days=${backtestDays}`);
+    const data = await api(`/api/strategies/backtest?symbol=${encodeURIComponent(symbol)}&days=${backtestDays}&environment=${selectedEnvironment}`);
     renderBacktest(data);
     state.className = "backtest-state";
     state.textContent = "Backtest დასრულდა. შედეგები ეფუძნება საათობრივ OHLC ფასებს და არ ითვალისწინებს საკომისიოსა და slippage-ს.";
@@ -715,7 +717,7 @@ async function openCreateForComparison() {
 }
 
 async function openComparison({ historyMode = "push" } = {}) {
-  if (!activeStrategies.length) activeStrategies = (await api("/api/strategies")).strategies;
+  if (!activeStrategies.length) activeStrategies = (await api(`/api/strategies?environment=${selectedEnvironment}`)).strategies;
   const counts = activeStrategies.reduce((result, strategy) => result.set(strategy.symbol, (result.get(strategy.symbol) ?? 0) + 1), new Map());
   const symbols = [...counts.keys()].sort((a, b) => (counts.get(b) - counts.get(a)) || a.localeCompare(b));
   const select = byId("comparisonSymbol");
@@ -835,6 +837,7 @@ function renderDetail(data) {
   selectedStrategy = strategy;
   selectedStrategyData = data;
   byId("mode").textContent = strategy.executionEnvironment;
+  byId("toggleStatus").disabled = strategy.executionEnvironment === "LIVE" && strategy.status !== "ACTIVE";
   byId("symbol").textContent = strategy.symbol;
   byId("status").textContent = labelStatus(strategy.status);
   byId("toggleStatus").classList.toggle("paused", strategy.status === "PAUSED");
@@ -1026,6 +1029,7 @@ function prepareCreateForm(strategy = null) {
   editingStrategyId = strategy?.id ?? null;
   const form = byId("createForm");
   form.reset();
+  form.elements.executionEnvironment.value = selectedEnvironment === "LIVE" ? "SIMULATION" : selectedEnvironment;
   form.elements.executionEnvironment.disabled = false;
   byId("formError").hidden = true;
   byId("formTitle").textContent = strategy ? "სტრატეგიის რედაქტირება" : "სტრატეგიის შექმნა";
@@ -1083,12 +1087,60 @@ function showError(error) {
   byId("error").hidden = false;
 }
 
+function updateEnvironmentControls() {
+  const canViewLive = sessionUser?.role === "ADMIN" || sessionUser?.liveAccess === true;
+  const credentialsEnvironment = byId("credentialsForm").elements.environment;
+  credentialsEnvironment.querySelector('option[value="LIVE"]').disabled = !canViewLive;
+  if (!canViewLive && credentialsEnvironment.value === "LIVE") credentialsEnvironment.value = "TESTNET";
+  window.refreshSelectControls?.();
+  byId("environmentSwitch").querySelectorAll("button").forEach((button) => {
+    const current = button.dataset.environment === selectedEnvironment;
+    button.classList.toggle("selected", current);
+    button.setAttribute("aria-pressed", String(current));
+    button.disabled = button.dataset.environment === "LIVE" && !canViewLive;
+  });
+  byId("liveTradingNotice").hidden = selectedEnvironment !== "LIVE";
+  byId("mode").textContent = selectedEnvironment;
+  [byId("openCreate"), byId("comparisonCreate"), byId("mobileNavigation").querySelector('[data-action="openCreate"]')].forEach((button) => {
+    button.disabled = selectedEnvironment === "LIVE";
+    button.title = selectedEnvironment === "LIVE" ? "LIVE ორდერების შესრულება დაბლოკილია" : "სტრატეგიის შექმნა";
+  });
+}
+
+byId("environmentSwitch").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-environment]");
+  if (!button || button.disabled || button.dataset.environment === selectedEnvironment) return;
+  selectedEnvironment = button.dataset.environment;
+  activeStrategies = [];
+  overviewAccountBalance = null;
+  overviewRequest++;
+  try { localStorage.setItem(`spot-environment:${sessionUser.username}`, selectedEnvironment); } catch {}
+  updateEnvironmentControls();
+  byId("strategyList").replaceChildren();
+  byId("portfolioSummary").textContent = "ბალანსი იტვირთება...";
+  showOverview();
+});
+
 byId("mobileNavigation").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
   if (button) byId(button.dataset.action).click();
 });
 
+byId("pauseAllStrategies").addEventListener("click", async () => {
+  if (!confirm("შეჩერდეს შენი ყველა აქტიური ბოტი? აქტივები არ გაიყიდება. უკვე გაგზავნილი ორდერები შეიძლება დასრულდეს. ხელახლა ჩართვა თითოეული ბოტიდან შეგეძლება.")) return;
+  const button = byId("pauseAllStrategies");
+  button.disabled = true;
+  try {
+    const { pausedCount } = await api("/api/strategies/pause-all", { method: "POST" });
+    byId("pauseAllMessage").textContent = `შეჩერდა ${pausedCount} ბოტი. აქტივების გაყიდვა არ მოთხოვნილა.`;
+    byId("pauseAllMessage").hidden = false;
+    await loadOverview();
+  } catch (error) { showError(error); }
+  finally { button.disabled = false; }
+});
+
 byId("openCreate").addEventListener("click", async () => {
+  if (selectedEnvironment === "LIVE") return;
   byId("createDialog").showModal();
   try { await Promise.all([loadSymbols(), loadTemplates()]); prepareCreateForm(); } catch (error) { byId("formError").textContent = error.message; byId("formError").hidden = false; }
 });
@@ -1233,7 +1285,18 @@ byId("openUsers").addEventListener("click", async () => {
   byId("inviteResult").hidden = true;
   try {
     const { users } = await api("/api/admin/users");
-    byId("usersList").innerHTML = users.map((user) => `<div class="user-row"><strong>${escapeHtml(user.username)}</strong><span>${user.role} · ${user.strategyCount} სტრატეგია</span><button type="button" class="secondary-button" data-user="${user.id}">სტრატეგიები</button><div class="admin-strategies" id="adminStrategies-${user.id}"></div></div>`).join("");
+    byId("usersMessage").textContent = "";
+    byId("usersList").innerHTML = users.map((user) => `<div class="user-row"><strong>${escapeHtml(user.username)}</strong><span>${user.role} · ${user.strategyCount} სტრატეგია</span>${user.role === "USER" ? `<label class="user-live-access"><input type="checkbox" data-live-user="${user.id}" ${user.liveAccess ? "checked" : ""}>LIVE წვდომა</label>` : ""}<button type="button" class="secondary-button" data-user="${user.id}">სტრატეგიები</button><div class="admin-strategies" id="adminStrategies-${user.id}"></div></div>`).join("");
+    byId("usersList").querySelectorAll("[data-live-user]").forEach((checkbox) => checkbox.addEventListener("change", async () => {
+      const enabled = checkbox.checked;
+      if (!enabled && !confirm("მოეხსნას LIVE წვდომა? მომხმარებლის აქტიური LIVE ბოტები შეჩერდება, აქტივები არ გაიყიდება.")) { checkbox.checked = true; return; }
+      checkbox.disabled = true;
+      try {
+        await api(`/api/admin/users/${checkbox.dataset.liveUser}/live-access`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) });
+        byId("usersMessage").textContent = enabled ? "LIVE წვდომა მინიჭებულია; რეალური ორდერები კვლავ დაბლოკილია." : "LIVE წვდომა მოხსნილია.";
+      } catch (error) { checkbox.checked = !enabled; byId("usersMessage").textContent = error.message; }
+      finally { checkbox.disabled = false; }
+    }));
     byId("usersList").querySelectorAll("[data-user]").forEach((button) => button.addEventListener("click", async () => {
       try {
         const { strategies } = await api(`/api/admin/users/${button.dataset.user}/strategies`);
@@ -1409,19 +1472,39 @@ window.addEventListener("popstate", (event) => {
   else if (view === "sharedView") void openShared({ historyMode: "none" });
   else showOverview({ historyMode: "none" });
 });
-api("/api/session").then(({ user }) => {
+function applySessionUser(user) {
+  const firstSession = sessionUser === null;
   sessionUser = user;
+  if (firstSession) {
+    try {
+      const saved = localStorage.getItem(`spot-environment:${user.username}`);
+      if (["SIMULATION", "TESTNET", "LIVE"].includes(saved)) selectedEnvironment = saved;
+    } catch {}
+  }
+  if (selectedEnvironment === "LIVE" && user.role !== "ADMIN" && user.liveAccess !== true) {
+    selectedEnvironment = "TESTNET";
+    activeStrategies = [];
+    overviewRequest++;
+    if (byId("createDialog").open) byId("createDialog").close();
+    showOverview({ historyMode: "replace" });
+  }
   byId("currentUser").textContent = user.username;
   byId("openUsers").hidden = user.role !== "ADMIN";
   byId("openReadiness").hidden = user.role !== "ADMIN";
   byId("openMarketCandidates").hidden = user.role !== "ADMIN";
+  updateEnvironmentControls();
+}
+api("/api/session").then(({ user }) => {
+  applySessionUser(user);
   if (new URLSearchParams(window.location.search).get("setup") === "1") void openProfile();
+  void loadOverview();
 }).catch(showError);
-loadOverview();
 setInterval(() => {
+  if (!sessionUser) return;
   if (selectedStrategyId) return refreshDetail();
   if (!byId("overviewView").hidden) return loadOverview();
 }, 3_000);
 setInterval(() => {
+  void api("/api/session").then(({ user }) => applySessionUser(user)).catch(showError);
   if (!byId("readinessView").hidden) void loadReadiness();
 }, 30_000);

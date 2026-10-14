@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 import type { AccountBalance, OrderExecutionResult, OrderExecutionService } from "../types/strategy.js";
+import { OrderSubmissionBlockedError } from "./marketSafety.js";
 
 const TESTNET_BASE_URL = "https://testnet.binance.vision";
 
@@ -37,17 +38,17 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     if (!apiKey || !apiSecret) throw new Error("Binance Spot Testnet API მონაცემები მითითებული არ არის");
   }
 
-  async buy(symbol: string, _price: number, quoteAmount: number, clientOrderId?: string): Promise<OrderExecutionResult> {
+  async buy(symbol: string, _price: number, quoteAmount: number, clientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult> {
     if (!Number.isFinite(quoteAmount) || quoteAmount <= 0) throw new Error("TESTNET BUY თანხა ნულზე მეტი უნდა იყოს");
-    return this.placeMarketOrder(symbol, "BUY", { quoteOrderQty: this.decimal(quoteAmount, 8) }, clientOrderId);
+    return this.placeMarketOrder(symbol, "BUY", { quoteOrderQty: this.decimal(quoteAmount, 8) }, clientOrderId, canSubmit);
   }
 
-  async sell(symbol: string, _price: number, assetQuantity: number, clientOrderId?: string): Promise<OrderExecutionResult> {
+  async sell(symbol: string, _price: number, assetQuantity: number, clientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult> {
     if (!Number.isFinite(assetQuantity) || assetQuantity <= 0) throw new Error("TESTNET SELL რაოდენობა ნულზე მეტი უნდა იყოს");
     const { stepSize } = await this.getOrderRules(symbol);
     const quantity = this.floorToStep(assetQuantity, stepSize);
     if (quantity <= 0) throw new BinanceTestnetOrderError("FILTER_REJECTED", "გასაყიდი რაოდენობა Binance-ის stepSize-ზე ნაკლებია");
-    return this.placeMarketOrder(symbol, "SELL", { quantity: this.decimal(quantity, this.decimals(stepSize)) }, clientOrderId);
+    return this.placeMarketOrder(symbol, "SELL", { quantity: this.decimal(quantity, this.decimals(stepSize)) }, clientOrderId, canSubmit);
   }
 
   async getBalances(): Promise<AccountBalance[]> {
@@ -104,8 +105,10 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     }
   }
 
-  private async placeMarketOrder(symbol: string, side: "BUY" | "SELL", amount: Record<string, string>, requestedClientOrderId?: string): Promise<OrderExecutionResult> {
+  private async placeMarketOrder(symbol: string, side: "BUY" | "SELL", amount: Record<string, string>, requestedClientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult> {
     await this.syncServerTime();
+    // Recheck after exchange preflight calls, before sending an irreversible order.
+    if (canSubmit && !await canSubmit()) throw new OrderSubmissionBlockedError();
     const clientOrderId = requestedClientOrderId ?? `bot_${side.toLowerCase()}_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
     const params = { symbol, side, type: "MARKET", newOrderRespType: "FULL", newClientOrderId: clientOrderId, ...amount };
     let payload: OrderPayload;

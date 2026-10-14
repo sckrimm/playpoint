@@ -9,6 +9,7 @@ export interface StrategyStore {
   listArchivedStrategies(): Promise<StrategyRecord[]>;
   updateStrategy(id: number, config: StrategyConfig): Promise<StrategyRecord>;
   setStrategyStatus(id: number, status: "ACTIVE" | "PAUSED"): Promise<StrategyRecord>;
+  pauseStrategies(ids: number[]): Promise<number>;
   archiveStrategy(id: number): Promise<StrategyRecord>;
   resetSimulationStrategyById(id: number): Promise<StrategyRecord>;
   listStrategyTemplates(): Promise<StrategyTemplateRecord[]>;

@@ -144,6 +144,7 @@ describe("order duplication protection", () => {
     const strategy = await store.createStrategy(config("TESTNET"));
     await store.claimLevel(strategy.id, "BUY", 10, "persisted-client");
     await store.failLevel(strategy.id, "BUY", 10, new Error("[NO_AUTO_RETRY] response lost"));
+    await store.setStrategyStatus(strategy.id, "PAUSED");
     const orders: OrderExecutionService = {
       environment: "TESTNET",
       buy: async () => { throw new Error("not used"); },
@@ -160,6 +161,7 @@ describe("order duplication protection", () => {
     assert.equal(await store.countOrders(strategy.id), 1);
     assert.equal((await store.getById(strategy.id)).totalInvested, 900);
     assert.equal((await store.getLevels(strategy.id))[0]!.status, "EXECUTED");
+    assert.equal((await store.getById(strategy.id)).status, "PAUSED");
   });
 });
 
