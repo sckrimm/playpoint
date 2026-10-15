@@ -191,6 +191,43 @@
 .user-live-access input { width: 18px; height: 18px; margin: 0; accent-color: var(--control-accent); }
 .portfolio-overview { width: 100%; }
 .portfolio-overview .portfolio-period { margin-bottom: 14px; }
+
+:root #portfolioPeriod {
+  display: inline-flex;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+:root #portfolioPeriod button {
+  position: relative;
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--control-muted);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+:root #portfolioPeriod button::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: transparent;
+}
+:root #portfolioPeriod button.selected { color: var(--control-text); }
+:root #portfolioPeriod button.selected::after { background: var(--control-muted); }
+@media (hover: hover) {
+  :root #portfolioPeriod button:hover { color: var(--control-text); background: transparent; }
+}
 .portfolio-summary { gap: 12px; padding-bottom: 0; border: 0; align-items: stretch; }
 .portfolio-summary.has-assigned-balance { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .portfolio-results, .portfolio-balance, .assigned-balance {
