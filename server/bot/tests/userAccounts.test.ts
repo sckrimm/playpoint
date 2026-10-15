@@ -32,8 +32,9 @@ test("a member without credentials cannot fall back to the administrator's envir
 test("invites, sessions and strategy ownership isolate two accounts", async () => {
   const previousKey = process.env.BOT_CREDENTIALS_ENCRYPTION_KEY;
   process.env.BOT_CREDENTIALS_ENCRYPTION_KEY = "12".repeat(32);
-  const db = newDb();
-  db.public.none(`CREATE TABLE bot_strategies (id BIGSERIAL PRIMARY KEY, symbol TEXT, final_reserve_percent NUMERIC, status TEXT, execution_environment TEXT, updated_at TIMESTAMPTZ);
+  // pg-mem otherwise rejects the repeated CREATE TABLE IF NOT EXISTS restart check.
+  const db = newDb({ noAstCoverageCheck: true });
+  db.public.none(`CREATE TABLE bot_strategies (id BIGSERIAL PRIMARY KEY, symbol TEXT, final_reserve_percent NUMERIC, status TEXT, execution_environment TEXT, updated_at TIMESTAMPTZ, total_budget NUMERIC DEFAULT 0, withdrawn_profit NUMERIC DEFAULT 0);
     CREATE TABLE bot_strategy_templates (id BIGSERIAL PRIMARY KEY, name TEXT UNIQUE);
     CREATE TABLE bot_executed_levels (strategy_id BIGINT, status TEXT);
     INSERT INTO bot_strategies (symbol, final_reserve_percent, status, execution_environment) VALUES ('BTCUSDT', 20, 'ACTIVE', 'SIMULATION');`);
@@ -46,6 +47,8 @@ test("invites, sessions and strategy ownership isolate two accounts", async () =
     const invitation = await users.createInvite(admin.id);
     const friend = await users.register(invitation.code, "friend", "friend-password-test");
     assert.equal(friend.liveAccess, false);
+    assert.equal(friend.testnetAccess, false);
+    assert.equal((await users.wallets.summary(friend.id)).simulation.available, 1000);
     await users.saveCredentials(admin.id, "TESTNET", { apiKey: "admin-api-key", apiSecret: "admin-secret" });
     await users.saveCredentials(friend.id, "TESTNET", { apiKey: "friend-api-key", apiSecret: "friend-secret" });
     assert.equal((await users.credentials(friend.id, "TESTNET"))?.apiKey, "friend-api-key");
@@ -92,6 +95,21 @@ test("invites, sessions and strategy ownership isolate two accounts", async () =
     assert.equal((await pool.query("SELECT status FROM bot_strategies WHERE id = 3")).rows[0].status, "PAUSED");
     assert.equal((await pool.query("SELECT status FROM bot_strategies WHERE id = 2")).rows[0].status, "ACTIVE");
     assert.equal((await users.getSession(await users.createSession(admin.id)))?.liveAccess, true);
+    await users.setTestnetAccess(admin, friend.id, true);
+    const testnetGranted = (await users.getSession(liveToken))!;
+    assert.equal(testnetGranted.testnetAccess, true);
+    await pool.query("INSERT INTO bot_strategies (symbol, status, execution_environment) VALUES ('BNBUSDT', 'ACTIVE', 'TESTNET')");
+    await users.assignStrategy(4, friend.id);
+    await users.assertStrategyAccess(4, testnetGranted);
+    await users.setTestnetAccess(admin, friend.id, false);
+    const testnetRevoked = (await users.getSession(liveToken))!;
+    assert.equal(testnetRevoked.testnetAccess, false);
+    await assert.rejects(users.assertStrategyAccess(4, testnetRevoked));
+    assert.equal((await pool.query("SELECT status FROM bot_strategies WHERE id = 4")).rows[0].status, "PAUSED");
+    await users.wallets.changeBalance(admin, friend.id, { operation: "SIMULATION_CREDIT", amount: 10, requestKey: "restart-credit-0001" });
+    await users.initialize("owner", "owner-password-test");
+    assert.equal((await users.wallets.summary(friend.id)).simulation.credited, 1010);
+    assert.equal((await users.getSession(liveToken))?.testnetAccess, false);
   } finally {
     await users.close();
     if (previousKey === undefined) delete process.env.BOT_CREDENTIALS_ENCRYPTION_KEY;

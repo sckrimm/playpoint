@@ -14,6 +14,7 @@ import { getRuntimeUsers } from "./auth/runtimeUsers.js";
 import { resolveCredentials } from "./auth/accountCredentials.js";
 import { createHash } from "node:crypto";
 import { isFreshMarketEvent } from "./services/marketSafety.js";
+import { hasTestnetAccess } from "./auth/liveAccess.js";
 
 const store = await createStore();
 const users = await getRuntimeUsers();
@@ -47,6 +48,15 @@ async function syncStrategies(): Promise<void> {
     retainedIds.add(strategy.id);
     const owner = users ? await users.strategyOwner(strategy.id) : null;
     if (users && !owner) continue;
+    if (users && owner && strategy.status === "ACTIVE") {
+      const allowed = strategy.executionEnvironment === "TESTNET" ? hasTestnetAccess(owner)
+        : await users.wallets.isFunded(owner.id, strategy.id, strategy.totalBudget);
+      if (!allowed) {
+        await store.setStrategyStatus(strategy.id, "PAUSED");
+        engines.delete(strategy.id);
+        continue;
+      }
+    }
     let credentials;
     try { credentials = strategy.executionEnvironment === "TESTNET" ? await resolveCredentials(users, owner, "TESTNET") : null; }
     catch { engines.delete(strategy.id); continue; }
@@ -66,7 +76,10 @@ async function syncStrategies(): Promise<void> {
         continue;
       }
       const engine = new StrategyEngine(strategyRecordToConfig(strategy, await store.getLevels(strategy.id)), store, orders, false, strategy.id,
-        owner?.role === "USER" ? async () => false : (message) => telegramAlerts.send(message));
+        owner?.role === "USER" ? async () => false : (message) => telegramAlerts.send(message),
+        users && owner ? async (current) => current.executionEnvironment === "SIMULATION"
+          ? users.wallets.isFunded(owner.id, current.id, current.totalBudget)
+          : hasTestnetAccess(await users.strategyOwner(current.id)) : undefined);
       await engine.initialize();
       engines.set(strategy.id, engine);
       const rules = await exchangeInfo.getSymbolRules(strategy.symbol);

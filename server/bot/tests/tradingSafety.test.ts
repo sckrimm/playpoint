@@ -18,6 +18,23 @@ const config: StrategyConfig = {
   sellLevels: [{ gainPercent: 10, allocationPercent: 100 }],
 };
 
+test("an unfunded virtual account cannot submit orders even if the strategy is active", async () => {
+  const db = openDatabase(":memory:");
+  const store = new StrategyRepository(db);
+  let funded = false;
+  try {
+    const engine = new StrategyEngine({ ...config, executionEnvironment: "SIMULATION" }, store, new SimulationOrderService(), false,
+      undefined, async () => false, async () => funded);
+    const id = await engine.initialize();
+    await engine.onPrice(90);
+    assert.equal(await store.countOrders(id), 0);
+    assert.ok((await store.getLevels(id)).every((level) => level.status === "WAITING"));
+    funded = true;
+    await engine.onPrice(90);
+    assert.equal(await store.countOrders(id), 1);
+  } finally { db.close(); }
+});
+
 test("market safety rejects missing, invalid, stale and future exchange timestamps", () => {
   const now = 100_000;
   for (const time of [undefined, NaN, 69_999, 105_001]) assert.equal(isFreshMarketEvent(time, now), false);

@@ -13,8 +13,9 @@ To enable personal API credentials:
 3. Keep this key stable and backed up with the database. Replacing it prevents
    existing encrypted API credentials from being read.
 
-Invite users from the administrator's Users panel. Registration opens their
-Profile, where they can enter their own Testnet and Spot read-only credentials.
+Invite users from the administrator's Users panel. Registration opens the
+SIMULATION dashboard. After an administrator grants the relevant access, users
+can enter their own Testnet and Spot read-only credentials in Profile.
 LIVE trading remains disabled. Testnet credentials must permit trading.
 
 Each dashboard lists only its owner's strategies, history and templates.
@@ -72,3 +73,35 @@ order submission: LIVE creation, activation, profit withdrawal and engine
 initialization remain locked. The LIVE view displays this state and disables
 strategy creation. Enabling real-money execution requires separate work and
 explicit approval; neither the environment switch nor a permission grant does it.
+
+## Virtual Funding And Assigned Balances
+
+New users start in SIMULATION with a persistent 1,000 USDT virtual wallet.
+Both TESTNET and LIVE require separate administrator grants. Existing Testnet
+users retain their previous access during migration; new registrations do not.
+No exchange credentials are needed for simulation.
+
+Each simulation strategy reserves its initial budget from the same user's
+virtual funds. Funding uses a per-wallet PostgreSQL row lock to prevent concurrent
+strategy requests from spending the same allocation. The execution worker also
+checks funding before orders. Retained bot profit compounds inside its reserved
+strategy; profit taken from that strategy becomes available for another bot.
+Archiving preserves both the position and its allocation rather than issuing
+new free funds. A reset requires a paused bot, realizes its simulated PnL, and
+transfers the existing allocation instead of granting a second starting balance.
+
+Administrators open Users > Balance Management for each account to add virtual
+USDT or replace its separate assigned fiat balance. Credits require a unique
+request key and are idempotent. Administrator changes are recorded in an audit
+table. Neither operation deposits money on Binance. Existing running simulation
+budgets receive a one-time opening allocation to avoid disrupting older bots;
+this migration and the initial grant do not repeat on restart.
+
+The assigned balance has one original amount and currency (GEL by default).
+GEL/USD/EUR buttons display equivalents without changing this original amount
+or its simulation funding. Conversion uses the NBG official daily JSON endpoint,
+normalizes rates by their currency quantity, and displays the effective date.
+The service requests today's date in Asia/Tbilisi, caches rates for one hour and
+explicitly labels cached fallback data on outages. Rates older than seven days
+are rejected. Missing rates never result in an invented 1:1 conversion. These
+are official reference rates, not executable exchange or bank retail quotes.

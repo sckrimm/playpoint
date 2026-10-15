@@ -7,7 +7,7 @@
     <title>სტრატეგიების პანელი</title>
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
     <link rel="stylesheet" href="styles.css?v=20261014-1" />
-    <link rel="stylesheet" href="controls.css?v=20261015-2" />
+    <link rel="stylesheet" href="controls.css?v=20261015-4" />
   </head>
   <body>
     <header class="topbar">
@@ -27,15 +27,17 @@
 
     <main>
       <div id="environmentSwitch" class="view-switch execution-switch" role="group" aria-label="ვაჭრობის გარემო">
-        <button type="button" data-environment="SIMULATION" aria-pressed="false">SIMULATION</button>
-        <button type="button" data-environment="TESTNET" aria-pressed="true" class="selected">TESTNET</button>
+        <button type="button" data-environment="SIMULATION" aria-pressed="true" class="selected">SIMULATION</button>
+        <button type="button" data-environment="TESTNET" aria-pressed="false" disabled title="TESTNET წვდომას ადმინისტრატორი ანიჭებს">TESTNET</button>
         <button type="button" data-environment="LIVE" aria-pressed="false" disabled title="LIVE წვდომას ადმინისტრატორი ანიჭებს">LIVE</button>
       </div>
       <p id="liveTradingNotice" class="muted" role="status" hidden>LIVE ორდერების შესრულება დაბლოკილია</p>
       <section id="overviewView">
         <div class="overview-head">
-          <div id="portfolioPeriod" class="view-switch portfolio-period" role="group" aria-label="შედეგების პერიოდი"><button type="button" data-hours="24" aria-pressed="true" class="selected">24 საათი</button><button type="button" data-hours="168" aria-pressed="false">7 დღე</button><button type="button" data-hours="720" aria-pressed="false" title="ბოლო 30 დღე">1 თვე</button></div>
-          <div id="portfolioSummary" class="portfolio-summary" aria-live="polite" aria-label="ბოტების საერთო შედეგები"><p class="muted">ბალანსი იტვირთება...</p></div>
+          <div class="portfolio-overview">
+            <div id="portfolioPeriod" class="view-switch portfolio-period" role="group" aria-label="შედეგების პერიოდი"><button type="button" data-hours="24" aria-pressed="true" class="selected">24 საათი</button><button type="button" data-hours="168" aria-pressed="false">7 დღე</button><button type="button" data-hours="720" aria-pressed="false" title="ბოლო 30 დღე">1 თვე</button></div>
+            <div id="portfolioSummary" class="portfolio-summary" aria-live="polite" aria-label="ბოტების საერთო შედეგები"><p class="muted">ბალანსი იტვირთება...</p></div>
+          </div>
           <div class="overview-actions">
             <div class="view-switch" role="tablist"><button id="showActive" class="selected" type="button">აქტიური</button><button id="showArchived" type="button">არქივი</button></div>
             <button id="openReadiness" class="secondary-button" type="button" hidden>მზადყოფნის მონიტორი</button>
@@ -294,7 +296,7 @@
       <button type="button" data-view="newsView" data-action="openNews" title="კრიპტო სიახლეები"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16v18H4zM8 7h8M8 11h8M8 15h4"/></svg><span>სიახლეები</span></button>
     </nav>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
-    <script src="select-controls.js?v=20261014-2" defer></script>
-    <script src="app.js?v=20261015-2" defer></script>
+    <script src="select-controls.js?v=20261015-4" defer></script>
+    <script src="app.js?v=20261015-4" defer></script>
   </body>
 </html>

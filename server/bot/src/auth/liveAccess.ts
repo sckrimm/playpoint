@@ -5,8 +5,13 @@ export function hasLiveAccess(user: DashboardUser | null): boolean {
   return user?.role === "ADMIN" || user?.liveAccess === true;
 }
 
-export function filterEnvironment(strategies: StrategyRecord[], environment: ExecutionEnvironment | null, liveAllowed: boolean): StrategyRecord[] {
+export function hasTestnetAccess(user: DashboardUser | null): boolean {
+  return user?.role === "ADMIN" || user?.testnetAccess === true;
+}
+
+export function filterEnvironment(strategies: StrategyRecord[], environment: ExecutionEnvironment | null, liveAllowed: boolean, testnetAllowed = true): StrategyRecord[] {
   return strategies.filter((strategy) => (liveAllowed || strategy.executionEnvironment !== "LIVE") &&
+    (testnetAllowed || strategy.executionEnvironment !== "TESTNET") &&
     (environment === null || strategy.executionEnvironment === environment));
 }
 

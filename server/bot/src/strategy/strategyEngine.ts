@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ExecutedLevelRecord, OrderExecutionService, StrategyConfig } from "../types/strategy.js";
+import type { ExecutedLevelRecord, OrderExecutionService, StrategyConfig, StrategyRecord } from "../types/strategy.js";
 import type { StrategyStore } from "../database/repository.js";
 import { money, quantity } from "../utils/format.js";
 import { telegramAlerts } from "../services/telegramAlertService.js";
@@ -21,6 +21,7 @@ export class StrategyEngine {
     private readonly verbose = true,
     strategyId?: number,
     private readonly notify: (message: string) => Promise<boolean> = (message) => telegramAlerts.send(message),
+    private readonly authorize: (strategy: StrategyRecord) => Promise<boolean> = async () => true,
   ) {
     this.strategyId = strategyId ?? null;
   }
@@ -96,7 +97,7 @@ export class StrategyEngine {
 
   private async canSubmit(strategyId: number, eventTime: number | undefined): Promise<boolean> {
     const strategy = await this.repository.getById(strategyId);
-    return strategy.status === "ACTIVE" && this.marketIsSafe(eventTime);
+    return strategy.status === "ACTIVE" && await this.authorize(strategy) && this.marketIsSafe(eventTime);
   }
 
   private async evaluate(price: number, eventTime: number | undefined): Promise<void> {
@@ -105,6 +106,7 @@ export class StrategyEngine {
     if (!this.marketIsSafe(eventTime)) return;
     const strategy = await this.repository.getById(this.strategyId);
     if (strategy.status !== "ACTIVE") return;
+    if (!await this.authorize(strategy)) return;
     if (this.verbose) console.log(`\n${strategy.symbol} | Current: ${money(price)} | Initial: ${money(strategy.initialEntryPrice)} | Average: ${money(strategy.averageEntryPrice)}`);
 
     const storedLevels = await this.repository.getLevels(strategy.id);

@@ -5,9 +5,14 @@
   const check = icon('<path d="m20 6-11 11-5-5"/>');
   const back = icon('<path d="m12 19-7-7 7-7"/><path d="M5 12h14"/>');
   const controls = [];
+  const enhanced = new WeakSet();
+  let nextIndex = 0;
   let opened = null;
 
-  function enhance(select, index) {
+  function enhance(select) {
+    if (enhanced.has(select)) return;
+    enhanced.add(select);
+    const index = nextIndex++;
     const wrapper = document.createElement("div");
     wrapper.className = "select-control";
     select.before(wrapper);
@@ -115,7 +120,12 @@
       active = options().findIndex((option) => option.selected && !option.disabled);
       highlight(active < 0 ? options().findIndex((option) => !option.disabled) : active);
     }
-    const control = { sync, close, position, wrapper, trigger };
+    const control = { sync, close, position, wrapper, trigger, destroy() {
+      close();
+      observer.disconnect();
+      formForReset?.removeEventListener("reset", resetHandler);
+      labelElement?.removeEventListener("click", labelHandler);
+    } };
     trigger.addEventListener("click", () => opened === control ? close() : open());
     trigger.addEventListener("keydown", (event) => {
       if (event.key === "Escape") { event.preventDefault(); close(true); return; }
@@ -140,11 +150,16 @@
       }
     });
     select.addEventListener("change", sync);
-    new MutationObserver(() => { close(); sync(); }).observe(select, { childList: true, subtree: true, attributes: true });
-    select.form?.addEventListener("reset", () => setTimeout(sync, 0));
-    select.labels?.[0]?.addEventListener("click", (event) => {
-      if (event.target === select.labels[0]) { event.preventDefault(); trigger.focus(); }
-    });
+    const observer = new MutationObserver(() => { close(); sync(); });
+    observer.observe(select, { childList: true, subtree: true, attributes: true });
+    const formForReset = select.form;
+    const labelElement = select.labels?.[0];
+    const resetHandler = () => setTimeout(sync, 0);
+    const labelHandler = (event) => {
+      if (event.target === labelElement) { event.preventDefault(); trigger.focus(); }
+    };
+    formForReset?.addEventListener("reset", resetHandler);
+    labelElement?.addEventListener("click", labelHandler);
     sync();
     controls.push(control);
   }
@@ -158,7 +173,13 @@
     button.append(label);
   });
   document.querySelectorAll("summary > i").forEach((item) => { item.innerHTML = chevron; });
-  window.refreshSelectControls = () => controls.forEach((control) => control.sync());
+  window.refreshSelectControls = () => {
+    for (let i = controls.length - 1; i >= 0; i--) {
+      if (!controls[i].wrapper.isConnected) { controls[i].destroy(); controls.splice(i, 1); }
+    }
+    document.querySelectorAll("select").forEach(enhance);
+    controls.forEach((control) => control.sync());
+  };
   ["click", "input", "change"].forEach((event) => document.addEventListener(event, () => queueMicrotask(window.refreshSelectControls)));
   document.addEventListener("pointerdown", (event) => { if (opened && !opened.wrapper.contains(event.target)) opened.close(); });
   document.addEventListener("scroll", () => { if (opened && !opened.wrapper.querySelector(".select-menu")?.contains(document.activeElement)) opened.position(); }, true);

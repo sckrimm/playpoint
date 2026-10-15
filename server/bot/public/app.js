@@ -56,7 +56,11 @@ let comparisonData = null;
 let comparisonSelection = new Set();
 let backtestDays = 30;
 let sessionUser = null;
-let selectedEnvironment = "TESTNET";
+let selectedEnvironment = "SIMULATION";
+let selectedFiatCurrency = "GEL";
+let currentAccountSummary = null;
+let fiatRates = null;
+let lastOverviewStrategies = [];
 let newsItems = [];
 let overviewAccountBalance = null;
 let overviewAccountChange = 0;
@@ -66,6 +70,7 @@ let overviewRequest = 0;
 const formatPercent = (value) => Number.isFinite(value) ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}%` : "—";
 
 function updateOverviewAccount(account) {
+  currentAccountSummary = account;
   const balance = account?.balance;
   if (!Number.isFinite(balance)) {
     overviewAccountBalance = null;
@@ -379,6 +384,9 @@ async function api(url, options) {
 }
 
 function renderPortfolioSummary(strategies) {
+  const summary = byId("portfolioSummary");
+  if (summary.querySelector('.fiat-currency [aria-expanded="true"]')) return;
+  const restoreCurrencyFocus = Boolean(document.activeElement?.closest(".fiat-currency"));
   const positioned = strategies.filter((strategy) => strategy.totalInvested > 0);
   const priced = positioned.filter((strategy) => Number.isFinite(strategy.performance?.period?.change));
   const complete = priced.length === positioned.length;
@@ -395,24 +403,73 @@ function renderPortfolioSummary(strategies) {
   const balance = strategies.reduce((sum, strategy) => sum + strategy.totalBudget - (strategy.withdrawnProfit || 0) + (strategy.performance?.totalPnl ?? 0), 0);
   const arrow = (value) => value > 0 ? "↑" : value < 0 ? "↓" : "→";
   const resultClass = complete ? performanceClass(pnl) : "neutral";
-  byId("portfolioSummary").innerHTML = `
+  summary.classList.toggle("has-assigned-balance", selectedEnvironment === "SIMULATION");
+  summary.innerHTML = `
     <div class="portfolio-results">
       <div class="portfolio-count-line"><span class="portfolio-label">${showingArchived ? "არქივის ბოტები" : "სულ ბოტი"}</span><strong class="portfolio-count">${strategies.length}</strong></div>
-      <div class="portfolio-total-line ${resultClass}"><strong class="portfolio-total">${complete ? `${arrow(pnl)} ${formatSignedMoney(pnl)}` : "—"}</strong><small>${complete ? formatPercent(percentFor(priced)) : "—"}</small></div>
-      <div class="portfolio-group positive"><strong>↑ ${priced.length || !positioned.length ? formatSignedMoney(sumPnl(winners)) : "—"}</strong><small>${formatPercent(percentFor(winners))}</small><span>${winners.length} ბოტი</span></div>
-      <div class="portfolio-group negative"><strong>↓ ${priced.length || !positioned.length ? formatSignedMoney(sumPnl(losers)) : "—"}</strong><small>${formatPercent(percentFor(losers))}</small><span>${losers.length} ბოტი</span></div>
+      <div class="portfolio-total-line ${resultClass}"><strong class="portfolio-total">${complete ? `${arrow(pnl)} ${formatSignedMoney(pnl)}` : "—"}</strong>${complete && percentFor(priced) !== null ? `<small>${formatPercent(percentFor(priced))}</small>` : ""}</div>
+      <div class="portfolio-group positive"><strong>↑ ${priced.length || !positioned.length ? formatSignedMoney(sumPnl(winners)) : "—"}</strong>${winners.length ? `<small>${formatPercent(percentFor(winners))}</small>` : ""}<span>${winners.length} ბოტი</span></div>
+      <div class="portfolio-group negative"><strong>↓ ${priced.length || !positioned.length ? formatSignedMoney(sumPnl(losers)) : "—"}</strong>${losers.length ? `<small>${formatPercent(percentFor(losers))}</small>` : ""}<span>${losers.length} ბოტი</span></div>
       ${complete ? "" : `<span class="portfolio-label">${positioned.length - priced.length} ბოტის ისტორია არასრულია</span>`}
       ${newBots ? `<span class="portfolio-label">${newBots} ახალი ბოტი — შექმნიდან</span>` : ""}
     </div>
     <div class="portfolio-balance">
-      <span class="portfolio-label">${selectedEnvironment === "TESTNET" ? "Binance Testnet" : selectedEnvironment === "LIVE" ? "Binance Spot" : "SIMULATION"} · USDT</span>
-      <div class="portfolio-total-line ${performanceClass(overviewAccountChange)}"><strong class="portfolio-balance-value">${overviewAccountBalance === null ? "—" : `${arrow(overviewAccountChange)} ${money.format(overviewAccountBalance)}`}</strong><small title="USDT ბალანსის ცვლილება; მოიცავს ჩარიცხვებსა და გატანებს">${formatPercent(overviewAccountPercent)}</small></div>
+      <span class="portfolio-label">${selectedEnvironment === "TESTNET" ? "Binance Testnet" : selectedEnvironment === "LIVE" ? "Binance Spot" : "სატესტო"} · USDT</span>
+      <div class="portfolio-total-line ${performanceClass(overviewAccountChange)}"><strong class="portfolio-balance-value">${overviewAccountBalance === null ? "—" : `${arrow(overviewAccountChange)} ${money.format(overviewAccountBalance)}`}</strong>${Number.isFinite(overviewAccountPercent) ? `<small title="USDT ბალანსის ცვლილება; მოიცავს ჩარიცხვებსა და გატანებს">${formatPercent(overviewAccountPercent)}</small>` : ""}</div>
       ${overviewAccountBalance === null ? '<span class="portfolio-label">ბალანსი მიუწვდომელია</span>' : ""}
       <span class="portfolio-bot-balance">ბოტების ბალანსი <strong>${balanceComplete ? money.format(balance) : "—"}</strong> <small class="${resultClass}">${complete ? formatPercent(percentFor(priced)) : "—"}</small></span>
-    </div>`;
+      ${selectedEnvironment === "SIMULATION" && currentAccountSummary?.simulation ? `<span class="portfolio-label">თავისუფალი <strong>${money.format(currentAccountSummary.simulation.available)} USDT</strong></span>` : ""}
+    </div>
+    ${selectedEnvironment === "SIMULATION" ? assignedBalanceMarkup() : ""}`;
+  window.refreshSelectControls?.();
+  fitPortfolioAmounts();
+  if (restoreCurrencyFocus) summary.querySelector(".fiat-currency .select-trigger")?.focus({ preventScroll: true });
 }
 
+function fitPortfolioAmounts() {
+  byId("portfolioSummary").querySelectorAll(".portfolio-total, .portfolio-balance-value, .assigned-amount").forEach((element) => {
+    element.style.fontSize = "";
+    element.style.whiteSpace = "nowrap";
+    element.style.maxWidth = "none";
+    const panel = element.closest(".portfolio-results, .portfolio-balance, .assigned-balance");
+    const style = getComputedStyle(panel);
+    const available = panel.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const natural = element.scrollWidth;
+    if (available > 0 && natural > available) {
+      const size = parseFloat(getComputedStyle(element).fontSize);
+      element.style.fontSize = `${Math.max(14, Math.floor(size * available / natural))}px`;
+      if (element.scrollWidth > available) { element.style.whiteSpace = "normal"; element.style.maxWidth = "100%"; }
+    }
+  });
+}
+window.addEventListener("resize", fitPortfolioAmounts);
+
+function assignedBalanceMarkup() {
+  const assigned = currentAccountSummary?.assigned;
+  let amount = assigned?.currency === selectedFiatCurrency ? assigned.amount : null;
+  if (assigned && fiatRates) amount = assigned.amount * fiatRates.gelPerUnit[assigned.currency] / fiatRates.gelPerUnit[selectedFiatCurrency];
+  const value = Number.isFinite(amount) ? new Intl.NumberFormat("ka-GE", { style: "currency", currency: selectedFiatCurrency, currencyDisplay: "narrowSymbol" }).format(amount) : "—";
+  return `<div class="assigned-balance"><div class="assigned-heading"><span class="portfolio-label">ჩარიცხული ბალანსი</span>
+    <div class="fiat-currency"><select data-fiat-currency aria-label="ბალანსის ვალუტა">${["GEL", "USD", "EUR"].map((currency) => `<option value="${currency}" ${currency === selectedFiatCurrency ? "selected" : ""}>${currency}</option>`).join("")}</select></div></div>
+    <strong class="assigned-amount">${value}</strong><span class="portfolio-label assigned-rate">${fiatRates ? `${fiatRates.stale ? "ბოლო კურსი" : "სებ-ის კურსი"} · ${escapeHtml(fiatRates.date)}` : "კურსი დროებით მიუწვდომელია"}</span></div>`;
+}
+
+async function loadFiatRates() {
+  try { fiatRates = (await api("/api/exchange-rates")).rates ?? null; }
+  catch { fiatRates = null; }
+  if (!byId("overviewView").hidden) renderPortfolioSummary(lastOverviewStrategies);
+}
+
+byId("portfolioSummary").addEventListener("change", (event) => {
+  const select = event.target.closest("select[data-fiat-currency]");
+  if (!select) return;
+  selectedFiatCurrency = select.value;
+  try { localStorage.setItem(`spot-fiat:${sessionUser.username}`, selectedFiatCurrency); } catch {}
+  renderPortfolioSummary(lastOverviewStrategies);
+});
+
 function renderOverview(strategies) {
+  lastOverviewStrategies = strategies;
   renderPortfolioSummary(strategies);
   const list = byId("strategyList");
   if (!strategies.length) {
@@ -1089,15 +1146,21 @@ function showError(error) {
 
 function updateEnvironmentControls() {
   const canViewLive = sessionUser?.role === "ADMIN" || sessionUser?.liveAccess === true;
+  const canViewTestnet = sessionUser?.role === "ADMIN" || sessionUser?.testnetAccess === true;
   const credentialsEnvironment = byId("credentialsForm").elements.environment;
+  credentialsEnvironment.querySelector('option[value="TESTNET"]').disabled = !canViewTestnet;
   credentialsEnvironment.querySelector('option[value="LIVE"]').disabled = !canViewLive;
   if (!canViewLive && credentialsEnvironment.value === "LIVE") credentialsEnvironment.value = "TESTNET";
+  if (!canViewTestnet && credentialsEnvironment.value === "TESTNET" && canViewLive) credentialsEnvironment.value = "LIVE";
+  byId("credentialsForm").hidden = !canViewLive && !canViewTestnet;
+  byId("executionEnvironment").querySelector('option[value="TESTNET"]').disabled = !canViewTestnet;
+  if (!canViewTestnet && byId("executionEnvironment").value === "TESTNET") byId("executionEnvironment").value = "SIMULATION";
   window.refreshSelectControls?.();
   byId("environmentSwitch").querySelectorAll("button").forEach((button) => {
     const current = button.dataset.environment === selectedEnvironment;
     button.classList.toggle("selected", current);
     button.setAttribute("aria-pressed", String(current));
-    button.disabled = button.dataset.environment === "LIVE" && !canViewLive;
+    button.disabled = (button.dataset.environment === "LIVE" && !canViewLive) || (button.dataset.environment === "TESTNET" && !canViewTestnet);
   });
   byId("liveTradingNotice").hidden = selectedEnvironment !== "LIVE";
   byId("mode").textContent = selectedEnvironment;
@@ -1286,14 +1349,22 @@ byId("openUsers").addEventListener("click", async () => {
   try {
     const { users } = await api("/api/admin/users");
     byId("usersMessage").textContent = "";
-    byId("usersList").innerHTML = users.map((user) => `<div class="user-row"><strong>${escapeHtml(user.username)}</strong><span>${user.role} · ${user.strategyCount} სტრატეგია</span>${user.role === "USER" ? `<label class="user-live-access"><input type="checkbox" data-live-user="${user.id}" ${user.liveAccess ? "checked" : ""}>LIVE წვდომა</label>` : ""}<button type="button" class="secondary-button" data-user="${user.id}">სტრატეგიები</button><div class="admin-strategies" id="adminStrategies-${user.id}"></div></div>`).join("");
-    byId("usersList").querySelectorAll("[data-live-user]").forEach((checkbox) => checkbox.addEventListener("change", async () => {
+    byId("usersList").innerHTML = users.map((user) => `<div class="user-row"><strong>${escapeHtml(user.username)}</strong><span>${user.role} · ${user.strategyCount} სტრატეგია</span>${user.role === "USER" ? ["TESTNET", "LIVE"].map((environment) => `<label class="user-live-access"><input type="checkbox" data-access-user="${user.id}" data-access-environment="${environment}" ${user[environment === "LIVE" ? "liveAccess" : "testnetAccess"] ? "checked" : ""}>${environment}</label>`).join("") : ""}<button type="button" class="secondary-button" data-user="${user.id}">სტრატეგიები</button><div class="admin-strategies" id="adminStrategies-${user.id}"></div><details class="admin-wallet" data-wallet-user="${user.id}"><summary>ბალანსების მართვა</summary><div data-wallet-panel="${user.id}"></div></details></div>`).join("");
+    byId("usersList").querySelectorAll("[data-wallet-user]").forEach((details) => details.addEventListener("toggle", async () => {
+      if (!details.open) return;
+      const panel = details.querySelector("[data-wallet-panel]");
+      panel.textContent = "ბალანსი იტვირთება...";
+      try { renderAdminWallet(panel, details.dataset.walletUser, await api(`/api/admin/users/${details.dataset.walletUser}/wallet`)); }
+      catch (error) { panel.textContent = error.message; }
+    }));
+    byId("usersList").querySelectorAll("[data-access-user]").forEach((checkbox) => checkbox.addEventListener("change", async () => {
       const enabled = checkbox.checked;
-      if (!enabled && !confirm("მოეხსნას LIVE წვდომა? მომხმარებლის აქტიური LIVE ბოტები შეჩერდება, აქტივები არ გაიყიდება.")) { checkbox.checked = true; return; }
+      const environment = checkbox.dataset.accessEnvironment;
+      if (!enabled && !confirm(`მოეხსნას ${environment} წვდომა? მომხმარებლის შესაბამისი აქტიური ბოტები შეჩერდება, აქტივები არ გაიყიდება.`)) { checkbox.checked = true; return; }
       checkbox.disabled = true;
       try {
-        await api(`/api/admin/users/${checkbox.dataset.liveUser}/live-access`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) });
-        byId("usersMessage").textContent = enabled ? "LIVE წვდომა მინიჭებულია; რეალური ორდერები კვლავ დაბლოკილია." : "LIVE წვდომა მოხსნილია.";
+        await api(`/api/admin/users/${checkbox.dataset.accessUser}/${environment.toLowerCase()}-access`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) });
+        byId("usersMessage").textContent = enabled ? `${environment} წვდომა მინიჭებულია.${environment === "LIVE" ? " რეალური ორდერები კვლავ დაბლოკილია." : ""}` : `${environment} წვდომა მოხსნილია.`;
       } catch (error) { checkbox.checked = !enabled; byId("usersMessage").textContent = error.message; }
       finally { checkbox.disabled = false; }
     }));
@@ -1307,6 +1378,34 @@ byId("openUsers").addEventListener("click", async () => {
     }));
   } catch (error) { showError(error); }
 });
+function renderAdminWallet(panel, userId, data) {
+  const { wallet, history = [] } = data;
+  panel.innerHTML = `<div class="admin-wallet-forms">
+    <form data-wallet-operation="SIMULATION_CREDIT"><h3>სატესტო USDT-ის დარიცხვა</h3><span class="muted">თავისუფალი: ${money.format(wallet.simulation.available)} USDT · გამოყოფილი: ${money.format(wallet.simulation.allocated)} USDT</span>
+      <label>დასამატებელი USDT<input type="number" name="amount" min="0.01" max="10000000000" step="0.01" required inputmode="decimal"></label>
+      <button type="submit" class="primary-button">სატესტო თანხის დარიცხვა</button><p role="status"></p></form>
+    <form data-wallet-operation="ASSIGNED_SET"><h3>მინიჭებული ბალანსი</h3>
+      <label>თანხა<input type="number" name="amount" min="0" max="10000000000" step="0.01" value="${wallet.assigned.amount}" required inputmode="decimal"></label>
+      <label>ვალუტა<select name="currency">${["GEL", "USD", "EUR"].map((currency) => `<option value="${currency}" ${currency === wallet.assigned.currency ? "selected" : ""}>${currency}</option>`).join("")}</select></label>
+      <button type="submit" class="primary-button">ბალანსის შენახვა</button><p role="status"></p></form>
+    <ul class="wallet-audit">${history.map((item) => `<li>${escapeHtml(new Date(item.createdAt).toLocaleString("ka-GE"))} · ${escapeHtml(({ SIMULATION_CREDIT: "სატესტო დარიცხვა", ASSIGNED_SET: "ბალანსის განახლება", SIMULATION_RESET: "სატესტო განულება" })[item.operation] ?? item.operation)} · ${escapeHtml(item.amount)} ${escapeHtml(item.currency)}</li>`).join("")}</ul></div>`;
+  window.refreshSelectControls?.();
+  panel.querySelectorAll("form").forEach((form) => form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const fields = new FormData(form);
+    const intent = JSON.stringify({ operation: form.dataset.walletOperation, amount: fields.get("amount"), currency: fields.get("currency") ?? "USDT" });
+    if (form.dataset.intent !== intent) { form.dataset.intent = intent; form.dataset.requestKey = crypto.randomUUID(); }
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const updated = await api(`/api/admin/users/${userId}/wallet`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...JSON.parse(intent), requestKey: form.dataset.requestKey }) });
+      renderAdminWallet(panel, userId, updated);
+      byId("usersMessage").textContent = "ბალანსი განახლებულია";
+      if (!byId("overviewView").hidden) void loadOverview();
+    } catch (error) { form.querySelector('[role="status"]').textContent = error.message; }
+    finally { button.disabled = false; }
+  }));
+}
 byId("closeUsers").addEventListener("click", () => byId("usersDialog").close());
 byId("createInvite").addEventListener("click", async () => {
   try {
@@ -1479,10 +1578,13 @@ function applySessionUser(user) {
     try {
       const saved = localStorage.getItem(`spot-environment:${user.username}`);
       if (["SIMULATION", "TESTNET", "LIVE"].includes(saved)) selectedEnvironment = saved;
+      const currency = localStorage.getItem(`spot-fiat:${user.username}`);
+      if (["GEL", "USD", "EUR"].includes(currency)) selectedFiatCurrency = currency;
     } catch {}
   }
-  if (selectedEnvironment === "LIVE" && user.role !== "ADMIN" && user.liveAccess !== true) {
-    selectedEnvironment = "TESTNET";
+  if (user.role !== "ADMIN" && ((selectedEnvironment === "LIVE" && user.liveAccess !== true) ||
+    (selectedEnvironment === "TESTNET" && user.testnetAccess !== true))) {
+    selectedEnvironment = "SIMULATION";
     activeStrategies = [];
     overviewRequest++;
     if (byId("createDialog").open) byId("createDialog").close();
@@ -1498,6 +1600,7 @@ api("/api/session").then(({ user }) => {
   applySessionUser(user);
   if (new URLSearchParams(window.location.search).get("setup") === "1") void openProfile();
   void loadOverview();
+  void loadFiatRates();
 }).catch(showError);
 setInterval(() => {
   if (!sessionUser) return;
@@ -1508,3 +1611,4 @@ setInterval(() => {
   void api("/api/session").then(({ user }) => applySessionUser(user)).catch(showError);
   if (!byId("readinessView").hidden) void loadReadiness();
 }, 30_000);
+setInterval(() => { if (sessionUser) void loadFiatRates(); }, 10 * 60_000);

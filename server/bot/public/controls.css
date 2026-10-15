@@ -189,9 +189,60 @@
 .user-row { flex-wrap: wrap; align-items: center; }
 .user-live-access { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; }
 .user-live-access input { width: 18px; height: 18px; margin: 0; accent-color: var(--control-accent); }
+.portfolio-overview { width: 100%; }
+.portfolio-overview .portfolio-period { margin-bottom: 14px; }
+.portfolio-summary { gap: 12px; padding-bottom: 0; border: 0; align-items: stretch; }
+.portfolio-summary.has-assigned-balance { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.portfolio-results, .portfolio-balance, .assigned-balance {
+  min-width: 0;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid #dce2df;
+  border-radius: 8px;
+  background: #fff;
+}
+[data-theme="dark"] :is(.portfolio-results, .portfolio-balance) { background: #1e2329; border-color: #343b44; }
+.portfolio-results { gap: 10px; }
+.portfolio-count-line { width: 100%; justify-content: space-between; }
+.portfolio-count { font-size: 18px; }
+.portfolio-results > .portfolio-total-line { margin: 5px 0 2px; }
+.portfolio-results .portfolio-total { font-size: 26px; }
+.portfolio-results .portfolio-group { gap: 6px; flex-wrap: wrap; }
+.portfolio-balance { align-items: flex-start; text-align: left; gap: 10px; }
+.portfolio-balance .portfolio-total-line { justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin: 5px 0 2px; }
+.portfolio-balance-value { font-size: 28px; }
+.portfolio-bot-balance { width: 100%; margin-top: auto; padding-top: 12px; border-top: 1px solid #e5e8eb; }
+[data-theme="dark"] .portfolio-bot-balance { border-color: #343b44; }
+.assigned-balance { display: flex; flex-direction: column; gap: 14px; border-color: #706023; background: #23241f; color: #eaecef; }
+.assigned-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
+.assigned-heading .portfolio-label { color: #f0b90b; font-size: 13px; }
+.assigned-amount { color: #f0b90b; font-size: 32px; line-height: 1.3; overflow-wrap: anywhere; }
+.portfolio-total, .portfolio-balance-value, .assigned-amount { min-width: 0; width: max-content; }
+.assigned-rate { margin-top: auto; color: #aeb6a3 !important; font-size: 11px; }
+.fiat-currency { flex: 0 0 82px; width: 82px; }
+:root .fiat-currency .select-trigger { height: 36px; min-height: 36px; padding: 6px 9px; color: #f0b90b; background: #2c2e1d; border-color: #706023; font-size: 12px; }
+.fiat-currency .control-chevron { color: #f0b90b; }
+.admin-wallet { width: 100%; padding-top: 10px; border-top: 1px solid var(--control-border); }
+.admin-wallet summary { cursor: pointer; font-size: 13px; }
+.admin-wallet-forms { display: grid; gap: 18px; padding-top: 12px; }
+.admin-wallet-forms form { display: grid; gap: 10px; padding: 0; }
+.admin-wallet-forms h3 { margin: 0; font-size: 14px; }
+.wallet-audit { padding: 0; list-style: none; font-size: 11px; color: var(--control-muted); }
+.wallet-audit li { padding: 6px 0; border-bottom: 1px solid var(--control-border); overflow-wrap: anywhere; }
 :root #environmentSwitch button:disabled { background: transparent; color: var(--control-muted); }
 :root #pauseAllStrategies { color: var(--control-error); border-color: var(--control-error); }
 @media (max-width: 640px) {
+  .portfolio-summary, .portfolio-summary.has-assigned-balance { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .portfolio-results, .portfolio-balance { padding: 13px; gap: 8px; }
+  .portfolio-results .portfolio-total { font-size: 20px; }
+  .portfolio-balance-value { font-size: 23px; }
+  .portfolio-count-line { gap: 6px; }
+  .portfolio-results .portfolio-label, .portfolio-balance .portfolio-label { font-size: 11px; }
+  .portfolio-group strong { font-size: 13px; }
+  .portfolio-group small, .portfolio-group span { font-size: 10px; }
+  .portfolio-bot-balance { font-size: 10px; line-height: 1.6; }
+  .assigned-balance { grid-column: 1 / -1; padding: 16px; gap: 10px; }
+  .assigned-amount { font-size: 28px; }
   .execution-switch { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .execution-switch button { padding: 8px 4px; font-size: 11px; }
   main { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }

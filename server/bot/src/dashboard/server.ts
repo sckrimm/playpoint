@@ -21,7 +21,8 @@ import { periodPerformance } from "../services/portfolioPerformance.js";
 import { resolveCredentials } from "../auth/accountCredentials.js";
 import { BinanceAccountService } from "../binance/binanceAccountService.js";
 import { MAX_MARKET_AGE_MS } from "../services/marketSafety.js";
-import { filterEnvironment, hasLiveAccess, parseEnvironment } from "../auth/liveAccess.js";
+import { filterEnvironment, hasLiveAccess, hasTestnetAccess, parseEnvironment } from "../auth/liveAccess.js";
+import { ExchangeRateService, moneyMinor } from "../services/exchangeRateService.js";
 import type { ExecutionEnvironment } from "../types/strategy.js";
 
 const port = Number(process.env.DASHBOARD_PORT ?? process.env.PORT ?? 4173);
@@ -43,6 +44,7 @@ const marketHistory = new BinanceMarketHistoryService();
 const testnetMarketHistory = new BinanceMarketHistoryService("https://testnet.binance.vision");
 const marketOpportunities = new MarketOpportunityService();
 const cryptoNews = new CryptoNewsService();
+const exchangeRates = new ExchangeRateService();
 let catalogCache: { items: SpotSymbolCatalogItem[]; expiresAt: number } | null = null;
 const hourlyPriceCache = new Map<string, { value: HistoricalPrice; expiresAt: number }>();
 const personalAccountCache = new Map<number, { balance: number; expiresAt: number }>();
@@ -149,6 +151,7 @@ async function readFormBody(request: IncomingMessage): Promise<URLSearchParams> 
 }
 
 async function getTestnetService(user: DashboardUser | null = null): Promise<BinanceTestnetOrderService | null> {
+  if (userAuthStore && !hasTestnetAccess(user)) throw new Error("TESTNET წვდომა ადმინისტრატორს უნდა სთხოვო");
   const credentials = await resolveCredentials(userAuthStore, user, "TESTNET");
   return credentials
     ? new BinanceTestnetOrderService(credentials.apiKey, credentials.apiSecret)
@@ -193,7 +196,7 @@ async function ensureStrategyAccess(id: number, user: DashboardUser | null, read
 async function visibleStrategies(strategies: StrategyRecord[], user: DashboardUser | null): Promise<StrategyRecord[]> {
   if (!userAuthStore || !user) return strategies;
   const visibleIds = await userAuthStore.filterStrategyIds(strategies.map((strategy) => strategy.id), user);
-  return filterEnvironment(strategies.filter((strategy) => visibleIds.has(strategy.id)), null, hasLiveAccess(user));
+  return filterEnvironment(strategies.filter((strategy) => visibleIds.has(strategy.id)), null, hasLiveAccess(user), hasTestnetAccess(user));
 }
 
 type ReadinessStatus = "OK" | "WAITING" | "WARNING" | "ERROR";
@@ -573,7 +576,10 @@ async function updateStrategy(id: number, body: unknown, user: DashboardUser | n
         ? current.finalReservePercent : Number(input.finalReservePercent),
     };
     validateStrategyConfig(config);
-    const strategy = await repository.updateStrategy(id, config);
+    let strategy = current;
+    if (userAuthStore && user && current.executionEnvironment === "SIMULATION") {
+      await userAuthStore.wallets.fundStrategy(user.id, id, totalBudget, async () => { strategy = await repository.updateStrategy(id, config); });
+    } else strategy = await repository.updateStrategy(id, config);
     await repository.saveSymbolRules(await exchangeInfo.getSymbolRules(symbol));
     return strategy;
   } finally {
@@ -619,11 +625,18 @@ async function createStrategy(body: unknown, user: DashboardUser | null) {
     finalReservePercent,
   };
   validateStrategyConfig(config);
+  if (userAuthStore && user && executionEnvironment === "SIMULATION") {
+    const wallet = await userAuthStore.wallets.summary(user.id);
+    if (moneyMinor(totalBudget, false) > Math.round(wallet.simulation.available * 100)) {
+      throw new Error(`არასაკმარისი სატესტო USDT; ხელმისაწვდომია ${wallet.simulation.available.toFixed(2)}`);
+    }
+  }
   const repository = await createStore();
   try {
     let strategy = await repository.createStrategy(config);
     await repository.setStrategyStatus(strategy.id, "PAUSED");
     if (userAuthStore && user) await userAuthStore.assignStrategy(strategy.id, user.id);
+    if (userAuthStore && user && executionEnvironment === "SIMULATION") await userAuthStore.wallets.fundStrategy(user.id, strategy.id, totalBudget);
     await repository.saveSymbolRules(rules);
     if (initialPurchaseAmount > 0) {
       const currentPrice = testnetService
@@ -709,14 +722,38 @@ function overviewPeriodHours(request: IncomingMessage): number {
   return [24, 168, 720].includes(hours) ? hours : 24;
 }
 
+async function simulationAccountSummary(user: DashboardUser | null) {
+  if (!userAuthStore || !user) return { balance: 1000, status: "SIMULATION", change: null, percent: null,
+    simulation: { credited: 1000, available: 1000, allocated: 0 }, assigned: { amount: 0, currency: "GEL" } };
+  const wallet = await userAuthStore.wallets.summary(user.id);
+  const ids = new Set(wallet.simulation.strategyIds);
+  const repository = await createStore();
+  try {
+    const strategies = [...await repository.listStrategies(), ...await repository.listArchivedStrategies()].filter((strategy) => ids.has(strategy.id));
+    let equity = wallet.simulation.available;
+    let complete = true;
+    for (const strategy of strategies) {
+      const market = await repository.getMarketState(strategy.symbol);
+      if (strategy.totalAssetQuantity > 0 && !market) { complete = false; continue; }
+      equity += strategy.totalBudget + strategy.totalSaleProceeds - strategy.totalInvested - strategy.withdrawnProfit +
+        strategy.totalAssetQuantity * (market?.price ?? 0);
+    }
+    return { ...wallet, balance: complete ? equity : null, status: "SIMULATION", change: null, percent: null };
+  } finally { await repository.close(); }
+}
+
 async function handleApi(request: IncomingMessage, response: ServerResponse, pathname: string, user: DashboardUser | null): Promise<boolean> {
   const environment = parseEnvironment(new URL(request.url ?? pathname, "http://localhost").searchParams.get("environment"));
   if (environment === "LIVE" && userAuthStore && !hasLiveAccess(user)) {
     json(response, 403, { error: "LIVE წვდომა ადმინისტრატორს უნდა სთხოვო" });
     return true;
   }
+  if (environment === "TESTNET" && userAuthStore && !hasTestnetAccess(user)) {
+    json(response, 403, { error: "TESTNET წვდომა ადმინისტრატორს უნდა სთხოვო" });
+    return true;
+  }
   if (request.method === "GET" && pathname === "/api/session") {
-    json(response, 200, { user: user ?? { username: dashboardUsername, role: "ADMIN", liveAccess: true }, liveTradingEnabled: false });
+    json(response, 200, { user: user ?? { username: dashboardUsername, role: "ADMIN", liveAccess: true, testnetAccess: true }, liveTradingEnabled: false });
     return true;
   }
   if (pathname === "/api/profile") {
@@ -739,6 +776,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     if (!userAuthStore.vault.configured) throw new Error("სერვერზე BOT_CREDENTIALS_ENCRYPTION_KEY ჯერ დასამატებელია");
     const body = await readJson(request) as { environment?: string; apiKey?: string; apiSecret?: string };
     if (body.environment !== "LIVE" && body.environment !== "TESTNET") throw new Error("გარემო არასწორია");
+    if (body.environment === "TESTNET" && !hasTestnetAccess(user)) {
+      json(response, 403, { error: "TESTNET წვდომა ადმინისტრატორს უნდა სთხოვო" });
+      return true;
+    }
     if (body.environment === "LIVE" && !hasLiveAccess(user)) {
       json(response, 403, { error: "LIVE წვდომა ადმინისტრატორს უნდა სთხოვო" });
       return true;
@@ -805,7 +846,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
       return true;
     }
     if (environment === "SIMULATION") {
-      json(response, 200, { balance: null, status: "SIMULATION", change: null, percent: null });
+      json(response, 200, await simulationAccountSummary(user));
       return true;
     }
     if (environment === "TESTNET") {
@@ -907,7 +948,27 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     json(response, 200, { users: await userAuthStore.listUsers() });
     return true;
   }
-  const liveAccessMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/live-access$/);
+  if (request.method === "GET" && pathname === "/api/exchange-rates") {
+    try { json(response, 200, { rates: await exchangeRates.getRates() }); }
+    catch { json(response, 200, { rates: null, error: "ეროვნული ბანკის კურსი დროებით მიუწვდომელია" }); }
+    return true;
+  }
+  const walletMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/wallet$/);
+  if (walletMatch && (request.method === "GET" || request.method === "POST")) {
+    if (!userAuthStore || user?.role !== "ADMIN") {
+      json(response, 403, { error: "ბალანსებს მხოლოდ ადმინისტრატორი მართავს" });
+      return true;
+    }
+    const targetId = Number(walletMatch[1]);
+    if (request.method === "POST") {
+      const body = await readJson(request) as { operation?: string; amount?: unknown; currency?: unknown; requestKey?: unknown };
+      if (body.operation !== "SIMULATION_CREDIT" && body.operation !== "ASSIGNED_SET") throw new Error("ოპერაცია არასწორია");
+      await userAuthStore.wallets.changeBalance(user, targetId, { operation: body.operation, amount: body.amount, currency: body.currency, requestKey: String(body.requestKey ?? "") });
+    }
+    json(response, 200, { wallet: await userAuthStore.wallets.summary(targetId), history: await userAuthStore.wallets.history(targetId) });
+    return true;
+  }
+  const liveAccessMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/(live|testnet)-access$/);
   if (request.method === "PATCH" && liveAccessMatch) {
     if (!userAuthStore || user?.role !== "ADMIN") {
       json(response, 403, { error: "LIVE წვდომას მხოლოდ ადმინისტრატორი მართავს" });
@@ -915,8 +976,9 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     }
     const body = await readJson(request) as { enabled?: unknown };
     if (typeof body.enabled !== "boolean") throw new Error("წვდომის მნიშვნელობა არასწორია");
-    await userAuthStore.setLiveAccess(user, Number(liveAccessMatch[1]), body.enabled);
-    json(response, 200, { liveAccess: body.enabled, liveTradingEnabled: false });
+    if (liveAccessMatch[2] === "live") await userAuthStore.setLiveAccess(user, Number(liveAccessMatch[1]), body.enabled);
+    else await userAuthStore.setTestnetAccess(user, Number(liveAccessMatch[1]), body.enabled);
+    json(response, 200, { enabled: body.enabled, liveTradingEnabled: false });
     return true;
   }
   if (request.method === "GET" && pathname === "/api/strategy-templates") {
@@ -1041,6 +1103,9 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
       if (body.status === "ACTIVE" && (await repository.getById(Number(statusMatch[1]))).executionEnvironment === "LIVE") {
         throw new Error("LIVE რეჟიმი უსაფრთხოების მიზნით დაბლოკილია");
       }
+      const current = await repository.getById(Number(statusMatch[1]));
+      if (body.status === "ACTIVE" && current.executionEnvironment === "SIMULATION" && userAuthStore && user &&
+        !await userAuthStore.wallets.isFunded(user.id, current.id, current.totalBudget)) throw new Error("ჯერ ბოტის სატესტო ბიუჯეტი დააფინანსე რედაქტირებიდან");
       json(response, 200, { strategy: await repository.setStrategyStatus(Number(statusMatch[1]), body.status) });
     } finally {
       await repository.close();
@@ -1052,14 +1117,28 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     const repository = await createStore();
     try {
       await ensureStrategyAccess(Number(resetMatch[1]), user);
-      let strategy = await repository.resetSimulationStrategyById(Number(resetMatch[1]));
-      if (userAuthStore && user) await userAuthStore.assignStrategy(strategy.id, user.id);
+      const oldId = Number(resetMatch[1]);
+      let strategy;
+      if (userAuthStore && user) {
+        const old = await repository.getById(oldId);
+        if (old.status !== "PAUSED") throw new Error("განულებამდე ბოტი შეაჩერე");
+        const levels = await repository.getLevels(oldId);
+        if (levels.some((level) => level.status === "EXECUTING" || level.errorMessage?.startsWith("[NO_AUTO_RETRY]"))) throw new Error("ჯერ მიმდინარე ორდერების გადამოწმებას დაელოდე");
+        const price = old.totalAssetQuantity > 0 ? await exchangeInfo.getCurrentPrice(old.symbol) : 0;
+        const pnl = old.totalAssetQuantity * price + old.totalSaleProceeds - old.totalInvested;
+        strategy = await userAuthStore.wallets.replaceSimulationStrategy(user.id, oldId, pnl, async () => {
+          const fresh = await repository.resetSimulationStrategyById(oldId);
+          await repository.setStrategyStatus(fresh.id, "PAUSED");
+          return fresh;
+        });
+      } else strategy = await repository.resetSimulationStrategyById(oldId);
       if (strategy.initialPurchaseAmount > 0) {
         const currentPrice = await exchangeInfo.getCurrentPrice(strategy.symbol);
         const order = await new SimulationOrderService().buy(strategy.symbol, currentPrice, strategy.initialPurchaseAmount);
         await repository.completeBuy(strategy.id, 0, currentPrice, strategy.initialPurchaseAmount, order.assetQuantity, order.orderId);
         strategy = await repository.getById(strategy.id);
       }
+      strategy = await repository.setStrategyStatus(strategy.id, "ACTIVE");
       json(response, 201, { strategy });
     } finally {
       await repository.close();
@@ -1148,7 +1227,7 @@ const server = http.createServer(async (request, response) => {
       const token = await userAuthStore.createSession(user.id);
       const cookiePath = `${basePath}/` || "/";
       const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-      response.writeHead(303, { Location: `${cookiePath}?setup=1`, "Set-Cookie": `dashboard_session=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=604800${secure}` });
+      response.writeHead(303, { Location: cookiePath, "Set-Cookie": `dashboard_session=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=604800${secure}` });
       return response.end();
     } catch (error) {
       response.writeHead(400, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
