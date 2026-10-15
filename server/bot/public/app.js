@@ -340,6 +340,7 @@ const appBasePath = window.location.pathname === "/bot" || window.location.pathn
 const appViews = ["overviewView", "detailView", "comparisonView", "marketCandidatesView", "newsView", "readinessView", "profileView", "sharedView"];
 
 function setVisibleView(view) {
+  document.body.dataset.view = view;
   appViews.forEach((id) => { byId(id).hidden = id !== view; });
   byId("mobileNavigation").querySelectorAll("[data-view]").forEach((button) => {
     if (button.dataset.view === view) button.setAttribute("aria-current", "page");
