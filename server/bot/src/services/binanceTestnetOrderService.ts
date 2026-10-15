@@ -17,10 +17,11 @@ type OrderPayload = BinanceErrorPayload & {
 };
 
 export type TestnetErrorKind = "INVALID_KEY" | "INVALID_SIGNATURE" | "TIMESTAMP_ERROR" | "ORDER_NOT_FOUND" |
-  "RATE_LIMITED" | "INSUFFICIENT_BALANCE" | "FILTER_REJECTED" | "UNKNOWN_RESULT" | "ERROR";
+  "RATE_LIMITED" | "INSUFFICIENT_BALANCE" | "FILTER_REJECTED" | "UNKNOWN_RESULT" | "TEMPORARY" | "ERROR";
 
 export class BinanceTestnetOrderError extends Error {
-  constructor(public readonly kind: TestnetErrorKind, message: string, public readonly noAutoRetry = false) {
+  constructor(public readonly kind: TestnetErrorKind, message: string, public readonly noAutoRetry = false,
+    public readonly retryAfterMs = 0) {
     super(noAutoRetry ? `[NO_AUTO_RETRY] ${message}` : message);
     this.name = "BinanceTestnetOrderError";
   }
@@ -29,6 +30,7 @@ export class BinanceTestnetOrderError extends Error {
 export class BinanceTestnetOrderService implements OrderExecutionService {
   readonly environment = "TESTNET" as const;
   private timeOffsetMs = 0;
+  private retryAt = 0;
 
   constructor(
     private readonly apiKey: string,
@@ -45,7 +47,7 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
 
   async sell(symbol: string, _price: number, assetQuantity: number, clientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult> {
     if (!Number.isFinite(assetQuantity) || assetQuantity <= 0) throw new Error("TESTNET SELL რაოდენობა ნულზე მეტი უნდა იყოს");
-    const { stepSize } = await this.getOrderRules(symbol);
+    const { stepSize } = await this.preflight(() => this.getOrderRules(symbol));
     const quantity = this.floorToStep(assetQuantity, stepSize);
     if (quantity <= 0) throw new BinanceTestnetOrderError("FILTER_REJECTED", "გასაყიდი რაოდენობა Binance-ის stepSize-ზე ნაკლებია");
     return this.placeMarketOrder(symbol, "SELL", { quantity: this.decimal(quantity, this.decimals(stepSize)) }, clientOrderId, canSubmit);
@@ -62,7 +64,7 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
   }
 
   async getCurrentPrice(symbol: string): Promise<number> {
-    const response = await this.fetchImpl(`${TESTNET_BASE_URL}/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`, {
+    const response = await this.request(`${TESTNET_BASE_URL}/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`, {
       signal: AbortSignal.timeout(10_000),
     });
     const payload = await response.json().catch(() => ({})) as BinanceErrorPayload & { price?: string };
@@ -73,7 +75,7 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
   }
 
   async getOrderRules(symbol: string): Promise<{ stepSize: number; minNotional: number }> {
-    const response = await this.fetchImpl(`${TESTNET_BASE_URL}/api/v3/exchangeInfo?symbol=${encodeURIComponent(symbol)}`, {
+    const response = await this.request(`${TESTNET_BASE_URL}/api/v3/exchangeInfo?symbol=${encodeURIComponent(symbol)}`, {
       signal: AbortSignal.timeout(10_000),
     });
     const payload = await response.json().catch(() => ({})) as BinanceErrorPayload & {
@@ -106,7 +108,7 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
   }
 
   private async placeMarketOrder(symbol: string, side: "BUY" | "SELL", amount: Record<string, string>, requestedClientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult> {
-    await this.syncServerTime();
+    await this.preflight(() => this.syncServerTime());
     // Recheck after exchange preflight calls, before sending an irreversible order.
     if (canSubmit && !await canSubmit()) throw new OrderSubmissionBlockedError();
     const clientOrderId = requestedClientOrderId ?? `bot_${side.toLowerCase()}_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
@@ -150,7 +152,7 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
   private async signedRequest(method: "GET" | "POST", pathname: string, params: Record<string, string>): Promise<unknown> {
     const query = new URLSearchParams({ ...params, recvWindow: "5000", timestamp: String(Math.floor(Date.now() + this.timeOffsetMs)) }).toString();
     const signature = createHmac("sha256", this.apiSecret).update(query).digest("hex");
-    const response = await this.fetchImpl(`${TESTNET_BASE_URL}${pathname}?${query}&signature=${signature}`, {
+    const response = await this.request(`${TESTNET_BASE_URL}${pathname}?${query}&signature=${signature}`, {
       method, headers: { "X-MBX-APIKEY": this.apiKey }, signal: AbortSignal.timeout(10_000),
     });
     const payload = await response.json().catch(() => ({})) as BinanceErrorPayload;
@@ -160,7 +162,7 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
 
   private async syncServerTime(): Promise<void> {
     const startedAt = Date.now();
-    const response = await this.fetchImpl(`${TESTNET_BASE_URL}/api/v3/time`, { signal: AbortSignal.timeout(5_000) });
+    const response = await this.request(`${TESTNET_BASE_URL}/api/v3/time`, { signal: AbortSignal.timeout(5_000) });
     const payload = await response.json().catch(() => ({})) as BinanceErrorPayload & { serverTime?: number };
     if (!response.ok) throw this.safeError(response.status, payload.code);
     if (!Number.isFinite(payload.serverTime)) throw new BinanceTestnetOrderError("TIMESTAMP_ERROR", "Spot Testnet-მა არასწორი დრო დააბრუნა");
@@ -176,6 +178,30 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     if (code === -2013) return new BinanceTestnetOrderError("ORDER_NOT_FOUND", "Spot Testnet-ზე ორდერი ვერ მოიძებნა");
     if (code === -1013) return new BinanceTestnetOrderError("FILTER_REJECTED", "ორდერი Spot Testnet-ის symbol rules-ს არ აკმაყოფილებს");
     return new BinanceTestnetOrderError("ERROR", `Spot Testnet მოთხოვნა ვერ შესრულდა: HTTP ${httpStatus}${code ? ` (code ${code})` : ""}`);
+  }
+
+  private async request(url: string, init: RequestInit): Promise<Response> {
+    if (Date.now() < this.retryAt) throw new BinanceTestnetOrderError("RATE_LIMITED", "TESTNET კავშირის აღდგენას ელოდება", false, this.retryAt - Date.now());
+    const response = await this.fetchImpl(url, init);
+    if (response.status === 429 || response.status === 418) {
+      const seconds = Number(response.headers.get("Retry-After"));
+      const delay = Math.max(response.status === 418 ? 180_000 : 60_000, Number.isFinite(seconds) ? seconds * 1000 : 0);
+      this.retryAt = Date.now() + delay;
+      throw new BinanceTestnetOrderError("RATE_LIMITED", "TESTNET მოთხოვნების ლიმიტი; ავტომატურად განმეორდება", false, delay);
+    }
+    return response;
+  }
+
+  private async preflight<T>(operation: () => Promise<T>): Promise<T> {
+    try { return await operation(); }
+    catch (error) {
+      if (error instanceof BinanceTestnetOrderError && error.kind !== "ERROR") throw error;
+      // No order has been submitted during preflight, so network failures are safe to retry.
+      if (!(error instanceof BinanceTestnetOrderError) || /HTTP 5\d\d/.test(error.message)) {
+        throw new BinanceTestnetOrderError("TEMPORARY", "TESTNET დროებითი კავშირის შეფერხება");
+      }
+      throw error;
+    }
   }
 
   private floorToStep(value: number, step: number): number { return Math.floor((value + Number.EPSILON) / step) * step; }

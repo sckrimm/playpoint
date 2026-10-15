@@ -7,7 +7,7 @@ import { StrategyRepository } from "../src/database/strategyRepository.js";
 import { PostgresStrategyRepository } from "../src/database/postgresRepository.js";
 import { StrategyEngine } from "../src/strategy/strategyEngine.js";
 import { SimulationOrderService } from "../src/services/simulationOrderService.js";
-import { BinanceTestnetOrderService } from "../src/services/binanceTestnetOrderService.js";
+import { BinanceTestnetOrderService, BinanceTestnetOrderError } from "../src/services/binanceTestnetOrderService.js";
 import { isFreshMarketEvent, OrderSubmissionBlockedError } from "../src/services/marketSafety.js";
 import type { OrderExecutionService, StrategyConfig } from "../src/types/strategy.js";
 
@@ -77,6 +77,138 @@ test("an API error pauses TESTNET before any additional eligible BUY is submitte
     assert.equal((await store.getById(id)).status, "PAUSED");
     assert.equal((await store.getLevels(id)).find((level) => level.levelPercent === 20)?.status, "WAITING");
   } finally { db.close(); }
+});
+
+test("temporary failures back off and automatically trade again without pausing", async (context) => {
+  let now = Date.now();
+  context.mock.method(Date, "now", () => now);
+  const db = openDatabase(":memory:");
+  const store = new StrategyRepository(db);
+  let calls = 0;
+  const orders: OrderExecutionService = { environment: "TESTNET",
+    buy: async (symbol, price, quote) => {
+      if (++calls === 1) throw new BinanceTestnetOrderError("TEMPORARY", "offline");
+      return { orderId: "recovered", side: "BUY", symbol, price, quoteAmount: quote, assetQuantity: quote / price };
+    }, sell: async () => { throw new Error("Unexpected SELL"); } };
+  try {
+    const engine = new StrategyEngine(config, store, orders, false, undefined, async () => false);
+    const id = await engine.initialize();
+    await engine.onPrice(90, new Date(now));
+    assert.equal((await store.getById(id)).status, "ACTIVE");
+    await engine.onPrice(90, new Date(now));
+    assert.equal(calls, 1);
+    now += 30_001;
+    await engine.onPrice(90, new Date(now));
+    assert.equal(await store.countOrders(id), 1);
+  } finally { db.close(); }
+});
+
+test("uncertain orders block all new trades until reconciliation confirms execution", async (context) => {
+  let now = Date.now();
+  context.mock.method(Date, "now", () => now);
+  const db = openDatabase(":memory:");
+  const store = new StrategyRepository(db);
+  let calls = 0;
+  let resolved = false;
+  const orders: OrderExecutionService = { environment: "TESTNET",
+    buy: async () => { calls++; throw new BinanceTestnetOrderError("UNKNOWN_RESULT", "timeout", true); },
+    sell: async () => { throw new Error("Unexpected SELL"); },
+    reconcileOrder: async () => {
+      if (!resolved) throw new Error("offline");
+      return { orderId: "confirmed", side: "BUY", symbol: "BTCUSDT", price: 90, quoteAmount: 50, assetQuantity: 50 / 90 };
+    } };
+  try {
+    const engine = new StrategyEngine(config, store, orders, false, undefined, async () => false);
+    const id = await engine.initialize();
+    await engine.onPrice(80, new Date(now));
+    assert.equal((await store.getById(id)).status, "ACTIVE");
+    now += 30_001;
+    await engine.onPrice(80, new Date(now));
+    assert.equal(calls, 1);
+    await engine.reconcilePendingOrders();
+    resolved = true;
+    now += 60_001;
+    await engine.reconcilePendingOrders();
+    assert.equal(await store.countOrders(id), 1);
+    await engine.onPrice(90, new Date(now));
+    assert.equal(calls, 1);
+  } finally { db.close(); }
+});
+
+test("preflight network failure is retryable and submits no order", async () => {
+  const executor = new BinanceTestnetOrderService("key", "secret", (async () => { throw new TypeError("fetch failed"); }) as typeof fetch);
+  await assert.rejects(executor.buy("BTCUSDT", 90, 50), (error: unknown) => error instanceof BinanceTestnetOrderError && error.kind === "TEMPORARY");
+});
+
+test("temporary SELL failure automatically recovers without duplicating a sale", async (context) => {
+  let now = Date.now();
+  context.mock.method(Date, "now", () => now);
+  const db = openDatabase(":memory:");
+  const store = new StrategyRepository(db);
+  const simulation = new SimulationOrderService();
+  let sales = 0;
+  const orders: OrderExecutionService = { environment: "TESTNET",
+    buy: simulation.buy.bind(simulation),
+    sell: async (symbol, price, quantity) => {
+      if (++sales === 1) throw new BinanceTestnetOrderError("TIMESTAMP_ERROR", "clock skew");
+      return simulation.sell(symbol, price, quantity);
+    } };
+  try {
+    const engine = new StrategyEngine(config, store, orders, false, undefined, async () => false);
+    const id = await engine.initialize();
+    await engine.onPrice(90, new Date(now));
+    await engine.onPrice(111, new Date(now));
+    assert.equal((await store.getById(id)).status, "ACTIVE");
+    await engine.onPrice(111, new Date(now));
+    assert.equal(sales, 1);
+    now += 30_001;
+    await engine.onPrice(111, new Date(now));
+    await engine.onPrice(111, new Date(now));
+    assert.equal(sales, 2);
+    assert.equal(await store.countOrders(id), 2);
+  } finally { db.close(); }
+});
+
+test("invalid credentials, balance and filter errors still pause instead of looping", async () => {
+  for (const kind of ["INVALID_KEY", "INVALID_SIGNATURE", "INSUFFICIENT_BALANCE", "FILTER_REJECTED"] as const) {
+    const db = openDatabase(":memory:");
+    const store = new StrategyRepository(db);
+    const orders: OrderExecutionService = { environment: "TESTNET",
+      buy: async () => { throw new BinanceTestnetOrderError(kind, kind); },
+      sell: async () => { throw new Error("Unexpected SELL"); } };
+    try {
+      const engine = new StrategyEngine(config, store, orders, false, undefined, async () => false);
+      const id = await engine.initialize();
+      await engine.onPrice(80, new Date());
+      assert.equal((await store.getById(id)).status, "PAUSED");
+    } finally { db.close(); }
+  }
+});
+
+test("POST server failures query the same order ID instead of resubmitting", async () => {
+  let posts = 0;
+  const executor = new BinanceTestnetOrderService("key", "secret", (async (url, init) => {
+    if (String(url).includes("/time")) return new Response(JSON.stringify({ serverTime: Date.now() }));
+    if (init?.method === "POST") {
+      posts++;
+      return new Response("{}", { status: 503 });
+    }
+    assert.equal(new URL(String(url)).searchParams.get("origClientOrderId"), "same-id");
+    return new Response(JSON.stringify({ orderId: 1, executedQty: "1", cummulativeQuoteQty: "90", status: "FILLED" }));
+  }) as typeof fetch);
+  assert.equal((await executor.buy("BTCUSDT", 90, 90, "same-id")).orderId, "1");
+  assert.equal(posts, 1);
+});
+
+test("rate limits honor Retry-After without sending more requests", async () => {
+  let calls = 0;
+  const executor = new BinanceTestnetOrderService("key", "secret", (async () => {
+    calls++;
+    return new Response("{}", { status: 429, headers: { "Retry-After": "600" } });
+  }) as typeof fetch);
+  await assert.rejects(executor.buy("BTCUSDT", 90, 50), (error: unknown) => error instanceof BinanceTestnetOrderError && error.retryAfterMs >= 600_000);
+  await assert.rejects(executor.buy("BTCUSDT", 90, 50));
+  assert.equal(calls, 1);
 });
 
 test("ticks that expire while queued or during preflight never submit an order", async (context) => {

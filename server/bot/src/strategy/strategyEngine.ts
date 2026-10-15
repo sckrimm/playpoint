@@ -4,6 +4,7 @@ import type { StrategyStore } from "../database/repository.js";
 import { money, quantity } from "../utils/format.js";
 import { telegramAlerts } from "../services/telegramAlertService.js";
 import { isFreshMarketEvent, OrderSubmissionBlockedError } from "../services/marketSafety.js";
+import { BinanceTestnetOrderError } from "../services/binanceTestnetOrderService.js";
 
 export function needsOrderReconciliation(level: ExecutedLevelRecord): boolean {
   return Boolean(level.clientOrderId && (level.status === "EXECUTING" ||
@@ -13,6 +14,8 @@ export function needsOrderReconciliation(level: ExecutedLevelRecord): boolean {
 export class StrategyEngine {
   private evaluationQueue: Promise<void> = Promise.resolve();
   private strategyId: number | null;
+  private retryAt = 0;
+  private retryFailures = 0;
 
   constructor(
     private readonly config: StrategyConfig,
@@ -53,6 +56,7 @@ export class StrategyEngine {
   }
 
   private async reconcilePendingOrdersNow(): Promise<void> {
+    if (Date.now() < this.retryAt) return;
     if (!this.orders.reconcileOrder) return;
     if (this.strategyId === null) return;
     const strategyId = this.strategyId;
@@ -77,9 +81,11 @@ export class StrategyEngine {
             order.assetQuantity, minimumReserveQuantity, order.orderId);
         }
         void this.notify(`ორდერი აღდგენილია restart-ის შემდეგ\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\nBinance order: ${order.orderId}`);
+        this.retryFailures = 0;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`Order reconciliation failed for ${clientOrderId}: ${message}`);
+        this.deferRetry(error);
         void this.notify(`ორდერის reconciliation ვერ დასრულდა\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\n${message}\nდონე უსაფრთხოდ დაბლოკილი რჩება`);
       }
     }
@@ -97,19 +103,40 @@ export class StrategyEngine {
 
   private async canSubmit(strategyId: number, eventTime: number | undefined): Promise<boolean> {
     const strategy = await this.repository.getById(strategyId);
-    return strategy.status === "ACTIVE" && await this.authorize(strategy) && this.marketIsSafe(eventTime);
+    return Date.now() >= this.retryAt && strategy.status === "ACTIVE" && await this.authorize(strategy) && this.marketIsSafe(eventTime);
+  }
+
+  private deferRetry(error: unknown): void {
+    this.retryFailures++;
+    const delay = Math.min(300_000, 30_000 * 2 ** Math.min(this.retryFailures - 1, 4));
+    this.retryAt = Date.now() + Math.max(delay, error instanceof BinanceTestnetOrderError ? error.retryAfterMs : 0);
+  }
+
+  private async handleTestnetFailure(strategy: StrategyRecord, error: unknown): Promise<void> {
+    const recoverable = error instanceof BinanceTestnetOrderError &&
+      (error.noAutoRetry || ["TEMPORARY", "RATE_LIMITED", "TIMESTAMP_ERROR"].includes(error.kind));
+    if (recoverable) {
+      this.deferRetry(error);
+      void this.notify(`${strategy.symbol} · სტრატეგია #${strategy.id}\nდროებითი შეფერხება; ავტომატურად გადამოწმდება და გაგრძელდება`);
+    } else {
+      await this.repository.setStrategyStatus(strategy.id, "PAUSED");
+      void this.notify(`${strategy.symbol} · სტრატეგია #${strategy.id} შეჩერებულია API შეცდომის შემდეგ; განახლებამდე გადაამოწმე ორდერი`);
+    }
   }
 
   private async evaluate(price: number, eventTime: number | undefined): Promise<void> {
     if (!Number.isFinite(price) || price <= 0) throw new Error("Price must be a positive number");
     if (this.strategyId === null) throw new Error("Strategy engine is not initialized");
     if (!this.marketIsSafe(eventTime)) return;
+    if (Date.now() < this.retryAt) return;
     const strategy = await this.repository.getById(this.strategyId);
     if (strategy.status !== "ACTIVE") return;
     if (!await this.authorize(strategy)) return;
     if (this.verbose) console.log(`\n${strategy.symbol} | Current: ${money(price)} | Initial: ${money(strategy.initialEntryPrice)} | Average: ${money(strategy.averageEntryPrice)}`);
 
     const storedLevels = await this.repository.getLevels(strategy.id);
+    // Uncertain orders may have filled; do not spend or sell again until reconciled.
+    if (storedLevels.some(needsOrderReconciliation)) return;
     const eligibleBuys = storedLevels
       .filter((level) => level.side === "BUY" && price <= level.triggerPrice)
       .sort((a, b) => a.levelPercent - b.levelPercent);
@@ -133,6 +160,7 @@ export class StrategyEngine {
       try {
         const order = await this.orders.buy(strategy.symbol, price, quoteAmount, clientOrderId, () => this.canSubmit(strategy.id, eventTime));
         await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
+        this.retryFailures = 0;
         void this.notify([
           `BUY შესრულდა [${this.orders.environment}]`,
           `${strategy.symbol} · სტრატეგია #${strategy.id}`,
@@ -158,8 +186,7 @@ export class StrategyEngine {
         void this.notify(`BUY შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: -${level.levelPercent}%\n${message}`);
         console.error(`BUY -${level.levelPercent}% failed safely`, message);
         if (this.orders.environment === "TESTNET") {
-          await this.repository.setStrategyStatus(strategy.id, "PAUSED");
-          void this.notify(`${strategy.symbol} · სტრატეგია #${strategy.id} შეჩერებულია API შეცდომის შემდეგ; განახლებამდე გადაამოწმე ორდერი`);
+          await this.handleTestnetFailure(strategy, error);
           return;
         }
       }
@@ -186,6 +213,7 @@ export class StrategyEngine {
         const order = await this.orders.sell(strategy.symbol, price, assetQuantity, clientOrderId, () => this.canSubmit(strategy.id, eventTime));
         await this.repository.completeSell(strategy.id, level.levelPercent, order.price, order.quoteAmount,
           order.assetQuantity, minimumReserveQuantity, order.orderId);
+        this.retryFailures = 0;
         void this.notify([
           `SELL შესრულდა [${this.orders.environment}]`,
           `${strategy.symbol} · სტრატეგია #${strategy.id}`,
@@ -211,8 +239,7 @@ export class StrategyEngine {
         void this.notify(`SELL შეცდომა [${this.orders.environment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nდონე: +${level.levelPercent}%\n${message}`);
         console.error(`SELL +${level.levelPercent}% failed safely`, message);
         if (this.orders.environment === "TESTNET") {
-          await this.repository.setStrategyStatus(strategy.id, "PAUSED");
-          void this.notify(`${strategy.symbol} · სტრატეგია #${strategy.id} შეჩერებულია API შეცდომის შემდეგ; განახლებამდე გადაამოწმე ორდერი`);
+          await this.handleTestnetFailure(strategy, error);
           return;
         }
       }
