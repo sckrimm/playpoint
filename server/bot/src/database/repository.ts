@@ -27,7 +27,7 @@ export interface StrategyStore {
   initializeBuyLevels(strategyId: number, config: StrategyConfig): Promise<void>;
   getLevels(strategyId: number): Promise<ExecutedLevelRecord[]>;
   claimLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<boolean>;
-  releaseLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<void>;
+  releaseLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string, reason?: string): Promise<void>;
   completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string): Promise<void>;
   completeSell(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void>;
   beginProfitWithdrawal(strategyId: number, amount: number, requestKey: string, allowSale: boolean): Promise<ProfitWithdrawalRequest>;

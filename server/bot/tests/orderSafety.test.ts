@@ -209,6 +209,7 @@ describe("Binance reconciliation responses", () => {
       { filterType: "NOTIONAL", minNotional: "5.00000000" },
     ] }] });
     const rules = await new BinanceTestnetOrderService("key", "secret", fetchMock).getOrderRules("SOLUSDT");
-    assert.deepEqual(rules, { stepSize: 0.001, minNotional: 5 });
+    assert.deepEqual(rules, { stepSize: 0.001, minNotional: 5, maxNotional: null, avgPriceMins: 0,
+      quantity: [{ min: 0, max: null, step: 0.001 }] });
   });
 });

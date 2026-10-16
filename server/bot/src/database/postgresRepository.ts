@@ -395,11 +395,11 @@ export class PostgresStrategyRepository implements StrategyStore {
     return result.rowCount === 1;
   }
 
-  async releaseLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<void> {
-    await this.pool.query(`UPDATE bot_executed_levels SET status = 'WAITING', error_message = NULL,
+  async releaseLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string, reason?: string): Promise<void> {
+    await this.pool.query(`UPDATE bot_executed_levels SET status = 'WAITING', error_message = $5,
       client_order_id = NULL, execution_started_at = NULL
       WHERE strategy_id = $1 AND side = $2 AND level_percent = $3 AND client_order_id = $4
-        AND status IN ('EXECUTING', 'FAILED')`, [strategyId, side, levelPercent, clientOrderId]);
+        AND status IN ('EXECUTING', 'FAILED')`, [strategyId, side, levelPercent, clientOrderId, reason?.slice(0, 500) ?? null]);
   }
 
   async completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string): Promise<void> {

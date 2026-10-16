@@ -189,6 +189,9 @@ test("POST server failures query the same order ID instead of resubmitting", asy
   let posts = 0;
   const executor = new BinanceTestnetOrderService("key", "secret", (async (url, init) => {
     if (String(url).includes("/time")) return new Response(JSON.stringify({ serverTime: Date.now() }));
+    if (String(url).includes("/exchangeInfo")) return new Response(JSON.stringify({ symbols: [{ filters: [
+      { filterType: "LOT_SIZE", stepSize: "0.001" }, { filterType: "MIN_NOTIONAL", minNotional: "5" },
+    ] }] }));
     if (init?.method === "POST") {
       posts++;
       return new Response("{}", { status: 503 });

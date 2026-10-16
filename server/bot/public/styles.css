@@ -323,9 +323,10 @@ h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
 .level-view-title { margin-top: 16px; }
 .level-view[hidden] { display: none; }
 .orders-grid { grid-template-columns: 1fr; }
-.level-info { display: grid; gap: 4px; }
+.level-info { display: grid; min-width: 0; gap: 4px; }
 .level-info strong { font-size: 14px; }
 .level-info span { color: #7b8780; font-size: 11px; }
+.level-info .level-deferred { color: #bd9f3b; overflow-wrap: anywhere; }
 .level-state { padding: 5px 8px; border-radius: 5px; font-size: 10px; font-weight: 800; }
 .level-state.executed { background: #e5f5ed; color: #16774c; }
 .level-state.waiting { background: #eef1ef; color: #68746e; }

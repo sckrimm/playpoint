@@ -5,6 +5,7 @@ import { money, quantity } from "../utils/format.js";
 import { telegramAlerts } from "../services/telegramAlertService.js";
 import { isFreshMarketEvent, OrderSubmissionBlockedError } from "../services/marketSafety.js";
 import { BinanceTestnetOrderError } from "../services/binanceTestnetOrderService.js";
+import { OrderBelowMinimumError } from "../services/orderRules.js";
 
 export function needsOrderReconciliation(level: ExecutedLevelRecord): boolean {
   return Boolean(level.clientOrderId && (level.status === "EXECUTING" ||
@@ -16,6 +17,7 @@ export class StrategyEngine {
   private strategyId: number | null;
   private retryAt = 0;
   private retryFailures = 0;
+  private levelRetryAt = new Map<string, number>();
 
   constructor(
     private readonly config: StrategyConfig,
@@ -143,6 +145,7 @@ export class StrategyEngine {
 
     let executedAny = false;
     for (const level of eligibleBuys) {
+      if (Date.now() < (this.levelRetryAt.get(`BUY:${level.levelPercent}`) ?? 0)) continue;
       const current = await this.repository.getById(strategy.id);
       const retainedProfit = Math.max(0, current.realizedProfit - current.withdrawnProfit);
       const levelBudget = current.totalBudget + retainedProfit - current.initialPurchaseAmount;
@@ -177,6 +180,10 @@ export class StrategyEngine {
           `Estimated asset received: ${quantity(order.assetQuantity)}`,
         ].join("\n"));
       } catch (error) {
+        if (error instanceof OrderBelowMinimumError) {
+          await this.deferSmallOrder(strategy, level, clientOrderId, error);
+          continue;
+        }
         if (error instanceof OrderSubmissionBlockedError) {
           await this.repository.releaseLevel(strategy.id, "BUY", level.levelPercent, clientOrderId);
           return;
@@ -199,6 +206,7 @@ export class StrategyEngine {
       .sort((a, b) => a.levelPercent - b.levelPercent);
 
     for (const level of eligibleSells) {
+      if (Date.now() < (this.levelRetryAt.get(`SELL:${level.levelPercent}`) ?? 0)) continue;
       const current = await this.repository.getById(strategy.id);
       const assetQuantity = current.cyclePurchasedQuantity * (level.allocationPercent / 100);
       if (assetQuantity <= 0 || current.totalAssetQuantity - assetQuantity + 1e-12 < minimumReserveQuantity) continue;
@@ -230,6 +238,10 @@ export class StrategyEngine {
           `Estimated proceeds: ${money(order.quoteAmount)}`,
         ].join("\n"));
       } catch (error) {
+        if (error instanceof OrderBelowMinimumError) {
+          await this.deferSmallOrder(strategy, level, clientOrderId, error);
+          continue;
+        }
         if (error instanceof OrderSubmissionBlockedError) {
           await this.repository.releaseLevel(strategy.id, "SELL", level.levelPercent, clientOrderId);
           return;
@@ -245,5 +257,15 @@ export class StrategyEngine {
       }
     }
     if (!executedAny && this.verbose) console.log("No action.");
+  }
+
+  private async deferSmallOrder(strategy: StrategyRecord, level: ExecutedLevelRecord, clientOrderId: string, error: OrderBelowMinimumError): Promise<void> {
+    const reason = `[ORDER_DEFERRED] ${error.message}`;
+    // Only pre-submission minimum checks reach here; unknown exchange results stay locked.
+    await this.repository.releaseLevel(strategy.id, level.side, level.levelPercent, clientOrderId, reason);
+    this.levelRetryAt.set(`${level.side}:${level.levelPercent}`, Date.now() + 60_000);
+    if (!level.errorMessage?.startsWith("[ORDER_DEFERRED]")) {
+      void this.notify(`${strategy.symbol} · ${level.side} ${level.levelPercent}%\n${error.message}\nბოტი აქტიურია; დონე ავტომატურად გადამოწმდება`);
+    }
   }
 }

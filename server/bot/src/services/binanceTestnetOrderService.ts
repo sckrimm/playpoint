@@ -1,6 +1,8 @@
 import { createHmac, randomUUID } from "node:crypto";
 import type { AccountBalance, OrderExecutionResult, OrderExecutionService } from "../types/strategy.js";
 import { OrderSubmissionBlockedError } from "./marketSafety.js";
+import { Decimal } from "decimal.js";
+import { checkMarketNotional, floorMarketQuantity, OrderBelowMinimumError, parseMarketRules, type TestnetOrderRules } from "./orderRules.js";
 
 const TESTNET_BASE_URL = "https://testnet.binance.vision";
 
@@ -31,6 +33,7 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
   readonly environment = "TESTNET" as const;
   private timeOffsetMs = 0;
   private retryAt = 0;
+  private rules = new Map<string, { value: TestnetOrderRules; expiresAt: number }>();
 
   constructor(
     private readonly apiKey: string,
@@ -42,15 +45,30 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
 
   async buy(symbol: string, _price: number, quoteAmount: number, clientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult> {
     if (!Number.isFinite(quoteAmount) || quoteAmount <= 0) throw new Error("TESTNET BUY თანხა ნულზე მეტი უნდა იყოს");
-    return this.placeMarketOrder(symbol, "BUY", { quoteOrderQty: this.decimal(quoteAmount, 8) }, clientOrderId, canSubmit);
+    const rules = await this.preflight(() => this.getOrderRules(symbol));
+    const rounded = new Decimal(quoteAmount).toDecimalPlaces(8, Decimal.ROUND_DOWN);
+    if (rounded.lte(0) || rounded.lt(rules.minNotional)) throw new OrderBelowMinimumError(`BUY თანხა ${rounded.toString()} USDT-ია; მინიმუმია ${rules.minNotional} USDT`);
+    if (rules.maxNotional !== null && rounded.gt(rules.maxNotional)) throw new BinanceTestnetOrderError("FILTER_REJECTED", "BUY თანხა Binance-ის მაქსიმუმს აღემატება");
+    return this.placeMarketOrder(symbol, "BUY", { quoteOrderQty: rounded.toFixed() }, clientOrderId, canSubmit);
   }
 
   async sell(symbol: string, _price: number, assetQuantity: number, clientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult> {
     if (!Number.isFinite(assetQuantity) || assetQuantity <= 0) throw new Error("TESTNET SELL რაოდენობა ნულზე მეტი უნდა იყოს");
-    const { stepSize } = await this.preflight(() => this.getOrderRules(symbol));
-    const quantity = this.floorToStep(assetQuantity, stepSize);
-    if (quantity <= 0) throw new BinanceTestnetOrderError("FILTER_REJECTED", "გასაყიდი რაოდენობა Binance-ის stepSize-ზე ნაკლებია");
-    return this.placeMarketOrder(symbol, "SELL", { quantity: this.decimal(quantity, this.decimals(stepSize)) }, clientOrderId, canSubmit);
+    const rules = await this.preflight(() => this.getOrderRules(symbol));
+    if (canSubmit && !await canSubmit()) throw new OrderSubmissionBlockedError();
+    const quantity = floorMarketQuantity(assetQuantity, rules);
+    let referencePrice = _price;
+    if (rules.avgPriceMins > 0) {
+      referencePrice = await this.preflight(async () => {
+        const response = await this.request(`${TESTNET_BASE_URL}/api/v3/avgPrice?symbol=${encodeURIComponent(symbol)}`, { signal: AbortSignal.timeout(10_000) });
+        const payload = await response.json() as { mins?: number; price?: string; code?: number };
+        if (!response.ok) throw this.safeError(response.status, payload.code);
+        if (payload.mins !== rules.avgPriceMins || !Number.isFinite(Number(payload.price)) || Number(payload.price) <= 0) throw new BinanceTestnetOrderError("TEMPORARY", "საშუალო სავაჭრო ფასი ვერ დადასტურდა");
+        return Number(payload.price);
+      });
+    }
+    checkMarketNotional(quantity, referencePrice, rules);
+    return this.placeMarketOrder(symbol, "SELL", { quantity: new Decimal(quantity).toFixed() }, clientOrderId, canSubmit);
   }
 
   async getBalances(): Promise<AccountBalance[]> {
@@ -74,21 +92,22 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     return price;
   }
 
-  async getOrderRules(symbol: string): Promise<{ stepSize: number; minNotional: number }> {
+  async getOrderRules(symbol: string): Promise<TestnetOrderRules> {
+    const cached = this.rules.get(symbol);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
     const response = await this.request(`${TESTNET_BASE_URL}/api/v3/exchangeInfo?symbol=${encodeURIComponent(symbol)}`, {
       signal: AbortSignal.timeout(10_000),
     });
     const payload = await response.json().catch(() => ({})) as BinanceErrorPayload & {
-      symbols?: Array<{ filters: Array<{ filterType: string; stepSize?: string; minNotional?: string }> }>;
+      symbols?: Array<{ symbol?: string; status?: string; filters: Parameters<typeof parseMarketRules>[0] }>;
     };
     if (!response.ok) throw this.safeError(response.status, payload.code);
-    const filters = payload.symbols?.[0]?.filters ?? [];
-    const stepSize = Number(filters.find((filter) => filter.filterType === "LOT_SIZE")?.stepSize);
-    const minNotional = Number(filters.find((filter) => ["NOTIONAL", "MIN_NOTIONAL"].includes(filter.filterType))?.minNotional);
-    if (!Number.isFinite(stepSize) || stepSize <= 0 || !Number.isFinite(minNotional) || minNotional <= 0) {
-      throw new BinanceTestnetOrderError("FILTER_REJECTED", "სიმბოლოს TESTNET სავაჭრო წესები ვერ მოიძებნა");
-    }
-    return { stepSize, minNotional };
+    const item = payload.symbols?.find((entry) => !entry.symbol || entry.symbol === symbol);
+    if (!item || (item.status && item.status !== "TRADING")) throw new BinanceTestnetOrderError("FILTER_REJECTED", "სიმბოლოს TESTNET ვაჭრობა მიუწვდომელია");
+    let value: TestnetOrderRules;
+    try { value = parseMarketRules(item.filters); } catch { throw new BinanceTestnetOrderError("FILTER_REJECTED", "სიმბოლოს TESTNET სავაჭრო წესები არასწორია"); }
+    this.rules.set(symbol, { value, expiresAt: Date.now() + 300_000 });
+    return value;
   }
 
   async reconcileOrder(symbol: string, side: "BUY" | "SELL", clientOrderId: string): Promise<OrderExecutionResult | null> {
@@ -204,9 +223,4 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     }
   }
 
-  private floorToStep(value: number, step: number): number { return Math.floor((value + Number.EPSILON) / step) * step; }
-  private decimals(value: number): number { return Math.min(12, Math.max(0, (value.toString().split(".")[1] ?? "").length)); }
-  private decimal(value: number, decimals: number): string {
-    return value.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-  }
 }

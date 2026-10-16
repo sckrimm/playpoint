@@ -233,11 +233,11 @@ export class StrategyRepository implements StrategyStore {
     return result.changes === 1;
   }
 
-  async releaseLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<void> {
-    this.db.prepare(`UPDATE executed_levels SET status = 'WAITING', error_message = NULL,
+  async releaseLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string, reason?: string): Promise<void> {
+    this.db.prepare(`UPDATE executed_levels SET status = 'WAITING', error_message = ?,
       client_order_id = NULL, execution_started_at = NULL
       WHERE strategy_id = ? AND side = ? AND level_percent = ? AND client_order_id = ?
-        AND status IN ('EXECUTING', 'FAILED')`).run(strategyId, side, levelPercent, clientOrderId);
+        AND status IN ('EXECUTING', 'FAILED')`).run(reason?.slice(0, 500) ?? null, strategyId, side, levelPercent, clientOrderId);
   }
 
   async completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string): Promise<void> {
