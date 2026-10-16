@@ -4,6 +4,7 @@ import type { StrategyStore } from "./repository.js";
 import type { SymbolRules } from "../binance/binanceService.js";
 import { emptyTestnetEvidence, nextTestnetEvidence, type TestnetEvidence } from "../services/testnetEvidence.js";
 import { mapProfitRequest, planProfitWithdrawal, validateProfitRequestKey, type ProfitWithdrawalRequest } from "../services/profitWithdrawal.js";
+import type { AnalystAssessment, AnalystReview } from "../services/analystService.js";
 
 type PgStrategyRow = {
   id: number; symbol: string; initial_entry_price: string; total_budget: string; initial_purchase_amount: string; final_reserve_percent: string; total_invested: string;
@@ -68,6 +69,10 @@ export class PostgresStrategyRepository implements StrategyStore {
         remaining_cost_basis NUMERIC NOT NULL DEFAULT 0,
         average_entry_price NUMERIC NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'ACTIVE', created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS bot_analyst_reviews (
+        id BIGSERIAL PRIMARY KEY, strategy_id BIGINT NOT NULL REFERENCES bot_strategies(id),
+        assessment TEXT NOT NULL, decision TEXT NOT NULL DEFAULT 'NEW', created_at TIMESTAMPTZ NOT NULL
       );
       CREATE TABLE IF NOT EXISTS bot_profit_withdrawals (
         request_key TEXT PRIMARY KEY, strategy_id BIGINT NOT NULL REFERENCES bot_strategies(id),
@@ -500,6 +505,24 @@ export class PostgresStrategyRepository implements StrategyStore {
     } finally {
       client.release();
     }
+  }
+
+  async saveAnalystReview(strategyId: number, assessment: AnalystAssessment): Promise<AnalystReview> {
+    const row = (await this.pool.query(`INSERT INTO bot_analyst_reviews (strategy_id, assessment, created_at) VALUES ($1, $2, $3) RETURNING id`,
+      [strategyId, JSON.stringify(assessment), assessment.generatedAt])).rows[0];
+    await this.pool.query(`DELETE FROM bot_analyst_reviews WHERE strategy_id = $1 AND id NOT IN
+      (SELECT id FROM bot_analyst_reviews WHERE strategy_id = $1 ORDER BY id DESC LIMIT 100)`, [strategyId]);
+    return { id: Number(row.id), decision: "NEW", assessment };
+  }
+
+  async getAnalystReviews(strategyId: number): Promise<AnalystReview[]> {
+    return (await this.pool.query("SELECT id, decision, assessment FROM bot_analyst_reviews WHERE strategy_id = $1 ORDER BY id DESC LIMIT 30", [strategyId])).rows
+      .map((row) => ({ id: Number(row.id), decision: row.decision, assessment: JSON.parse(row.assessment) }));
+  }
+
+  async decideAnalystReview(strategyId: number, reviewId: number, decision: "ACKNOWLEDGED" | "DISMISSED"): Promise<void> {
+    const result = await this.pool.query("UPDATE bot_analyst_reviews SET decision = $1 WHERE id = $2 AND strategy_id = $3", [decision, reviewId, strategyId]);
+    if (result.rowCount !== 1) throw new Error("შეფასება ვერ მოიძებნა");
   }
 
   async getProfitWithdrawals(strategyId: number): Promise<ProfitWithdrawalRequest[]> {

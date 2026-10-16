@@ -8,6 +8,7 @@
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("spot-theme")==="dark"?"dark":"light"}catch{}</script>
     <link rel="stylesheet" href="styles.css?v=20261015-1" />
     <link rel="stylesheet" href="controls.css?v=20261015-5" />
+    <link rel="stylesheet" href="analyst.css?v=20261016-1" />
   </head>
   <body>
     <header class="topbar">
@@ -50,6 +51,13 @@
           </div>
         </div>
         <p id="pauseAllMessage" role="status" hidden></p>
+        <section id="analystPanel" class="analyst-panel" aria-labelledby="analystTitle">
+          <div class="analyst-heading"><div><h2 id="analystTitle">ბაზრის პულსი</h2><span id="analystSource" class="analyst-caption">წესებზე დაფუძნებული · AI გამორთულია</span></div>
+            <div class="analyst-tools"><button id="refreshAnalyst" class="analyst-icon" type="button" title="ანალიზის განახლება" aria-label="ანალიზის განახლება">↻</button><button id="toggleAnalyst" class="analyst-toggle" type="button" role="switch" aria-checked="true" title="ანალიტიკის ჩართვა ან გამორთვა"><span>ანალიტიკა</span><i></i></button></div>
+          </div>
+          <div id="analystPulse" class="analyst-pulse" aria-live="polite"><p class="analyst-caption">ბაზრის მონაცემები მოწმდება...</p></div>
+          <div class="analyst-bottom"><span id="analystUpdated" class="analyst-caption">—</span><button id="openAnalystSummary" class="analyst-text-button" type="button" disabled>ბოტების შეფასებები</button></div>
+        </section>
         <div class="strategy-list-toolbar"><span class="muted">მოგების მიხედვით</span><div id="strategyLayout" class="view-switch" role="group" aria-label="სტრატეგიების განლაგება"><button type="button" data-layout="rows" aria-pressed="false">რიგები</button><button type="button" data-layout="columns" aria-pressed="true">სვეტები</button></div></div>
         <div id="strategyList" class="strategy-list"><p class="empty-state">სტრატეგიები იტვირთება...</p></div>
       </section>
@@ -155,6 +163,7 @@
         <label class="share-strategy"><input id="shareStrategy" type="checkbox" />გაზიარება</label>
         <button id="withdrawProfit" class="profit-action" type="button">მოგების აღება</button>
         <span id="withdrawnProfitTotal" class="withdrawn-profit-total">სულ აღებული: —</span>
+        <button id="openDetailAnalyst" type="button">ბოტის ანალიზი</button>
         <button id="editStrategy" type="button">რედაქტირება</button>
         <button id="resetStrategy" type="button">სიმულაციის განულება</button>
         <button id="archiveStrategy" class="danger-action" type="button">არქივში გადატანა</button>
@@ -241,6 +250,13 @@
       <p id="error" class="error" hidden></p>
     </main>
 
+    <dialog id="analystDialog" class="analyst-dialog" aria-labelledby="analystDialogTitle">
+      <div class="analyst-dialog-head"><div><span class="analyst-caption">მხოლოდ დაკვირვება</span><h2 id="analystDialogTitle">ბოტის ანალიზი</h2></div><button id="closeAnalyst" class="analyst-icon" type="button" aria-label="ანალიზის დახურვა" title="დახურვა">×</button></div>
+      <div class="analyst-tabs" role="tablist" aria-label="ანალიზის ხედები"><button id="analystCurrentTab" role="tab" aria-selected="true" aria-controls="analystCurrent" type="button">შეფასება</button><button id="analystHistoryTab" role="tab" aria-selected="false" aria-controls="analystHistory" type="button" tabindex="-1">ისტორია</button></div>
+      <div id="analystCurrent" role="tabpanel" aria-labelledby="analystCurrentTab"></div><div id="analystHistory" role="tabpanel" aria-labelledby="analystHistoryTab" hidden></div>
+      <p id="analystMessage" class="analyst-message" role="status"></p>
+      <div class="analyst-dialog-foot"><span class="analyst-caption">წესებზე დაფუძნებული · AI გამორთულია</span><button id="saveAnalystReview" class="secondary-button" type="button" disabled>შეფასების შენახვა</button></div>
+    </dialog>
     <dialog id="createDialog">
       <form id="createForm" method="dialog">
         <div class="dialog-head"><div><h2 id="formTitle">სტრატეგიის შექმნა</h2><p id="formSubtitle">მხოლოდ აქტიური Binance Spot USDT წყვილები</p></div><button id="closeCreate" class="icon-button" type="button" aria-label="დახურვა">×</button></div>
@@ -297,6 +313,7 @@
     </nav>
     <script src="vendor/lightweight-charts.js?v=20261003-7" defer></script>
     <script src="select-controls.js?v=20261015-4" defer></script>
-    <script src="app.js?v=20261016-1" defer></script>
+    <script src="app.js?v=20261016-2" defer></script>
+    <script src="analyst.js?v=20261016-1" defer></script>
   </body>
 </html>

@@ -9,6 +9,7 @@ import { appConfig } from "../config/env.js";
 import { BUILT_IN_STRATEGY_TEMPLATES, DEFAULT_BUY_LEVELS, validateStrategyConfig } from "../config/strategy.js";
 import { createStore } from "../database/createStore.js";
 import { needsOrderReconciliation } from "../strategy/strategyEngine.js";
+import { AnalystMarketService, assessStrategy } from "../services/analystService.js";
 import { SimulationOrderService } from "../services/simulationOrderService.js";
 import { BinanceTestnetOrderService, BinanceTestnetOrderError } from "../services/binanceTestnetOrderService.js";
 import { planProfitWithdrawal, profitAvailability, validateProfitRequestKey } from "../services/profitWithdrawal.js";
@@ -45,6 +46,7 @@ const exchangeInfo = new BinanceExchangeInfoService();
 const marketHistory = new BinanceMarketHistoryService();
 const testnetMarketHistory = new BinanceMarketHistoryService("https://testnet.binance.vision");
 const marketOpportunities = new MarketOpportunityService();
+const analystMarkets = new AnalystMarketService();
 const cryptoNews = new CryptoNewsService();
 const exchangeRates = new ExchangeRateService();
 let catalogCache: { items: SpotSymbolCatalogItem[]; expiresAt: number } | null = null;
@@ -804,6 +806,60 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
   }
   if (request.method === "GET" && pathname === "/api/session") {
     json(response, 200, { user: user ?? { username: dashboardUsername, role: "ADMIN", liveAccess: true, testnetAccess: true }, liveTradingEnabled: false });
+    return true;
+  }
+  if (request.method === "GET" && pathname === "/api/analyst/overview") {
+    const scope = environment ?? "SIMULATION";
+    const repository = await createStore();
+    try {
+      const visible = (await visibleStrategies(await repository.listStrategies(), user)).filter((strategy) => strategy.executionEnvironment === scope);
+      // Bound external market work per request; the UI explicitly reports truncation.
+      const selected = visible.slice(0, 30);
+      const assessments = [];
+      for (let offset = 0; offset < selected.length; offset += 4) {
+        assessments.push(...await Promise.all(selected.slice(offset, offset + 4).map(async (strategy) => {
+          const [levels, price, market, withdrawals] = await Promise.all([
+            repository.getLevels(strategy.id), repository.getMarketState(strategy.symbol), analystMarkets.get(strategy.symbol, scope), repository.getProfitWithdrawals(strategy.id),
+          ]);
+          return assessStrategy(strategy, levels, price, market, withdrawals.some((item) => item.status === "PENDING"));
+        })));
+      }
+      const pulse = await Promise.all(["BTCUSDT", "ETHUSDT"].map((symbol) => analystMarkets.get(symbol, scope)));
+      json(response, 200, { environment: scope, source: "RULES", aiEnabled: false, generatedAt: new Date().toISOString(), pulse, assessments, truncated: visible.length > selected.length });
+    } finally { await repository.close(); }
+    return true;
+  }
+  const analystStrategyMatch = pathname.match(/^\/api\/analyst\/strategies\/(\d+)$/);
+  if (analystStrategyMatch && ["GET", "POST"].includes(request.method ?? "")) {
+    const id = Number(analystStrategyMatch[1]);
+    await ensureStrategyAccess(id, user);
+    const repository = await createStore();
+    try {
+      const strategy = await repository.getById(id);
+      const [levels, price, market, withdrawals] = await Promise.all([
+        repository.getLevels(id), repository.getMarketState(strategy.symbol), analystMarkets.get(strategy.symbol, strategy.executionEnvironment), repository.getProfitWithdrawals(id),
+      ]);
+      const assessment = assessStrategy(strategy, levels, price, market, withdrawals.some((item) => item.status === "PENDING"));
+      if (request.method === "POST") {
+        const previous = (await repository.getAnalystReviews(id))[0];
+        // Rapid retries reuse a recent snapshot instead of flooding history.
+        const review = previous && previous.assessment.inputHash === assessment.inputHash && Date.now() - Date.parse(previous.assessment.generatedAt) < 30_000 ? previous : await repository.saveAnalystReview(id, assessment);
+        json(response, 200, { assessment, review, history: await repository.getAnalystReviews(id) });
+      } else json(response, 200, { assessment, history: await repository.getAnalystReviews(id), aiEnabled: false });
+    } finally { await repository.close(); }
+    return true;
+  }
+  const analystDecisionMatch = pathname.match(/^\/api\/analyst\/strategies\/(\d+)\/reviews\/(\d+)$/);
+  if (request.method === "PATCH" && analystDecisionMatch) {
+    const id = Number(analystDecisionMatch[1]);
+    await ensureStrategyAccess(id, user);
+    const body = await readJson(request) as { decision?: string };
+    if (!["ACKNOWLEDGED", "DISMISSED"].includes(body?.decision ?? "")) throw new Error("შეფასების სტატუსი არასწორია");
+    const repository = await createStore();
+    try {
+      await repository.decideAnalystReview(id, Number(analystDecisionMatch[2]), body.decision as "ACKNOWLEDGED" | "DISMISSED");
+      json(response, 200, { history: await repository.getAnalystReviews(id) });
+    } finally { await repository.close(); }
     return true;
   }
   if (pathname === "/api/profile") {

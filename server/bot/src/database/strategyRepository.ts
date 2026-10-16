@@ -4,6 +4,7 @@ import type { StrategyStore } from "./repository.js";
 import type { SymbolRules } from "../binance/binanceService.js";
 import { emptyTestnetEvidence, nextTestnetEvidence, type TestnetEvidence } from "../services/testnetEvidence.js";
 import { mapProfitRequest, planProfitWithdrawal, validateProfitRequestKey, type ProfitWithdrawalRequest } from "../services/profitWithdrawal.js";
+import type { AnalystAssessment, AnalystReview } from "../services/analystService.js";
 
 type StrategyRow = {
   id: number; symbol: string; initial_entry_price: number; total_budget: number; initial_purchase_amount: number; final_reserve_percent: number; total_invested: number;
@@ -324,6 +325,23 @@ export class StrategyRepository implements StrategyStore {
       }
     });
     transaction();
+  }
+
+  async saveAnalystReview(strategyId: number, assessment: AnalystAssessment): Promise<AnalystReview> {
+    const result = this.db.prepare("INSERT INTO analyst_reviews (strategy_id, assessment, created_at) VALUES (?, ?, ?)").run(strategyId, JSON.stringify(assessment), assessment.generatedAt);
+    this.db.prepare(`DELETE FROM analyst_reviews WHERE strategy_id = ? AND id NOT IN
+      (SELECT id FROM analyst_reviews WHERE strategy_id = ? ORDER BY id DESC LIMIT 100)`).run(strategyId, strategyId);
+    return { id: Number(result.lastInsertRowid), decision: "NEW", assessment };
+  }
+
+  async getAnalystReviews(strategyId: number): Promise<AnalystReview[]> {
+    return (this.db.prepare("SELECT id, decision, assessment FROM analyst_reviews WHERE strategy_id = ? ORDER BY id DESC LIMIT 30").all(strategyId) as Array<{ id: number; decision: AnalystReview["decision"]; assessment: string }>)
+      .map((row) => ({ id: row.id, decision: row.decision, assessment: JSON.parse(row.assessment) }));
+  }
+
+  async decideAnalystReview(strategyId: number, reviewId: number, decision: "ACKNOWLEDGED" | "DISMISSED"): Promise<void> {
+    const result = this.db.prepare("UPDATE analyst_reviews SET decision = ? WHERE id = ? AND strategy_id = ?").run(decision, reviewId, strategyId);
+    if (result.changes !== 1) throw new Error("შეფასება ვერ მოიძებნა");
   }
 
   async getProfitWithdrawals(strategyId: number): Promise<ProfitWithdrawalRequest[]> {

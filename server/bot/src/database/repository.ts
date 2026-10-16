@@ -2,6 +2,7 @@ import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, Marke
 import type { SymbolRules } from "../binance/binanceService.js";
 import type { TestnetEvidence } from "../services/testnetEvidence.js";
 import type { ProfitWithdrawalRequest } from "../services/profitWithdrawal.js";
+import type { AnalystAssessment, AnalystReview } from "../services/analystService.js";
 
 export interface StrategyStore {
   initialize(): Promise<void>;
@@ -19,6 +20,9 @@ export interface StrategyStore {
   deleteStrategyTemplate(id: number): Promise<void>;
   getById(id: number): Promise<StrategyRecord>;
   getTestnetEvidence(id: number): Promise<TestnetEvidence>;
+  saveAnalystReview(strategyId: number, assessment: AnalystAssessment): Promise<AnalystReview>;
+  getAnalystReviews(strategyId: number): Promise<AnalystReview[]>;
+  decideAnalystReview(strategyId: number, reviewId: number, decision: "ACKNOWLEDGED" | "DISMISSED"): Promise<void>;
   recordTestnetObservation(id: number, now: number, workerId: string): Promise<void>;
   initializeBuyLevels(strategyId: number, config: StrategyConfig): Promise<void>;
   getLevels(strategyId: number): Promise<ExecutedLevelRecord[]>;

@@ -512,13 +512,15 @@ function renderOverview(strategies) {
         <div><span>ბიუჯეტი</span><strong>${money.format(strategy.totalBudget)}</strong></div>
         <div><span>ინვესტირებული</span><strong>${money.format(strategy.totalInvested)}</strong></div>
       </div>
-      <div class="strategy-card-foot"><span>${strategy.executionEnvironment}</span>${strategy.status === "COMPLETED" ? '<span class="archived-label">არქივშია</span>' : `<button class="card-action" data-action="toggle" type="button" ${strategy.executionEnvironment === "LIVE" && strategy.status !== "ACTIVE" ? 'disabled title="LIVE ორდერების შესრულება დაბლოკილია"' : ""}>${strategy.status === "ACTIVE" ? "შეჩერება" : "გააქტიურება"}</button>`}</div>
+      <div class="strategy-card-foot"><span>${strategy.executionEnvironment}</span><button class="analyst-chip" type="button" data-analyst-id="${strategy.id}" title="ბოტის ანალიზის ნახვა">ანალიზი</button>${strategy.status === "COMPLETED" ? '<span class="archived-label">არქივშია</span>' : `<button class="card-action" data-action="toggle" type="button" ${strategy.executionEnvironment === "LIVE" && strategy.status !== "ACTIVE" ? 'disabled title="LIVE ორდერების შესრულება დაბლოკილია"' : ""}>${strategy.status === "ACTIVE" ? "შეჩერება" : "გააქტიურება"}</button>`}</div>
     </article>`;
   }).join("");
 
   list.querySelectorAll(".strategy-card").forEach((card) => {
     card.addEventListener("click", () => openDetail(Number(card.dataset.id)));
     card.addEventListener("keydown", (event) => { if (event.key === "Enter") openDetail(Number(card.dataset.id)); });
+    card.querySelector("[data-analyst-id]")?.addEventListener("click", (event) => { event.stopPropagation(); window.openAnalyst?.(Number(card.dataset.id)); });
+    card.querySelector("[data-analyst-id]")?.addEventListener("keydown", (event) => event.stopPropagation());
     card.querySelector("[data-action='toggle']")?.addEventListener("click", async (event) => {
       event.stopPropagation();
       const current = card.querySelector(".card-status").dataset.status;
@@ -540,6 +542,7 @@ async function loadOverview() {
     updateOverviewAccount(account);
     if (!showingArchived) activeStrategies = strategies;
     renderOverview(strategies);
+    window.dispatchEvent(new CustomEvent("spot:overview", { detail: { environment: selectedEnvironment } }));
     byId("error").hidden = true;
   } catch (error) { showError(error); }
 }

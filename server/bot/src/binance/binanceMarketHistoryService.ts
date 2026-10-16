@@ -8,6 +8,7 @@ export interface BinanceCandle {
   high: number;
   low: number;
   close: number;
+  quoteVolume?: number;
 }
 
 export interface HistoricalPrice {
@@ -27,7 +28,7 @@ export class BinanceMarketHistoryService {
     const payload = await response.json() as Kline[];
     const candles = payload.map((item) => ({
       time: Math.floor(item[0] / 1_000),
-      open: Number(item[1]), high: Number(item[2]), low: Number(item[3]), close: Number(item[4]),
+      open: Number(item[1]), high: Number(item[2]), low: Number(item[3]), close: Number(item[4]), quoteVolume: Number(item[7]),
     })).filter((item) => [item.open, item.high, item.low, item.close].every((value) => Number.isFinite(value) && value > 0));
     if (!candles.length) throw new Error(`Binance returned no candles for ${symbol}`);
     return candles;
