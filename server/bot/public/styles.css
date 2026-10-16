@@ -327,6 +327,8 @@ h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
 .level-info strong { font-size: 14px; }
 .level-info span { color: #7b8780; font-size: 11px; }
 .level-info .level-deferred { color: #bd9f3b; overflow-wrap: anywhere; }
+.commission-warning { color: #bd9f3b; font-size: 11px; overflow-wrap: anywhere; }
+.order-fees { display: block; max-width: 220px; white-space: normal; overflow-wrap: anywhere; margin-top: 4px; color: #9b8648; font-size: 10px; }
 .level-state { padding: 5px 8px; border-radius: 5px; font-size: 10px; font-weight: 800; }
 .level-state.executed { background: #e5f5ed; color: #16774c; }
 .level-state.waiting { background: #eef1ef; color: #68746e; }

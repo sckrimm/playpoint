@@ -172,8 +172,10 @@ describe("Binance reconciliation responses", () => {
 
   function service(orderResponse: Response): BinanceTestnetOrderService {
     let request = 0;
-    const fetchMock: typeof fetch = async () => {
+    const fetchMock: typeof fetch = async (url) => {
       request += 1;
+      if (String(url).includes("/myTrades")) return response([{ id: 1, orderId: 123, symbol: "BTCUSDT", isBuyer: true,
+        price: "90", qty: "2", quoteQty: "180", commission: "0.002", commissionAsset: "BTC" }]);
       return request === 1 ? response({ serverTime: Date.now() }) : orderResponse;
     };
     return new BinanceTestnetOrderService("key", "secret", fetchMock);
@@ -184,7 +186,8 @@ describe("Binance reconciliation responses", () => {
       orderId: 123, status: "FILLED", executedQty: "2", cummulativeQuoteQty: "180",
     })).reconcileOrder("BTCUSDT", "BUY", "client-a");
     assert.deepEqual(result, {
-      orderId: "123", symbol: "BTCUSDT", side: "BUY", price: 90, quoteAmount: 180, assetQuantity: 2,
+      orderId: "123", symbol: "BTCUSDT", side: "BUY", price: 90, quoteAmount: 180, assetQuantity: 1.998,
+      accounting: { status: "VERIFIED", source: "MY_TRADES", grossQuantity: "2", grossQuote: "180", commissions: [{ asset: "BTC", amount: "0.002" }] },
     });
   });
 

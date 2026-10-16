@@ -14,18 +14,16 @@
 
 Preflight cannot guarantee acceptance: the exchange applies its own live reference prices and rules. A later filter rejection is not silently retried as if no execution were possible.
 
-## Fee Audit Findings: Still Blocking LIVE Readiness
+## Fee Audit Follow-Up
 
-Source inspection of `BinanceTestnetOrderService.toResult` found:
+Source inspection initially found:
 
 1. BUY base-asset commissions are deducted, but quote-asset commissions are not added to cash spent.
 2. SELL quote-asset commissions are deducted, but base-asset commissions are not added to inventory debited.
 3. Third-asset commissions, such as BNB, are not recorded or valued.
 4. GET order reconciliation normally lacks fills; current conversion can therefore omit commissions after recovery.
 
-These findings are **not fixed by the minimum-order patch**, and existing reported PnL must not be treated as an audited, fee-inclusive result. Historical account reconciliation has not been performed.
-
-The next accounting change must obtain and validate exact fills (including order-scoped paginated myTrades for recovery), persist gross execution and per-asset commissions atomically with the ledger, and distinguish unpriced or legacy commissions from verified net profit. Unknown fill results must remain locked without resubmitting the order. Historical repair needs a separate reconciled migration rather than an assumed zero fee.
+The subsequent commission-accounting update addresses new and recovered executions; see [ORDER_ACCOUNTING.md](ORDER_ACCOUNTING.md). Historical account reconciliation and third-asset valuation still block a claim of fully audited net profit. Legacy history is not silently rewritten.
 
 ## Verification Scope
 

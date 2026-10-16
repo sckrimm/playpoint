@@ -247,6 +247,7 @@ async function getReadinessReport(user: DashboardUser | null) {
       const pendingExecutionCount = levels.filter(needsOrderReconciliation).length + withdrawals.filter((item) => item.status === "PENDING").length;
       const invalidOrderCount = orders.filter((order) => order.executionEnvironment !== "TESTNET" ||
         [order.marketPrice, order.quoteAmount, order.assetQuantity].some((value) => !Number.isFinite(value) || value <= 0)).length;
+      const unverifiedCommissions = orders.filter((order) => order.commissionStatus !== "VERIFIED").length;
       const observationHours = evidence.observedMs / 3_600_000;
       const marketAge = market ? Date.now() - Date.parse(market.eventTime) : NaN;
       const marketAgeMinutes = Number.isFinite(marketAge) && marketAge >= -5_000 ? Math.max(0, marketAge / 60_000) : null;
@@ -254,12 +255,15 @@ async function getReadinessReport(user: DashboardUser | null) {
       const capital = strategy.totalBudget + Math.max(0, strategy.realizedProfit - strategy.withdrawnProfit);
       const budgetUsedPercent = capital > 0 ? Math.max(0, capital - cash) / capital * 100 : 0;
       return { id: strategy.id, symbol: strategy.symbol, status: strategy.status, observationHours, orderCount: orders.length,
-        buyCount, sellCount, completedCycles, failedLevelCount, pendingExecutionCount, invalidOrderCount, marketAgeMinutes, budgetUsedPercent,
+        buyCount, sellCount, completedCycles, failedLevelCount, pendingExecutionCount, invalidOrderCount, unverifiedCommissions, marketAgeMinutes, budgetUsedPercent,
         restarts: evidence.restarts, gapRecoveries: evidence.gapRecoveries,
         workerFresh: evidence.lastObservedMs > 0 && Date.now() >= evidence.lastObservedMs && Date.now() - evidence.lastObservedMs <= 30_000 };
     }));
 
     const activeReports = strategyReports.filter((strategy) => strategy.status === "ACTIVE");
+    const unverifiedCommissions = strategyReports.reduce((sum, strategy) => sum + strategy.unverifiedCommissions, 0);
+    checks.push({ id: "commissions", label: "შესრულება და საკომისიოები", status: unverifiedCommissions ? "ERROR" : "OK",
+      detail: unverifiedCommissions ? `${unverifiedCommissions} ორდერის საკომისიო გადამოწმებას ან შეფასებას ელოდება` : "შენახულ ორდერებში დაუდასტურებელი საკომისიო არ არის" });
     const shortestObservation = activeReports.length
       ? activeReports.reduce((minimum, strategy) => Math.min(minimum, strategy.observationHours), Number.POSITIVE_INFINITY)
       : 0;
@@ -339,6 +343,7 @@ async function getStrategyState(id: number, user: DashboardUser | null = null) {
       : null;
     const availability = profitAvailability(strategy);
     const withdrawals = await repository.getProfitWithdrawals(id);
+    const unverifiedCommissions = orders.filter((order) => order.executionEnvironment === "TESTNET" && order.commissionStatus !== "VERIFIED").length;
     return {
       tradingMode: appConfig.tradingMode,
       strategy,
@@ -351,7 +356,8 @@ async function getStrategyState(id: number, user: DashboardUser | null = null) {
       account: { connection, balances: accountBalances },
       canManage: !userAuthStore || owner?.id === user?.id,
       shared: userAuthStore ? await userAuthStore.strategySharing(id) : false,
-      profitWithdrawal: { totalPnl, availableProfit: availability.realizedAvailable, cashAvailable: availability.cashAvailable,
+      unverifiedCommissions,
+      profitWithdrawal: { totalPnl, availableProfit: unverifiedCommissions ? 0 : availability.realizedAvailable, cashAvailable: availability.cashAvailable,
         pending: withdrawals.find((item) => item.status === "PENDING") ?? null, requests: withdrawals.slice(-20), withdrawnProfit: strategy.withdrawnProfit },
       generatedAt: new Date().toISOString(),
     };
@@ -423,7 +429,7 @@ async function withdrawStrategyProfit(id: number, body: unknown, user: Dashboard
       }
     }
     await repository.withdrawProfit(strategy.id, order.price, order.quoteAmount, order.assetQuantity,
-      minimumReserveQuantity, order.orderId, requestKey);
+      minimumReserveQuantity, order.orderId, requestKey, order.accounting);
     if (!user || user.role === "ADMIN") void telegramAlerts.send(`მოგების აღება [${strategy.executionEnvironment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nმიღებული: ${order.quoteAmount.toFixed(2)} ${strategy.quoteAsset}\nგაყიდული: ${order.assetQuantity} ${strategy.baseAsset}`);
     return await repository.getById(strategy.id);
   } finally {
@@ -466,6 +472,7 @@ async function getStrategiesOverview(archived = false, user: DashboardUser | nul
           sellLevelCount: sellLevels.length,
         },
         performance: {
+          unverifiedCommissions: orders.filter((order) => order.executionEnvironment === "TESTNET" && order.commissionStatus !== "VERIFIED").length,
           period,
           hourlyPnl,
           hourlyPercent: market && hourlyReference ? (market.price / hourlyReference.price - 1) * 100 : null,
@@ -694,7 +701,7 @@ async function createStrategy(body: unknown, user: DashboardUser | null) {
       const currentPrice = testnetService
         ? await testnetService.getCurrentPrice(symbol) : await exchangeInfo.getCurrentPrice(symbol);
       const order = await (testnetService ?? new SimulationOrderService()).buy(symbol, currentPrice, initialPurchaseAmount);
-      await repository.completeBuy(strategy.id, 0, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
+      await repository.completeBuy(strategy.id, 0, order.price, order.quoteAmount, order.assetQuantity, order.orderId, order.accounting);
       if (!user || user.role === "ADMIN") void telegramAlerts.send(`საწყისი BUY [${executionEnvironment}]\n${symbol} · სტრატეგია #${strategy.id}\nფასი: ${order.price}\nთანხა: ${order.quoteAmount.toFixed(2)} ${catalogItem.quoteAsset}`);
       strategy = await repository.getById(strategy.id);
     }

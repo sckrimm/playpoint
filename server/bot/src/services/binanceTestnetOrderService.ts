@@ -3,12 +3,14 @@ import type { AccountBalance, OrderExecutionResult, OrderExecutionService } from
 import { OrderSubmissionBlockedError } from "./marketSafety.js";
 import { Decimal } from "decimal.js";
 import { checkMarketNotional, floorMarketQuantity, OrderBelowMinimumError, parseMarketRules, type TestnetOrderRules } from "./orderRules.js";
+import { accountExecution, type ExecutionFill } from "./orderAccounting.js";
 
 const TESTNET_BASE_URL = "https://testnet.binance.vision";
 
 type FetchLike = typeof fetch;
 type BinanceErrorPayload = { code?: number; msg?: string };
 type OrderPayload = BinanceErrorPayload & {
+  symbol?: string;
   orderId?: number;
   clientOrderId?: string;
   status?: string;
@@ -111,19 +113,24 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
   }
 
   async reconcileOrder(symbol: string, side: "BUY" | "SELL", clientOrderId: string): Promise<OrderExecutionResult | null> {
+    let payload: OrderPayload;
     try {
-      const payload = await this.findOrder(symbol, clientOrderId);
-      const executedQty = Number(payload.executedQty ?? 0);
-      const terminalWithoutFill = ["CANCELED", "REJECTED", "EXPIRED", "EXPIRED_IN_MATCH"].includes(payload.status ?? "") && executedQty <= 0;
-      if (terminalWithoutFill) return null;
-      if (payload.status !== "FILLED" && !["CANCELED", "EXPIRED", "EXPIRED_IN_MATCH"].includes(payload.status ?? "")) {
-        throw new BinanceTestnetOrderError("UNKNOWN_RESULT", `TESTNET ორდერი ჯერ დასრულებული არ არის (${payload.status ?? "UNKNOWN"})`, true);
-      }
-      return this.toResult(symbol, side, payload);
+      payload = await this.findOrder(symbol, clientOrderId);
     } catch (error) {
       if (error instanceof BinanceTestnetOrderError && error.kind === "ORDER_NOT_FOUND") return null;
       throw error;
     }
+    if ((payload.symbol && payload.symbol !== symbol) || (payload.side && payload.side !== side) ||
+      (payload.clientOrderId && payload.clientOrderId !== clientOrderId)) {
+      throw new BinanceTestnetOrderError("UNKNOWN_RESULT", "TESTNET ორდერის იდენტიფიკატორი ვერ დადასტურდა", true);
+    }
+    const executedQty = Number(payload.executedQty);
+    const terminalWithoutFill = ["CANCELED", "REJECTED", "EXPIRED", "EXPIRED_IN_MATCH"].includes(payload.status ?? "") && executedQty === 0;
+    if (terminalWithoutFill) return null;
+    if (payload.status !== "FILLED" && !["CANCELED", "EXPIRED", "EXPIRED_IN_MATCH"].includes(payload.status ?? "")) {
+      throw new BinanceTestnetOrderError("UNKNOWN_RESULT", `TESTNET ორდერი ჯერ დასრულებული არ არის (${payload.status ?? "UNKNOWN"})`, true);
+    }
+    return this.toResult(symbol, side, payload);
   }
 
   private async placeMarketOrder(symbol: string, side: "BUY" | "SELL", amount: Record<string, string>, requestedClientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult> {
@@ -149,23 +156,32 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     return this.signedRequest("GET", "/api/v3/order", { symbol, origClientOrderId: clientOrderId }) as Promise<OrderPayload>;
   }
 
-  private toResult(symbol: string, side: "BUY" | "SELL", payload: OrderPayload): OrderExecutionResult {
-    const executedQty = Number(payload.executedQty);
-    const grossQuote = Number(payload.cummulativeQuoteQty);
-    if (!payload.orderId || !Number.isFinite(executedQty) || executedQty <= 0 || !Number.isFinite(grossQuote) || grossQuote <= 0) {
-      throw new BinanceTestnetOrderError("UNKNOWN_RESULT", "TESTNET ორდერის შესრულებული მოცულობა ვერ დადასტურდა", true);
+  private async toResult(symbol: string, side: "BUY" | "SELL", payload: OrderPayload): Promise<OrderExecutionResult> {
+    try {
+      if (!Number.isSafeInteger(payload.orderId) || payload.orderId! <= 0 || (payload.symbol && payload.symbol !== symbol) ||
+        (payload.side && payload.side !== side) || !["FILLED", "CANCELED", "EXPIRED", "EXPIRED_IN_MATCH"].includes(payload.status ?? "")) throw new Error("Invalid order identity or state");
+      const convert = (fills: ExecutionFill[], source: "FULL" | "MY_TRADES") => accountExecution(symbol, side, String(payload.orderId), payload.executedQty!, payload.cummulativeQuoteQty!, fills, source);
+      if (payload.fills?.length) {
+        try { return convert(payload.fills, "FULL"); } catch { /* Recover incomplete FULL responses from account trades. */ }
+      }
+      const fills: ExecutionFill[] = [];
+      let fromId: string | undefined;
+      const seen = new Set<number>();
+      for (let page = 0; page < 100; page++) {
+        const trades = await this.signedRequest("GET", "/api/v3/myTrades", { symbol, orderId: String(payload.orderId), limit: "1000", ...(fromId ? { fromId } : {}) });
+        if (!Array.isArray(trades)) throw new Error("Invalid trades response");
+        for (const trade of trades) {
+          if (!Number.isSafeInteger(trade.id) || trade.id < 0 || seen.has(trade.id) || trade.orderId !== payload.orderId || trade.symbol !== symbol || trade.isBuyer !== (side === "BUY") || (fromId && BigInt(trade.id) < BigInt(fromId))) throw new Error("Invalid trade identity");
+          seen.add(trade.id);
+          fills.push({ price: trade.price, qty: trade.qty, quoteQty: trade.quoteQty, commission: trade.commission, commissionAsset: trade.commissionAsset });
+        }
+        if (trades.length < 1000) return convert(fills, "MY_TRADES");
+        fromId = (BigInt(Math.max(...trades.map((trade) => trade.id))) + 1n).toString();
+      }
+      throw new Error("Too many execution fills");
+    } catch {
+      throw new BinanceTestnetOrderError("UNKNOWN_RESULT", "TESTNET შესრულება და საკომისიო სრულად ვერ დადასტურდა; საჭიროა გადამოწმება", true);
     }
-    const baseAsset = symbol.endsWith("USDT") ? symbol.slice(0, -4) : "";
-    const baseCommission = (payload.fills ?? []).filter((fill) => fill.commissionAsset === baseAsset)
-      .reduce((sum, fill) => sum + Number(fill.commission || 0), 0);
-    const quoteCommission = (payload.fills ?? []).filter((fill) => fill.commissionAsset === "USDT")
-      .reduce((sum, fill) => sum + Number(fill.commission || 0), 0);
-    return {
-      orderId: String(payload.orderId), symbol, side,
-      price: grossQuote / executedQty,
-      quoteAmount: side === "SELL" ? Math.max(0, grossQuote - quoteCommission) : grossQuote,
-      assetQuantity: side === "BUY" ? Math.max(0, executedQty - baseCommission) : executedQty,
-    };
   }
 
   private async signedRequest(method: "GET" | "POST", pathname: string, params: Record<string, string>): Promise<unknown> {

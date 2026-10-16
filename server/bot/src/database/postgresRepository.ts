@@ -1,5 +1,5 @@
 import { Pool, type PoolClient } from "pg";
-import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, MarketState, OrderRecord, StrategyConfig, StrategyRecord, StrategyTemplateRecord } from "../types/strategy.js";
+import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, MarketState, OrderAccounting, OrderRecord, StrategyConfig, StrategyRecord, StrategyTemplateRecord } from "../types/strategy.js";
 import type { StrategyStore } from "./repository.js";
 import type { SymbolRules } from "../binance/binanceService.js";
 import { emptyTestnetEvidence, nextTestnetEvidence, type TestnetEvidence } from "../services/testnetEvidence.js";
@@ -99,6 +99,8 @@ export class PostgresStrategyRepository implements StrategyStore {
         execution_started_at TIMESTAMPTZ,
         UNIQUE(strategy_id, side, level_percent)
       );
+      ALTER TABLE bot_orders ADD COLUMN IF NOT EXISTS commission_status TEXT NOT NULL DEFAULT 'UNVERIFIED';
+      ALTER TABLE bot_orders ADD COLUMN IF NOT EXISTS accounting TEXT;
       CREATE TABLE IF NOT EXISTS bot_market_state (
         symbol TEXT PRIMARY KEY, price NUMERIC NOT NULL, event_time TIMESTAMPTZ NOT NULL,
         source TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL
@@ -402,7 +404,7 @@ export class PostgresStrategyRepository implements StrategyStore {
         AND status IN ('EXECUTING', 'FAILED')`, [strategyId, side, levelPercent, clientOrderId, reason?.slice(0, 500) ?? null]);
   }
 
-  async completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string): Promise<void> {
+  async completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string, accounting?: OrderAccounting): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -432,6 +434,7 @@ export class PostgresStrategyRepository implements StrategyStore {
         market_price, quote_amount, asset_quantity, mode, execution_environment, created_at)
         VALUES ($1, $2, 'BUY', $3, $4, $5, $6, $7, $7, $8)`,
       [strategyId, externalOrderId, levelPercent, price, quoteAmount, assetQuantity, strategy.executionEnvironment, now]);
+      await this.saveAccounting(client, strategyId, externalOrderId, strategy.executionEnvironment, accounting);
       await client.query(`UPDATE bot_executed_levels SET status = 'EXECUTED', executed_at = $1, error_message = NULL
         WHERE strategy_id = $2 AND side = 'BUY' AND level_percent = $3 AND status IN ('EXECUTING', 'FAILED')`,
       [now, strategyId, levelPercent]);
@@ -452,7 +455,7 @@ export class PostgresStrategyRepository implements StrategyStore {
     }
   }
 
-  async completeSell(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void> {
+  async completeSell(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string, accounting?: OrderAccounting): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -490,6 +493,7 @@ export class PostgresStrategyRepository implements StrategyStore {
       [now, strategyId, levelPercent]);
       const remainingSells = await client.query<{ count: number }>(`SELECT COUNT(*)::int AS count
         FROM bot_executed_levels WHERE strategy_id = $1 AND side = 'SELL' AND status <> 'EXECUTED'`, [strategyId]);
+      await this.saveAccounting(client, strategyId, externalOrderId, strategy.executionEnvironment, accounting);
       if (remainingSells.rows[0]!.count === 0) {
         if (strategy.executionEnvironment === "TESTNET") await client.query(`INSERT INTO bot_testnet_evidence (strategy_id, completed_cycles)
           VALUES ($1, 1) ON CONFLICT(strategy_id) DO UPDATE SET completed_cycles = bot_testnet_evidence.completed_cycles + 1`, [strategyId]);
@@ -549,6 +553,7 @@ export class PostgresStrategyRepository implements StrategyStore {
       }
       if ((await client.query("SELECT 1 FROM bot_profit_withdrawals WHERE strategy_id = $1 AND status = 'PENDING'", [strategyId])).rows.length) throw new Error("წინა მოგების აღება ჯერ გადამოწმებას ელოდება");
       if ((await client.query("SELECT 1 FROM bot_executed_levels WHERE strategy_id = $1 AND (status = 'EXECUTING' OR (status = 'FAILED' AND error_message LIKE '[NO_AUTO_RETRY]%'))", [strategyId])).rows.length) throw new Error("ჯერ გადაამოწმე მიმდინარე ორდერები");
+      if ((await client.query("SELECT 1 FROM bot_orders WHERE strategy_id = $1 AND execution_environment = 'TESTNET' AND commission_status <> 'VERIFIED' LIMIT 1", [strategyId])).rows.length) throw new Error("მოგების აღებამდე საკომისიოების გადამოწმებაა საჭირო");
       const plan = planProfitWithdrawal(this.map(row), amount, allowSale);
       const now = new Date().toISOString();
       const status = plan.saleAmount > 0 ? "PENDING" : "COMPLETED";
@@ -561,7 +566,7 @@ export class PostgresStrategyRepository implements StrategyStore {
     finally { client.release(); }
   }
 
-  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string, requestKey?: string): Promise<void> {
+  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string, requestKey?: string, accounting?: OrderAccounting): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -598,6 +603,7 @@ export class PostgresStrategyRepository implements StrategyStore {
         market_price, quote_amount, asset_quantity, mode, execution_environment, created_at)
         VALUES ($1, $2, 'SELL', 0, $3, $4, $5, $6, $6, $7)`,
       [strategyId, externalOrderId, price, quoteAmount, assetQuantity, strategy.executionEnvironment, now]);
+      await this.saveAccounting(client, strategyId, externalOrderId, strategy.executionEnvironment, accounting);
       if (requestKey) await client.query("UPDATE bot_profit_withdrawals SET status = 'COMPLETED', actual_amount = $1, created_at = $2 WHERE request_key = $3", [quoteAmount + cashAmount, now, requestKey]);
       await client.query("COMMIT");
     } catch (error) {
@@ -624,9 +630,19 @@ export class PostgresStrategyRepository implements StrategyStore {
     const result = await this.pool.query(`SELECT id, side, level_percent::float8 AS "levelPercent",
       market_price::float8 AS "marketPrice", quote_amount::float8 AS "quoteAmount",
       asset_quantity::float8 AS "assetQuantity", execution_environment AS "executionEnvironment",
-      created_at AS "createdAt"
+      created_at AS "createdAt", commission_status AS "commissionStatus", accounting
       FROM bot_orders WHERE strategy_id = $1 ORDER BY id DESC`, [strategyId]);
-    return result.rows;
+    return result.rows.map((row) => ({ ...row, accounting: row.accounting ? JSON.parse(row.accounting) : null }));
+  }
+
+  private async saveAccounting(client: PoolClient, strategyId: number, externalOrderId: string, environment: string, accounting?: OrderAccounting): Promise<void> {
+    await client.query("UPDATE bot_orders SET commission_status = $1, accounting = $2 WHERE strategy_id = $3 AND external_order_id = $4 AND execution_environment = $5",
+      [accounting?.status ?? "UNVERIFIED", accounting ? JSON.stringify(accounting) : null, strategyId, externalOrderId, environment]);
+  }
+
+  async countUnverifiedCommissions(strategyId: number): Promise<number> {
+    const result = await this.pool.query("SELECT COUNT(*) AS count FROM bot_orders WHERE strategy_id = $1 AND execution_environment = 'TESTNET' AND commission_status <> 'VERIFIED'", [strategyId]);
+    return Number(result.rows[0]?.count ?? 0);
   }
 
   async updateMarketPrice(symbol: string, price: number, eventTime: Date): Promise<void> {

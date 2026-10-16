@@ -76,6 +76,14 @@ export interface ExecutedLevelRecord {
   executionStartedAt: string | null;
 }
 
+export interface OrderAccounting {
+  status: "VERIFIED" | "UNPRICED";
+  source: "FULL" | "MY_TRADES";
+  grossQuote: string;
+  grossQuantity: string;
+  commissions: Array<{ asset: string; amount: string }>;
+}
+
 export interface OrderExecutionResult {
   orderId: string;
   symbol: string;
@@ -83,6 +91,7 @@ export interface OrderExecutionResult {
   price: number;
   quoteAmount: number;
   assetQuantity: number;
+  accounting?: OrderAccounting;
 }
 
 export interface OrderExecutionService {
@@ -103,6 +112,8 @@ export interface OrderRecord {
   assetQuantity: number;
   executionEnvironment: ExecutionEnvironment;
   createdAt: string;
+  commissionStatus?: "UNVERIFIED" | "VERIFIED" | "UNPRICED";
+  accounting?: OrderAccounting | null;
 }
 
 export interface MarketState {

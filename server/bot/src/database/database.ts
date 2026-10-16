@@ -141,6 +141,8 @@ export function openDatabase(filename: string): Database.Database {
   ensureColumn(db, "strategies", "withdrawn_profit", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "strategies", "remaining_cost_basis", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "orders", "execution_environment", "TEXT NOT NULL DEFAULT 'SIMULATION'");
+  ensureColumn(db, "orders", "commission_status", "TEXT NOT NULL DEFAULT 'UNVERIFIED'");
+  ensureColumn(db, "orders", "accounting", "TEXT");
   ensureColumn(db, "executed_levels", "allocation_percent", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "executed_levels", "client_order_id", "TEXT");
   ensureColumn(db, "executed_levels", "execution_started_at", "TEXT");

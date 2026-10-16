@@ -132,7 +132,7 @@ function applyStrategyLayout(layout, persist = true) {
 
 function strategyIsHot(strategy) {
   const performance = strategy.performance;
-  return strategy.status === "ACTIVE" && strategy.totalInvested > 0 &&
+  return strategy.status === "ACTIVE" && strategy.totalInvested > 0 && !(performance?.unverifiedCommissions > 0) &&
     [performance?.totalPnl, performance?.hourlyPnl, performance?.dailyPnl]
       .every((value) => Number.isFinite(value) && value > 0);
 }
@@ -496,10 +496,12 @@ function renderOverview(strategies) {
     const botResultPercent = hasPosition && strategy.performance?.totalPnlPercent != null
       ? ` (${strategy.performance.totalPnlPercent >= 0 ? "+" : ""}${strategy.performance.totalPnlPercent.toFixed(2)}%)`
       : "";
+    const feeWarning = strategy.performance?.unverifiedCommissions > 0
+      ? '<span class="commission-warning">შედეგი წინასწარია · საკომისიო გადასამოწმებელია</span>' : "";
     return `
     <article class="strategy-card${strategyIsHot(strategy) ? " is-hot" : ""}" data-id="${strategy.id}" tabindex="0">
       <div class="strategy-card-head">
-        <div class="strategy-identity"><strong class="strategy-name">${strategy.symbol}${strategyIsHot(strategy) ? `<span class="strategy-hot" title="საერთო შედეგი, 1 საათი და 24 საათი პლიუსშია" aria-label="სამივე შედეგი პლიუსშია">${flameIcon}</span>` : ""}</strong><span>${strategy.baseAsset} / ${strategy.quoteAsset}</span><span class="strategy-profile">შესვლა -${strategy.profile?.firstBuyDropPercent ?? "—"}% · ${strategy.profile?.buyLevelCount ?? 0} BUY / ${strategy.profile?.sellLevelCount ?? 0} SELL</span><span class="bot-result ${botResultClass}">${botResultText}${botResultPercent}</span></div>
+        <div class="strategy-identity"><strong class="strategy-name">${strategy.symbol}${strategyIsHot(strategy) ? `<span class="strategy-hot" title="საერთო შედეგი, 1 საათი და 24 საათი პლიუსშია" aria-label="სამივე შედეგი პლიუსშია">${flameIcon}</span>` : ""}</strong><span>${strategy.baseAsset} / ${strategy.quoteAsset}</span><span class="strategy-profile">შესვლა -${strategy.profile?.firstBuyDropPercent ?? "—"}% · ${strategy.profile?.buyLevelCount ?? 0} BUY / ${strategy.profile?.sellLevelCount ?? 0} SELL</span><span class="bot-result ${botResultClass}">${botResultText}${botResultPercent}</span>${feeWarning}</div>
         <div class="card-performance">
           <span class="card-status ${strategy.status.toLowerCase()}" data-status="${strategy.status}">${labelStatus(strategy.status)}</span>
           <span class="performance-line ${strategy.performance?.hourlyPnl == null ? "neutral" : performanceClass(strategy.performance.hourlyPnl)}"><small>1 საათში</small><strong>${strategy.performance?.hourlyPnl == null ? "—" : formatSignedMoney(strategy.performance.hourlyPnl)}</strong>${strategy.performance?.hourlyPercent == null ? "" : `<em>${strategy.performance.hourlyPercent >= 0 ? "+" : ""}${strategy.performance.hourlyPercent.toFixed(2)}%</em>`}</span>
@@ -925,6 +927,7 @@ function renderDetail(data) {
   byId("withdrawnProfit").textContent = money.format(strategy.withdrawnProfit ?? 0);
   byId("withdrawnProfitTotal").textContent = `სულ აღებული: ${money.format(strategy.withdrawnProfit ?? 0)}`;
   byId("availableProfit").textContent = `რეალიზებული: ${money.format(availableProfit)} · თავისუფალი: ${money.format(data.profitWithdrawal?.cashAvailable ?? 0)}`;
+  if (data.unverifiedCommissions > 0) byId("availableProfit").textContent = `შედეგი წინასწარია · ${data.unverifiedCommissions} ორდერის საკომისიო გადასამოწმებელია; მოგების აღება და რეინვესტირება დროებით შეზღუდულია`;
   const withdrawButton = byId("withdrawProfit");
   withdrawButton.hidden = strategy.status === "COMPLETED" || data.canManage === false;
   withdrawButton.disabled = availableProfit < 0.01 && !data.profitWithdrawal?.pending;
@@ -966,6 +969,16 @@ function renderDetail(data) {
   byId("sellLevelCount").textContent = `${executedSells} / ${sellLevels.length}`;
   byId("sellLevels").innerHTML = sellLevels.map((level) => `<div class="level"><span class="level-badge sell-gain">+${level.levelPercent}%</span><div class="level-info"><strong>${formatPrice(level.triggerPrice, tickSize)}</strong><span>ნაყიდი რაოდენობის ${level.allocationPercent}%</span>${deferredReason(level)}</div><span class="level-state ${level.status.toLowerCase()}">${labelStatus(level.status)}</span></div>`).join("");
   byId("orders").innerHTML = orders.length ? orders.map((order) => `<tr><td><span class="order-environment">${order.executionEnvironment}</span></td><td><span class="${order.side === "BUY" ? "buy" : "sell"}">${order.levelPercent === 0 ? (order.side === "BUY" ? "საწყისი ყიდვა" : "მოგების აღება") : `${order.side === "BUY" ? "ყიდვა" : "გაყიდვა"} ${order.side === "BUY" ? "-" : "+"}${order.levelPercent}%`}</span></td><td>${formatPrice(order.marketPrice, tickSize)}</td><td>${money.format(order.quoteAmount)}</td><td class="quantity-cell ${order.side === "BUY" ? "positive" : "negative"}">${order.side === "BUY" ? "+" : "-"}${number.format(order.assetQuantity)}</td><td>${new Date(order.createdAt).toLocaleString("ka-GE", { dateStyle: "short", timeStyle: "short" })}</td></tr>`).join("") : '<tr><td colspan="6" class="empty">ორდერები ჯერ არ არის</td></tr>';
+  byId("orders").querySelectorAll("tr").forEach((row, index) => {
+    const order = orders[index];
+    if (!order || order.executionEnvironment !== "TESTNET") return;
+    const fees = document.createElement("small");
+    fees.className = "order-fees";
+    fees.textContent = order.accounting
+      ? `საკომისიო: ${order.accounting.commissions.map((fee) => `${fee.amount} ${fee.asset}`).join(" · ")}${order.commissionStatus === "UNPRICED" ? " · ღირებულება შესაფასებელია" : ""}`
+      : "საკომისიო გადასამოწმებელია";
+    row.children[3].append(fees);
+  });
   byId("updatedAt").textContent = `განახლდა ${new Date(data.generatedAt).toLocaleTimeString("ka-GE")}`;
 }
 

@@ -196,6 +196,8 @@ test("POST server failures query the same order ID instead of resubmitting", asy
       posts++;
       return new Response("{}", { status: 503 });
     }
+    if (String(url).includes("/myTrades")) return new Response(JSON.stringify([{ id: 1, orderId: 1, symbol: "BTCUSDT", isBuyer: true,
+      price: "90", qty: "1", quoteQty: "90", commission: "0.001", commissionAsset: "BTC" }]));
     assert.equal(new URL(String(url)).searchParams.get("origClientOrderId"), "same-id");
     return new Response(JSON.stringify({ orderId: 1, executedQty: "1", cummulativeQuoteQty: "90", status: "FILLED" }));
   }) as typeof fetch);

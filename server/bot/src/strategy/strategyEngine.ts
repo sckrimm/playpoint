@@ -75,12 +75,12 @@ export class StrategyEngine {
           continue;
         }
         if (level.side === "BUY") {
-          await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
+          await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId, order.accounting);
         } else {
           const current = await this.repository.getById(strategy.id);
           const minimumReserveQuantity = current.totalPurchasedQuantity * (current.finalReservePercent / 100);
           await this.repository.completeSell(strategy.id, level.levelPercent, order.price, order.quoteAmount,
-            order.assetQuantity, minimumReserveQuantity, order.orderId);
+            order.assetQuantity, minimumReserveQuantity, order.orderId, order.accounting);
         }
         void this.notify(`ორდერი აღდგენილია restart-ის შემდეგ\n${strategy.symbol} · ${level.side} ${level.levelPercent}%\nBinance order: ${order.orderId}`);
         this.retryFailures = 0;
@@ -147,7 +147,8 @@ export class StrategyEngine {
     for (const level of eligibleBuys) {
       if (Date.now() < (this.levelRetryAt.get(`BUY:${level.levelPercent}`) ?? 0)) continue;
       const current = await this.repository.getById(strategy.id);
-      const retainedProfit = Math.max(0, current.realizedProfit - current.withdrawnProfit);
+      const retainedProfit = await this.repository.countUnverifiedCommissions(strategy.id) === 0
+        ? Math.max(0, current.realizedProfit - current.withdrawnProfit) : 0;
       const levelBudget = current.totalBudget + retainedProfit - current.initialPurchaseAmount;
       const availableQuote = Math.max(0,
         current.totalBudget + current.totalSaleProceeds - current.totalInvested - current.withdrawnProfit);
@@ -160,9 +161,11 @@ export class StrategyEngine {
         return;
       }
       executedAny = true;
+      let confirmedExecution = false;
       try {
         const order = await this.orders.buy(strategy.symbol, price, quoteAmount, clientOrderId, () => this.canSubmit(strategy.id, eventTime));
-        await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId);
+        confirmedExecution = true;
+        await this.repository.completeBuy(strategy.id, level.levelPercent, order.price, order.quoteAmount, order.assetQuantity, order.orderId, order.accounting);
         this.retryFailures = 0;
         void this.notify([
           `BUY შესრულდა [${this.orders.environment}]`,
@@ -180,6 +183,7 @@ export class StrategyEngine {
           `Estimated asset received: ${quantity(order.assetQuantity)}`,
         ].join("\n"));
       } catch (error) {
+        if (confirmedExecution) error = new BinanceTestnetOrderError("UNKNOWN_RESULT", "შესრულებული BUY-ის შენახვა ვერ დადასტურდა; საჭიროა გადამოწმება", true);
         if (error instanceof OrderBelowMinimumError) {
           await this.deferSmallOrder(strategy, level, clientOrderId, error);
           continue;
@@ -217,10 +221,12 @@ export class StrategyEngine {
         return;
       }
       executedAny = true;
+      let confirmedExecution = false;
       try {
         const order = await this.orders.sell(strategy.symbol, price, assetQuantity, clientOrderId, () => this.canSubmit(strategy.id, eventTime));
+        confirmedExecution = true;
         await this.repository.completeSell(strategy.id, level.levelPercent, order.price, order.quoteAmount,
-          order.assetQuantity, minimumReserveQuantity, order.orderId);
+          order.assetQuantity, minimumReserveQuantity, order.orderId, order.accounting);
         this.retryFailures = 0;
         void this.notify([
           `SELL შესრულდა [${this.orders.environment}]`,
@@ -238,6 +244,7 @@ export class StrategyEngine {
           `Estimated proceeds: ${money(order.quoteAmount)}`,
         ].join("\n"));
       } catch (error) {
+        if (confirmedExecution) error = new BinanceTestnetOrderError("UNKNOWN_RESULT", "შესრულებული SELL-ის შენახვა ვერ დადასტურდა; საჭიროა გადამოწმება", true);
         if (error instanceof OrderBelowMinimumError) {
           await this.deferSmallOrder(strategy, level, clientOrderId, error);
           continue;

@@ -8,6 +8,10 @@ import { PostgresStrategyRepository } from "../src/database/postgresRepository.j
 import type { StrategyStore } from "../src/database/repository.js";
 import type { StrategyConfig } from "../src/types/strategy.js";
 import { planProfitWithdrawal, profitAvailability } from "../src/services/profitWithdrawal.js";
+import { accountExecution } from "../src/services/orderAccounting.js";
+
+const accounting = (quote: number) => accountExecution("BTCUSDT", "BUY", "1", "1", String(quote),
+  [{ price: String(quote), qty: "1", commission: "0", commissionAsset: "BTC" }], "FULL").accounting;
 
 const config: StrategyConfig = { executionEnvironment: "TESTNET", symbol: "BTCUSDT", baseAsset: "BTC", quoteAsset: "USDT",
   initialEntryPrice: 100, totalBudget: 100, finalReservePercent: 0,
@@ -16,9 +20,9 @@ const config: StrategyConfig = { executionEnvironment: "TESTNET", symbol: "BTCUS
 async function profitable(store: StrategyStore, reinvest = false) {
   const { id } = await store.createStrategy(config);
   await store.initializeBuyLevels(id, config);
-  await store.completeBuy(id, 10, 100, 100, 1, "entry");
-  await store.completeSell(id, 10, 120, 120, 1, 0, "profit");
-  if (reinvest) await store.completeBuy(id, 10, 110, 110, 1, "reinvest");
+  await store.completeBuy(id, 10, 100, 100, 1, "entry", accounting(100));
+  await store.completeSell(id, 10, 120, 120, 1, 0, "profit", accounting(120));
+  if (reinvest) await store.completeBuy(id, 10, 110, 110, 1, "reinvest", accounting(110));
   await store.setStrategyStatus(id, "PAUSED");
   return id;
 }

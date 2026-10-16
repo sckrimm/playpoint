@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, MarketState, OrderRecord, StrategyConfig, StrategyRecord, StrategyTemplateRecord } from "../types/strategy.js";
+import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, MarketState, OrderAccounting, OrderRecord, StrategyConfig, StrategyRecord, StrategyTemplateRecord } from "../types/strategy.js";
 import type { StrategyStore } from "./repository.js";
 import type { SymbolRules } from "../binance/binanceService.js";
 import { emptyTestnetEvidence, nextTestnetEvidence, type TestnetEvidence } from "../services/testnetEvidence.js";
@@ -240,7 +240,7 @@ export class StrategyRepository implements StrategyStore {
         AND status IN ('EXECUTING', 'FAILED')`).run(reason?.slice(0, 500) ?? null, strategyId, side, levelPercent, clientOrderId);
   }
 
-  async completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string): Promise<void> {
+  async completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string, accounting?: OrderAccounting): Promise<void> {
     const transaction = this.db.transaction(() => {
       const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
       if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
@@ -273,6 +273,7 @@ export class StrategyRepository implements StrategyStore {
         SUM(CASE WHEN status = 'EXECUTED' THEN 1 ELSE 0 END) AS executed
         FROM executed_levels WHERE strategy_id = ? AND side = 'SELL'`)
         .get(strategyId) as { total: number; executed: number | null };
+      this.saveAccounting(strategyId, externalOrderId, strategy.execution_environment, accounting);
       if (sellState.total > 0 && sellState.executed === sellState.total) {
         this.db.prepare(`UPDATE executed_levels SET status = 'WAITING', executed_at = NULL,
           error_message = NULL, client_order_id = NULL, execution_started_at = NULL
@@ -282,7 +283,7 @@ export class StrategyRepository implements StrategyStore {
     transaction();
   }
 
-  async completeSell(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void> {
+  async completeSell(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string, accounting?: OrderAccounting): Promise<void> {
     const transaction = this.db.transaction(() => {
       const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
       if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
@@ -315,6 +316,7 @@ export class StrategyRepository implements StrategyStore {
         .run(now, strategyId, levelPercent);
       const remainingSells = (this.db.prepare(`SELECT COUNT(*) AS count FROM executed_levels
         WHERE strategy_id = ? AND side = 'SELL' AND status <> 'EXECUTED'`).get(strategyId) as { count: number }).count;
+      this.saveAccounting(strategyId, externalOrderId, strategy.execution_environment, accounting);
       if (remainingSells === 0) {
         if (strategy.execution_environment === "TESTNET") this.db.prepare(`INSERT INTO testnet_evidence (strategy_id, completed_cycles)
           VALUES (?, 1) ON CONFLICT(strategy_id) DO UPDATE SET completed_cycles = completed_cycles + 1`).run(strategyId);
@@ -365,6 +367,7 @@ export class StrategyRepository implements StrategyStore {
       }
       if (this.db.prepare("SELECT 1 FROM profit_withdrawals WHERE strategy_id = ? AND status = 'PENDING'").get(strategyId)) throw new Error("წინა მოგების აღება ჯერ გადამოწმებას ელოდება");
       if (this.db.prepare("SELECT 1 FROM executed_levels WHERE strategy_id = ? AND (status = 'EXECUTING' OR (status = 'FAILED' AND error_message LIKE '[NO_AUTO_RETRY]%'))").get(strategyId)) throw new Error("ჯერ გადაამოწმე მიმდინარე ორდერები");
+      if (this.db.prepare("SELECT 1 FROM orders WHERE strategy_id = ? AND execution_environment = 'TESTNET' AND commission_status <> 'VERIFIED' LIMIT 1").get(strategyId)) throw new Error("მოგების აღებამდე საკომისიოების გადამოწმებაა საჭირო");
       const plan = planProfitWithdrawal(this.map(row), amount, allowSale);
       const now = new Date().toISOString();
       const status: ProfitWithdrawalRequest["status"] = plan.saleAmount > 0 ? "PENDING" : "COMPLETED";
@@ -375,7 +378,7 @@ export class StrategyRepository implements StrategyStore {
     })();
   }
 
-  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string, requestKey?: string): Promise<void> {
+  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string, requestKey?: string, accounting?: OrderAccounting): Promise<void> {
     const transaction = this.db.transaction(() => {
       const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
       if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
@@ -405,6 +408,7 @@ export class StrategyRepository implements StrategyStore {
         VALUES (?, ?, 'SELL', 0, ?, ?, ?, ?, ?, ?)`)
         .run(strategyId, externalOrderId, price, quoteAmount, assetQuantity,
           strategy.execution_environment, strategy.execution_environment, now);
+      this.saveAccounting(strategyId, externalOrderId, strategy.execution_environment, accounting);
       if (requestKey) this.db.prepare("UPDATE profit_withdrawals SET status = 'COMPLETED', actual_amount = ?, created_at = ? WHERE request_key = ?").run(quoteAmount + cashAmount, now, requestKey);
     });
     transaction();
@@ -422,10 +426,21 @@ export class StrategyRepository implements StrategyStore {
   }
 
   async getOrders(strategyId: number): Promise<OrderRecord[]> {
-    return this.db.prepare(`SELECT id, side, level_percent AS levelPercent, market_price AS marketPrice,
+    const rows = this.db.prepare(`SELECT id, side, level_percent AS levelPercent, market_price AS marketPrice,
       quote_amount AS quoteAmount, asset_quantity AS assetQuantity,
-      execution_environment AS executionEnvironment, created_at AS createdAt
-      FROM orders WHERE strategy_id = ? ORDER BY id DESC`).all(strategyId) as OrderRecord[];
+      execution_environment AS executionEnvironment, created_at AS createdAt, commission_status AS commissionStatus, accounting
+      FROM orders WHERE strategy_id = ? ORDER BY id DESC`).all(strategyId) as Array<Omit<OrderRecord, "accounting"> & { accounting: string | null }>;
+    return rows.map((row) => ({ ...row, accounting: row.accounting ? JSON.parse(row.accounting) : null }));
+  }
+
+  private saveAccounting(strategyId: number, externalOrderId: string, environment: string, accounting?: OrderAccounting): void {
+    this.db.prepare("UPDATE orders SET commission_status = ?, accounting = ? WHERE strategy_id = ? AND external_order_id = ? AND execution_environment = ?")
+      .run(accounting?.status ?? "UNVERIFIED", accounting ? JSON.stringify(accounting) : null, strategyId, externalOrderId, environment);
+  }
+
+  async countUnverifiedCommissions(strategyId: number): Promise<number> {
+    return (this.db.prepare("SELECT COUNT(*) AS count FROM orders WHERE strategy_id = ? AND execution_environment = 'TESTNET' AND commission_status <> 'VERIFIED'")
+      .get(strategyId) as { count: number }).count;
   }
 
   async updateMarketPrice(symbol: string, price: number, eventTime: Date): Promise<void> {
