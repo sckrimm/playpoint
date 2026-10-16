@@ -32,6 +32,7 @@ Incomplete/unavailable evidence raises `UNKNOWN_RESULT` with no automatic resubm
 ## Remaining Work Before LIVE
 
 1. Reconcile historical orders against account fills in a separately reviewed migration, preserving an audit trail of corrections. This update does not backfill or rewrite them.
+   A read-only, administrator-only comparison is now available; see [HISTORICAL_ACCOUNTING_AUDIT.md](HISTORICAL_ACCOUNTING_AUDIT.md). It is not the repair migration.
 2. Value third-asset fees with a documented historical conversion policy before labeling overall PnL fully net.
 3. Verify fee headroom and reserve edge cases against TESTNET. A base-asset SELL fee crossing the permanent-reserve/holdings guard stays pending for review instead of bypassing that guard or being resubmitted. A quote fee can consume cash beyond the requested gross amount; the actual debit is recorded, not hidden.
 4. Authenticated production checks and observed 48-hour / three-cycle evidence remain separate requirements. Unit tests are not trading-profit evidence.

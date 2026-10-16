@@ -105,6 +105,7 @@ export type SimulatedOrderResult = OrderExecutionResult;
 
 export interface OrderRecord {
   id: number;
+  externalOrderId?: string;
   side: LevelSide;
   levelPercent: number;
   marketPrice: number;

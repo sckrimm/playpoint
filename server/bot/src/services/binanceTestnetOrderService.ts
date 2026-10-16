@@ -133,6 +133,22 @@ export class BinanceTestnetOrderService implements OrderExecutionService {
     return this.toResult(symbol, side, payload);
   }
 
+  async inspectHistoricalOrder(symbol: string, side: "BUY" | "SELL", orderId: string): Promise<OrderExecutionResult | null> {
+    if (!/^[1-9]\d*$/.test(orderId)) throw new Error("TESTNET order ID არასწორია");
+    await this.syncServerTime();
+    let payload: OrderPayload;
+    try {
+      payload = await this.signedRequest("GET", "/api/v3/order", { symbol, orderId }) as OrderPayload;
+    } catch (error) {
+      if (error instanceof BinanceTestnetOrderError && error.kind === "ORDER_NOT_FOUND") return null;
+      throw error;
+    }
+    if (String(payload.orderId) !== orderId || payload.symbol !== symbol || payload.side !== side) {
+      throw new BinanceTestnetOrderError("UNKNOWN_RESULT", "ისტორიული ორდერის კუთვნილება ვერ დადასტურდა", true);
+    }
+    return this.toResult(symbol, side, payload);
+  }
+
   private async placeMarketOrder(symbol: string, side: "BUY" | "SELL", amount: Record<string, string>, requestedClientOrderId?: string, canSubmit?: () => Promise<boolean>): Promise<OrderExecutionResult> {
     await this.preflight(() => this.syncServerTime());
     // Recheck after exchange preflight calls, before sending an irreversible order.

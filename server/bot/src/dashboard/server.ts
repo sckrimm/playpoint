@@ -10,6 +10,7 @@ import { BUILT_IN_STRATEGY_TEMPLATES, DEFAULT_BUY_LEVELS, validateStrategyConfig
 import { createStore } from "../database/createStore.js";
 import { needsOrderReconciliation } from "../strategy/strategyEngine.js";
 import { AnalystMarketService, assessStrategy } from "../services/analystService.js";
+import { auditHistoricalOrders, auditPage, HistoricalAuditGate } from "../services/historicalAccountingAudit.js";
 import { SimulationOrderService } from "../services/simulationOrderService.js";
 import { BinanceTestnetOrderService, BinanceTestnetOrderError } from "../services/binanceTestnetOrderService.js";
 import { planProfitWithdrawal, profitAvailability, validateProfitRequestKey } from "../services/profitWithdrawal.js";
@@ -39,6 +40,7 @@ const dashboardSessionToken = createHash("sha256")
   .update(`${dashboardUsername}\0${dashboardPassword}`)
   .digest("hex");
 const userAuthStore = await getRuntimeUsers();
+const historicalAuditGate = new HistoricalAuditGate();
 if (process.env.NODE_ENV === "production" && (!dashboardUsername || !dashboardPassword)) {
   throw new Error("Production dashboard requires DASHBOARD_USERNAME and DASHBOARD_PASSWORD");
 }
@@ -195,6 +197,37 @@ async function getHistoricalReference(symbol: string, hours: number, environment
 
 async function ensureStrategyAccess(id: number, user: DashboardUser | null, readOnly = false): Promise<void> {
   if (userAuthStore && user) await userAuthStore.assertStrategyAccess(id, user, readOnly);
+}
+
+async function getHistoricalAccountingAudit(id: number, user: DashboardUser | null, body: unknown) {
+  await ensureStrategyAccess(id, user, true);
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("შემოწმების მოთხოვნა არასწორია");
+  const input = body as Record<string, unknown>;
+  const page = auditPage(input.offset ?? 0, input.limit ?? 5);
+  const repository = await createStore();
+  try {
+    const strategy = await repository.getById(id);
+    if (strategy.executionEnvironment !== "TESTNET" || strategy.status !== "PAUSED") throw new Error("შემოწმებისთვის TESTNET ბოტი შეაჩერე");
+    const levels = await repository.getLevels(id);
+    const withdrawals = await repository.getProfitWithdrawals(id);
+    if (levels.some(needsOrderReconciliation) || withdrawals.some((request) => request.status === "PENDING")) throw new Error("ჯერ მიმდინარე ორდერების გადამოწმებას დაელოდე");
+    const owner = userAuthStore ? await userAuthStore.strategyOwner(id) : user;
+    if (userAuthStore && !owner) throw new Error("სტრატეგიის მფლობელი ვერ დადასტურდა");
+    const orders = await repository.getOrders(id);
+    const snapshot = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    const initialSnapshot = snapshot({ strategy, orders, levels, withdrawals });
+    return await historicalAuditGate.run(`TESTNET:${owner?.id ?? "local"}`, async () => {
+      const service = await requireTestnetService(owner);
+      const report = await auditHistoricalOrders(strategy, orders, service.inspectHistoricalOrder.bind(service), page.offset, page.limit);
+      const current = { strategy: await repository.getById(id), orders: await repository.getOrders(id), levels: await repository.getLevels(id), withdrawals: await repository.getProfitWithdrawals(id) };
+      if (snapshot(current) !== initialSnapshot) {
+        report.stale = true;
+        report.ledgerProjection = null;
+        report.projectionBlocked = "STALE";
+      }
+      return report;
+    });
+  } finally { await repository.close(); }
 }
 
 async function visibleStrategies(strategies: StrategyRecord[], user: DashboardUser | null): Promise<StrategyRecord[]> {
@@ -1175,6 +1208,15 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     return true;
   }
   const chartMatch = pathname.match(/^\/api\/strategies\/(\d+)\/chart$/);
+  const accountingAuditMatch = pathname.match(/^\/api\/strategies\/(\d+)\/accounting-audit$/);
+  if (request.method === "POST" && accountingAuditMatch) {
+    if (userAuthStore && user?.role !== "ADMIN") {
+      json(response, 403, { error: "ისტორიის შემოწმება მხოლოდ ადმინისტრატორისთვისაა" });
+      return true;
+    }
+    json(response, 200, await getHistoricalAccountingAudit(Number(accountingAuditMatch[1]), user, await readJson(request)));
+    return true;
+  }
   if (request.method === "GET" && chartMatch) {
     const strategyId = Number(chartMatch[1]);
     const requestUrl = new URL(request.url ?? pathname, "http://localhost");

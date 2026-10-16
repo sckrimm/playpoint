@@ -426,7 +426,7 @@ export class StrategyRepository implements StrategyStore {
   }
 
   async getOrders(strategyId: number): Promise<OrderRecord[]> {
-    const rows = this.db.prepare(`SELECT id, side, level_percent AS levelPercent, market_price AS marketPrice,
+    const rows = this.db.prepare(`SELECT id, external_order_id AS externalOrderId, side, level_percent AS levelPercent, market_price AS marketPrice,
       quote_amount AS quoteAmount, asset_quantity AS assetQuantity,
       execution_environment AS executionEnvironment, created_at AS createdAt, commission_status AS commissionStatus, accounting
       FROM orders WHERE strategy_id = ? ORDER BY id DESC`).all(strategyId) as Array<Omit<OrderRecord, "accounting"> & { accounting: string | null }>;

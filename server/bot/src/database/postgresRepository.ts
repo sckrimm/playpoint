@@ -627,7 +627,7 @@ export class PostgresStrategyRepository implements StrategyStore {
   }
 
   async getOrders(strategyId: number): Promise<OrderRecord[]> {
-    const result = await this.pool.query(`SELECT id, side, level_percent::float8 AS "levelPercent",
+    const result = await this.pool.query(`SELECT id, external_order_id AS "externalOrderId", side, level_percent::float8 AS "levelPercent",
       market_price::float8 AS "marketPrice", quote_amount::float8 AS "quoteAmount",
       asset_quantity::float8 AS "assetQuantity", execution_environment AS "executionEnvironment",
       created_at AS "createdAt", commission_status AS "commissionStatus", accounting

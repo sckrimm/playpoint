@@ -34,6 +34,12 @@ let selectedStrategyId = null;
 let selectedStrategyStatus = null;
 let selectedStrategy = null;
 let selectedStrategyData = null;
+let accountingAudit = null;
+let auditStrategyId = null;
+let auditSnapshot = "";
+let auditSequence = 0;
+let auditBusy = false;
+let auditError = "";
 let previousMarketPrice = null;
 let symbolsLoaded = false;
 let showingArchived = false;
@@ -899,6 +905,7 @@ function renderDetail(data) {
   selectedStrategyStatus = strategy.status;
   selectedStrategy = strategy;
   selectedStrategyData = data;
+  updateAccountingAudit(data);
   byId("mode").textContent = strategy.executionEnvironment;
   byId("toggleStatus").disabled = strategy.executionEnvironment === "LIVE" && strategy.status !== "ACTIVE";
   byId("symbol").textContent = strategy.symbol;
@@ -1351,6 +1358,72 @@ byId("showArchived").addEventListener("click", () => {
 });
 byId("showBuyLevels").addEventListener("click", () => showLevelView("BUY"));
 byId("showSellLevels").addEventListener("click", () => showLevelView("SELL"));
+
+function accountingSnapshot(data) {
+  return JSON.stringify([data.strategy.status, data.strategy.updatedAt, data.orders.map((order) => [order.id, order.quoteAmount, order.assetQuantity, order.commissionStatus])]);
+}
+
+function updateAccountingAudit(data) {
+  const allowed = sessionUser?.role === "ADMIN" && data.strategy.executionEnvironment === "TESTNET";
+  byId("accountingAuditPanel").hidden = !allowed;
+  if (auditStrategyId !== data.strategy.id || !allowed) {
+    auditStrategyId = data.strategy.id;
+    accountingAudit = null; auditSnapshot = ""; auditBusy = false; auditError = ""; auditSequence++;
+    byId("auditResults").textContent = "";
+    byId("auditPagination").hidden = true;
+  }
+  if (!allowed) return;
+  const paused = data.strategy.status === "PAUSED";
+  byId("runAccountingAudit").disabled = auditBusy || !paused;
+  byId("runAccountingAudit").title = paused ? "ისტორიული ორდერების შედარება" : "შემოწმებისთვის ბოტი შეაჩერე";
+  if (accountingAudit && accountingSnapshot(data) !== auditSnapshot) {
+    accountingAudit.stale = true;
+    accountingAudit.ledgerProjection = null;
+  }
+  if (auditBusy) byId("auditStatus").textContent = "Binance-ის შესრულებები მოწმდება...";
+  else if (auditError) byId("auditStatus").textContent = auditError;
+  else if (accountingAudit?.stale) byId("auditStatus").textContent = "ბოტის მონაცემები შეიცვალა · ანგარიში მოძველებულია";
+  else if (!accountingAudit) byId("auditStatus").textContent = paused ? "შესამოწმებელია" : "შემოწმებისთვის ბოტი შეაჩერე";
+  if (accountingAudit?.stale) byId("auditResults").textContent = "მოძველებული ანგარიში აღარ გამოიყენება. ისტორია უცვლელია.";
+  for (const id of ["auditPrevious", "auditNext"]) byId(id).disabled = auditBusy || !paused || (id === "auditPrevious" ? !accountingAudit?.offset : accountingAudit?.nextOffset == null);
+}
+
+function renderAccountingAudit(report) {
+  const auditNumber = new Intl.NumberFormat("en-US", { maximumFractionDigits: 16 });
+  const labels = { MATCH: "ემთხვევა", DIFFERENCE: "სხვაობაა", UNPRICED: "საკომისიო შესაფასებელია", MISSING: "Binance-ზე ვერ მოიძებნა", UNSUPPORTED: "ორდერის ID არ დასტურდება", UNAVAILABLE: "ვერ გადამოწმდა", SKIPPED: "კავშირის აღდგენას ელოდება" };
+  byId("auditStatus").textContent = report.stale ? "მონაცემები შეიცვალა · ანგარიში მოძველებულია" : `შედარდა ${report.rows.length} / ${report.totalOrders} · ბალანსები უცვლელია`;
+  if (report.stale) { byId("auditResults").textContent = "ანგარიში თავიდან გადაამოწმე."; return; }
+  const projection = report.ledgerProjection;
+  const blocked = { PARTIAL: "ნაჩვენებია ისტორიის ნაწილი; სრული შედეგი ჯერ არ გამოითვლება.", EVIDENCE: "სრული შედეგისთვის ყველა ორდერის დადასტურებაა საჭირო.", BASELINE: "ჩაწერილი ისტორია ბოტის ბალანსს სრულად ვერ ხსნის; საჭიროა დამატებითი შეჯერება." };
+  byId("auditResults").innerHTML = report.rows.map((row) => `<article class="audit-order"><header><strong>${row.side} · #${escapeHtml(row.externalOrderId ?? row.localId)}</strong><span class="${row.status === "MATCH" ? "positive" : "commission-warning"}">${labels[row.status] ?? "ვერ გადამოწმდა"}</span></header><dl><div><dt>ჩაწერილი თანხა · USDT</dt><dd>${auditNumber.format(row.stored.quoteAmount)}</dd></div><div><dt>ფაქტობრივი თანხა · USDT</dt><dd>${row.actual ? auditNumber.format(row.actual.quoteAmount) : "—"}</dd></div><div><dt>ჩაწერილი აქტივი</dt><dd>${auditNumber.format(row.stored.assetQuantity)}</dd></div><div><dt>ფაქტობრივი აქტივი</dt><dd>${row.actual ? auditNumber.format(row.actual.assetQuantity) : "—"}</dd></div></dl>${row.difference ? `<p>სხვაობა: ${row.difference.quoteAmount >= 0 ? "+" : ""}${auditNumber.format(row.difference.quoteAmount)} USDT · ${row.difference.assetQuantity >= 0 ? "+" : ""}${auditNumber.format(row.difference.assetQuantity)} ${escapeHtml(report.symbol.replace(/USDT$/, ""))}</p>` : ""}${row.actual?.accounting ? `<p>საკომისიო: ${row.actual.accounting.commissions.map((fee) => `${escapeHtml(fee.amount)} ${escapeHtml(fee.asset)}`).join(" · ")}</p>` : ""}</article>`).join("") || '<p class="audit-note">ისტორია ცარიელია</p>';
+  byId("auditResults").innerHTML += projection ? `<dl class="audit-projection"><div><dt>ისტორიიდან დათვლილი რეალიზებული შედეგი</dt><dd>${money.format(projection.realizedProfit)}</dd></div><div><dt>ისტორიიდან დათვლილი აქტივი</dt><dd>${number.format(projection.totalAssetQuantity)}</dd></div></dl><p class="audit-note">შესწორებები არ გამოყენებულა · მოგების შეზღუდვა უცვლელია</p>` : `<p class="audit-note">${blocked[report.projectionBlocked] ?? "სრული შედეგი მიუწვდომელია"}</p>`;
+  byId("auditPagination").hidden = report.totalOrders <= report.limit;
+  byId("auditPageLabel").textContent = `${report.rows.length ? report.offset + 1 : 0}–${report.offset + report.rows.length} / ${report.totalOrders}`;
+}
+
+async function runAccountingAudit(offset = 0) {
+  if (auditBusy || !selectedStrategyData || sessionUser?.role !== "ADMIN" || selectedStrategyData.strategy.status !== "PAUSED") return;
+  const id = selectedStrategyData.strategy.id;
+  const sequence = ++auditSequence;
+  auditSnapshot = accountingSnapshot(selectedStrategyData);
+  auditBusy = true;
+  auditError = "";
+  updateAccountingAudit(selectedStrategyData);
+  try {
+    const report = await api(`/api/strategies/${id}/accounting-audit`, { method: "POST", body: JSON.stringify({ offset, limit: 5 }) });
+    if (sequence !== auditSequence || auditStrategyId !== id) return;
+    if (accountingSnapshot(selectedStrategyData) !== auditSnapshot) report.stale = true;
+    accountingAudit = report;
+    renderAccountingAudit(report);
+  } catch (error) {
+    if (sequence === auditSequence) auditError = error.message;
+  } finally {
+    if (sequence === auditSequence) { auditBusy = false; updateAccountingAudit(selectedStrategyData); }
+  }
+}
+byId("runAccountingAudit").addEventListener("click", () => void runAccountingAudit(0));
+byId("auditPrevious").addEventListener("click", () => void runAccountingAudit(Math.max(0, (accountingAudit?.offset ?? 0) - 5)));
+byId("auditNext").addEventListener("click", () => { if (accountingAudit?.nextOffset != null) void runAccountingAudit(accountingAudit.nextOffset); });
 byId("themeToggle").addEventListener("click", () => applyTheme(isDarkTheme() ? "light" : "dark"));
 byId("refreshOpportunities").addEventListener("click", loadOpportunities);
 byId("refreshNews").addEventListener("click", loadNews);

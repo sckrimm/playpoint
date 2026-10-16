@@ -246,6 +246,11 @@
           </div>
         </section>
       </div>
+      <section id="accountingAuditPanel" class="panel accounting-audit" hidden>
+        <div class="section-title"><div><h2>ისტორიის შეჯერება</h2><p id="auditStatus" role="status" aria-live="polite">შესამოწმებელია</p></div><button id="runAccountingAudit" class="secondary-button" type="button">შემოწმება</button></div>
+        <div id="auditResults"></div>
+        <div id="auditPagination" class="audit-pagination" hidden><button id="auditPrevious" class="secondary-button" type="button" aria-label="წინა გვერდი" title="წინა გვერდი">←</button><span id="auditPageLabel"></span><button id="auditNext" class="secondary-button" type="button" aria-label="შემდეგი გვერდი" title="შემდეგი გვერდი">→</button></div>
+      </section>
       </div>
       <p id="error" class="error" hidden></p>
     </main>
