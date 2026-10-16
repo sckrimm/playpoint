@@ -919,16 +919,14 @@ function renderDetail(data) {
   byId("realizedProfit").textContent = money.format(strategy.realizedProfit);
   byId("realizedProfit").className = strategy.realizedProfit > 0 ? "positive" : strategy.realizedProfit < 0 ? "negative" : "";
   const availableProfit = data.profitWithdrawal?.availableProfit ?? 0;
-  const minimumWithdrawal = strategy.executionEnvironment === "TESTNET" ? Number(data.symbolRules?.minNotional ?? 0) : 0;
   byId("withdrawnProfit").textContent = money.format(strategy.withdrawnProfit ?? 0);
   byId("withdrawnProfitTotal").textContent = `სულ აღებული: ${money.format(strategy.withdrawnProfit ?? 0)}`;
-  byId("availableProfit").textContent = `ხელმისაწვდომი: ${money.format(availableProfit)}${minimumWithdrawal > 0 ? ` · მინ. ${money.format(minimumWithdrawal)}` : ""}`;
+  byId("availableProfit").textContent = `რეალიზებული: ${money.format(availableProfit)} · თავისუფალი: ${money.format(data.profitWithdrawal?.cashAvailable ?? 0)}`;
   const withdrawButton = byId("withdrawProfit");
-  withdrawButton.hidden = strategy.status === "COMPLETED" || strategy.totalAssetQuantity <= 0;
-  withdrawButton.disabled = availableProfit <= 0 || availableProfit + 0.00000001 < minimumWithdrawal;
-  withdrawButton.title = withdrawButton.disabled && minimumWithdrawal > 0
-    ? `Binance-ზე მინიმუმ ${money.format(minimumWithdrawal)} მოგება უნდა დაგროვდეს`
-    : "ხელმისაწვდომი მოგების აღება";
+  withdrawButton.hidden = strategy.status === "COMPLETED" || data.canManage === false;
+  withdrawButton.disabled = availableProfit < 0.01 && !data.profitWithdrawal?.pending;
+  withdrawButton.title = data.profitWithdrawal?.pending ? "მოგების აღების ორდერის გადამოწმება" : "რეალიზებული მოგების გამოყოფა";
+  withdrawButton.textContent = data.profitWithdrawal?.pending ? "ორდერის გადამოწმება" : "მოგების აღება";
   const reserveQuantity = strategy.totalPurchasedQuantity * (strategy.finalReservePercent / 100);
   byId("reserveQuantity").textContent = `${number.format(reserveQuantity)} ${strategy.baseAsset}`;
   byId("reserveQuantity").nextElementSibling.textContent = `ნაყიდი რაოდენობის ${strategy.finalReservePercent}%`;
@@ -1442,21 +1440,61 @@ byId("resetStrategy").addEventListener("click", async () => {
     await openDetail(result.strategy.id, { historyMode: "replace" });
   } catch (error) { showError(error); }
 });
+let profitWithdrawalBusy = false;
+const profitRequestCache = new Map();
 byId("withdrawProfit").addEventListener("click", async () => {
+  if (profitWithdrawalBusy) return;
   if (!selectedStrategyId || !selectedStrategyData) return;
-  const available = selectedStrategyData.profitWithdrawal?.availableProfit ?? 0;
-  const defaultAmount = Math.floor(available * 100) / 100;
-  const value = prompt(`ხელმისაწვდომი მოგება: ${money.format(available)}\nრამდენი USDT-ის აღება გინდა?`, defaultAmount.toFixed(2));
-  if (value === null) return;
-  const amount = Number(value.replace(",", "."));
-  if (!Number.isFinite(amount) || amount <= 0) return showError(new Error("სწორი თანხა შეიყვანე"));
-  if (!confirm(`${money.format(amount)} მოგების მისაღებად გაიყიდება შესაბამისი ${selectedStrategy.baseAsset}. გაგრძელდეს?`)) return;
+  const id = selectedStrategyId;
+  const storageKey = `spot-profit-request:${sessionUser?.username ?? "local"}:${id}`;
+  let request = profitRequestCache.get(storageKey);
+  try { request ??= JSON.parse(localStorage.getItem(storageKey) ?? "null"); } catch {}
+  const data = selectedStrategyData.profitWithdrawal ?? {};
+  request ??= data.pending ? { amount: data.pending.amount, requestKey: data.pending.requestKey, allowSale: true } : null;
+  if (request) {
+    if (!confirm("წინა მოგების აღების მოთხოვნა გადავამოწმოთ? ახალი გაყიდვა არ განმეორდება.")) return;
+  } else {
+    if (selectedStrategy.status !== "PAUSED") return showError(new Error("მოგების აღებამდე სტრატეგია შეაჩერე; დასრულების შემდეგ კვლავ გაააქტიურებ"));
+    const available = data.availableProfit ?? 0;
+    const cash = data.cashAvailable ?? 0;
+    const defaultAmount = Math.floor(Math.min(available, cash) * 100) / 100;
+    const value = prompt(`რეალიზებული მოგება: ${money.format(available)}\nთავისუფალი USDT-დან: ${money.format(cash)}\nრამდენი USDT გამოყო?`, (defaultAmount || Math.floor(available * 100) / 100).toFixed(2));
+    if (value === null) return;
+    const amount = Number(value.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0 || amount > available + 1e-8) return showError(new Error("მიუთითე რეალიზებული მოგების ფარგლებში თანხა"));
+    const allowSale = amount > cash + 1e-8;
+    const message = allowSale
+      ? `${money.format(Math.min(amount, cash))} გამოიყოფა თავისუფალი USDT-დან. დარჩენილი დაახლოებით ${money.format(amount - cash)} მისაღებად დამატებით გაიყიდება ${selectedStrategy.baseAsset}. ეთანხმები გაყიდვას?`
+      : `${money.format(amount)} გამოიყოფა ბოტის ბიუჯეტიდან. ქოინი არ გაიყიდება. გაგრძელდეს?`;
+    if (!confirm(message)) return;
+    request = { amount, allowSale, requestKey: crypto.randomUUID() };
+    profitRequestCache.set(storageKey, request);
+    try { localStorage.setItem(storageKey, JSON.stringify(request)); } catch {}
+  }
+  profitWithdrawalBusy = true;
+  byId("withdrawProfit").disabled = true;
   try {
-    await api(`/api/strategies/${selectedStrategyId}/withdraw-profit`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount }),
+    await api(`/api/strategies/${id}/withdraw-profit`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request),
     });
+    profitRequestCache.delete(storageKey);
+    try { localStorage.removeItem(storageKey); } catch {}
     await refreshDetail();
-  } catch (error) { showError(error); }
+  } catch (error) {
+    try {
+      const fresh = await api(`/api/strategies/${id}`);
+      if (selectedStrategyId === id) renderDetail(fresh);
+      const saved = fresh.profitWithdrawal?.requests?.find((item) => item.requestKey === request.requestKey);
+      if (!saved || saved.status === "CANCELLED") {
+        profitRequestCache.delete(storageKey);
+        localStorage.removeItem(storageKey);
+      }
+    } catch {}
+    showError(error);
+  } finally {
+    profitWithdrawalBusy = false;
+    byId("withdrawProfit").disabled = (selectedStrategyData?.profitWithdrawal?.availableProfit ?? 0) < 0.01 && !selectedStrategyData?.profitWithdrawal?.pending;
+  }
 });
 byId("archiveStrategy").addEventListener("click", async () => {
   if (!selectedStrategyId || !confirm("სტრატეგია დასრულდება და არქივში გადავა. ისტორია არ წაიშლება. გავაგრძელოთ?")) return;

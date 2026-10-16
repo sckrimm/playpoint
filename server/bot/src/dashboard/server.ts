@@ -10,11 +10,12 @@ import { BUILT_IN_STRATEGY_TEMPLATES, DEFAULT_BUY_LEVELS, validateStrategyConfig
 import { createStore } from "../database/createStore.js";
 import { needsOrderReconciliation } from "../strategy/strategyEngine.js";
 import { SimulationOrderService } from "../services/simulationOrderService.js";
-import { BinanceTestnetOrderService } from "../services/binanceTestnetOrderService.js";
+import { BinanceTestnetOrderService, BinanceTestnetOrderError } from "../services/binanceTestnetOrderService.js";
+import { planProfitWithdrawal, profitAvailability, validateProfitRequestKey } from "../services/profitWithdrawal.js";
 import { runStrategyBacktest } from "../services/strategyBacktestService.js";
 import { MarketOpportunityService } from "../services/marketOpportunityService.js";
 import { CryptoNewsService } from "../services/cryptoNewsService.js";
-import type { BuyLevelConfig, OrderRecord, SellLevelConfig, StrategyConfig, StrategyRecord } from "../types/strategy.js";
+import type { BuyLevelConfig, OrderExecutionService, OrderRecord, SellLevelConfig, StrategyConfig, StrategyRecord } from "../types/strategy.js";
 import type { DashboardUser } from "../auth/userAuthStore.js";
 import { getRuntimeUsers } from "../auth/runtimeUsers.js";
 import { telegramAlerts } from "../services/telegramAlertService.js";
@@ -234,14 +235,14 @@ async function getReadinessReport(user: DashboardUser | null) {
       : { id: "live-lock", label: "LIVE უსაფრთხოების ჩამკეტი", status: "ERROR", detail: `${liveStrategies.length} LIVE სტრატეგია აქტიურია` });
 
     const strategyReports = await Promise.all(testnetStrategies.map(async (strategy) => {
-      const [levels, orders, market, evidence] = await Promise.all([
-        repository.getLevels(strategy.id), repository.getOrders(strategy.id), repository.getMarketState(strategy.symbol), repository.getTestnetEvidence(strategy.id),
+      const [levels, orders, market, evidence, withdrawals] = await Promise.all([
+        repository.getLevels(strategy.id), repository.getOrders(strategy.id), repository.getMarketState(strategy.symbol), repository.getTestnetEvidence(strategy.id), repository.getProfitWithdrawals(strategy.id),
       ]);
       const buyCount = orders.filter((order) => order.side === "BUY").length;
       const sellCount = orders.filter((order) => order.side === "SELL").length;
       const completedCycles = evidence.completedCycles;
       const failedLevelCount = levels.filter((level) => level.status === "FAILED").length;
-      const pendingExecutionCount = levels.filter(needsOrderReconciliation).length;
+      const pendingExecutionCount = levels.filter(needsOrderReconciliation).length + withdrawals.filter((item) => item.status === "PENDING").length;
       const invalidOrderCount = orders.filter((order) => order.executionEnvironment !== "TESTNET" ||
         [order.marketPrice, order.quoteAmount, order.assetQuantity].some((value) => !Number.isFinite(value) || value <= 0)).length;
       const observationHours = evidence.observedMs / 3_600_000;
@@ -334,7 +335,8 @@ async function getStrategyState(id: number, user: DashboardUser | null = null) {
     const totalPnl = market
       ? strategy.totalAssetQuantity * market.price + strategy.totalSaleProceeds - strategy.totalInvested
       : null;
-    const availableProfit = totalPnl === null ? null : Math.max(0, totalPnl - strategy.withdrawnProfit);
+    const availability = profitAvailability(strategy);
+    const withdrawals = await repository.getProfitWithdrawals(id);
     return {
       tradingMode: appConfig.tradingMode,
       strategy,
@@ -347,7 +349,8 @@ async function getStrategyState(id: number, user: DashboardUser | null = null) {
       account: { connection, balances: accountBalances },
       canManage: !userAuthStore || owner?.id === user?.id,
       shared: userAuthStore ? await userAuthStore.strategySharing(id) : false,
-      profitWithdrawal: { totalPnl, availableProfit, withdrawnProfit: strategy.withdrawnProfit },
+      profitWithdrawal: { totalPnl, availableProfit: availability.realizedAvailable, cashAvailable: availability.cashAvailable,
+        pending: withdrawals.find((item) => item.status === "PENDING") ?? null, requests: withdrawals.slice(-20), withdrawnProfit: strategy.withdrawnProfit },
       generatedAt: new Date().toISOString(),
     };
   } finally {
@@ -361,32 +364,64 @@ async function withdrawStrategyProfit(id: number, body: unknown, user: Dashboard
   try {
     const strategy = await repository.getById(id);
     if (strategy.executionEnvironment === "LIVE") throw new Error("LIVE რეჟიმი დაბლოკილია");
-    if (strategy.totalAssetQuantity <= 0) throw new Error("გასაყიდი აქტივი არ არის");
+    const input = body as { amount?: unknown; requestKey?: unknown; allowSale?: unknown };
+    const requestKey = typeof input?.requestKey === "string" ? input.requestKey : "";
+    validateProfitRequestKey(requestKey);
+    const requested = Number(input.amount);
+    const allowSale = input.allowSale === true;
+    const existing = (await repository.getProfitWithdrawals(id)).find((item) => item.requestKey === requestKey);
+    if (existing) {
+      if (existing.amount !== requested || (existing.saleAmount > 0 && !allowSale)) throw new Error("მოთხოვნის იდენტიფიკატორი უკვე გამოყენებულია");
+      if (existing.status === "COMPLETED") return strategy;
+      if (existing.status === "CANCELLED") throw new Error("მოთხოვნა გაუქმებულია; თავიდან სცადე");
+    }
+    const estimate = existing ?? planProfitWithdrawal(strategy, requested, allowSale);
+    if (estimate.saleAmount <= 0) {
+      const request = await repository.beginProfitWithdrawal(id, requested, requestKey, false);
+      if (request.isNew && (!user || user.role === "ADMIN")) void telegramAlerts.send(`მოგება გამოყოფილია [${strategy.executionEnvironment}]\n${strategy.symbol} · სტრატეგია #${id}\nთავისუფალი USDT-დან: ${request.actualAmount.toFixed(2)}\nდამატებითი გაყიდვის გარეშე`);
+      return await repository.getById(id);
+    }
     const testnetService = strategy.executionEnvironment === "TESTNET" ? await requireTestnetService(user) : null;
     const storedMarket = await repository.getMarketState(strategy.symbol);
     const price = testnetService
       ? await testnetService.getCurrentPrice(strategy.symbol)
       : storedMarket?.price ?? await exchangeInfo.getCurrentPrice(strategy.symbol);
-    const totalPnl = strategy.totalAssetQuantity * price + strategy.totalSaleProceeds - strategy.totalInvested;
-    const availableProfit = Math.max(0, totalPnl - strategy.withdrawnProfit);
     const orderRules = testnetService ? await testnetService.getOrderRules(strategy.symbol) : null;
     const minimumWithdrawal = orderRules ? orderRules.minNotional + price * orderRules.stepSize : 0;
-    let requested = Number((body as { amount?: unknown }).amount ?? availableProfit);
-    if (!Number.isFinite(requested) || requested <= 0) throw new Error("ასაღები თანხა ნულზე მეტი უნდა იყოს");
-    if (requested > availableProfit && requested - availableProfit < 0.01) requested = availableProfit;
-    if (requested > availableProfit + 0.00000001) {
-      throw new Error(`ხელმისაწვდომი მოგება არის ${availableProfit.toFixed(2)} USDT`);
-    }
-    if (requested + 0.00000001 < minimumWithdrawal) {
+    if (!existing && estimate.saleAmount + 0.00000001 < minimumWithdrawal) {
       throw new Error(`Binance-ის მინიმალური შესრულებადი თანხაა ${minimumWithdrawal.toFixed(2)} USDT; ჯერ დააგროვე მეტი მოგება`);
     }
     const minimumReserveQuantity = strategy.totalPurchasedQuantity * strategy.finalReservePercent / 100;
     const sellableQuantity = Math.max(0, strategy.totalAssetQuantity - minimumReserveQuantity);
-    const assetQuantity = requested / price;
-    if (assetQuantity > sellableQuantity + 1e-12) throw new Error("მოგების აღება მუდმივ რეზერვს შეამცირებს");
-    const order = await (testnetService ?? new SimulationOrderService()).sell(strategy.symbol, price, assetQuantity);
+    const assetQuantity = estimate.saleAmount / price;
+    if (!existing && assetQuantity > sellableQuantity + 1e-12) throw new Error("მოგების აღება მუდმივ რეზერვს შეამცირებს");
+    const request = await repository.beginProfitWithdrawal(id, requested, requestKey, allowSale);
+    const clientOrderId = `profit_${createHash("sha256").update(`${id}:${requestKey}`).digest("hex").slice(0, 24)}`;
+    const service: OrderExecutionService = testnetService ?? new SimulationOrderService();
+    let order;
+    if (!request.isNew) {
+      if (!service.reconcileOrder) throw new Error("მოგების აღება გადამოწმებას ელოდება");
+      order = await service.reconcileOrder(strategy.symbol, "SELL", clientOrderId);
+      if (!order) throw new Error("ორდერი ჯერ ვერ დადასტურდა; ხელახლა გაყიდვა დაბლოკილია");
+    } else {
+      try {
+        order = await service.sell(strategy.symbol, price, assetQuantity, clientOrderId,
+          async () => {
+            if ((await repository.getById(id)).status !== "PAUSED") return false;
+            if (!userAuthStore) return true;
+            const owner = await userAuthStore.strategyOwner(id);
+            return owner?.id === user?.id && (strategy.executionEnvironment !== "TESTNET" || hasTestnetAccess(owner));
+          });
+      } catch (error) {
+        // Only definitive preflight/rejection failures can release this durable request.
+        if (error instanceof BinanceTestnetOrderError && !error.noAutoRetry && error.kind !== "ERROR") {
+          await repository.cancelProfitWithdrawal(id, requestKey);
+        }
+        throw error;
+      }
+    }
     await repository.withdrawProfit(strategy.id, order.price, order.quoteAmount, order.assetQuantity,
-      minimumReserveQuantity, order.orderId);
+      minimumReserveQuantity, order.orderId, requestKey);
     if (!user || user.role === "ADMIN") void telegramAlerts.send(`მოგების აღება [${strategy.executionEnvironment}]\n${strategy.symbol} · სტრატეგია #${strategy.id}\nმიღებული: ${order.quoteAmount.toFixed(2)} ${strategy.quoteAsset}\nგაყიდული: ${order.assetQuantity} ${strategy.baseAsset}`);
     return await repository.getById(strategy.id);
   } finally {
@@ -413,11 +448,13 @@ async function getStrategiesOverview(archived = false, user: DashboardUser | nul
         ? strategy.totalAssetQuantity * market.price + strategy.totalSaleProceeds - strategy.totalInvested
         : null;
       const orders = await repository.getOrders(strategy.id);
+      const cashWithdrawals = (await repository.getProfitWithdrawals(strategy.id)).filter((item) => item.status === "COMPLETED")
+        .map((item) => ({ amount: item.cashAmount, createdAt: item.createdAt }));
       const targetTime = Date.now() - periodHours * 60 * 60_000;
       const reference = Date.parse(strategy.createdAt) > targetTime ? null
         : await getHistoricalReference(strategy.symbol, periodHours, strategy.executionEnvironment);
       const period = periodPerformance(strategy, orders, totalPnl, reference?.price ?? null,
-        reference ? Date.parse(reference.timestamp) : targetTime);
+        reference ? Date.parse(reference.timestamp) : targetTime, cashWithdrawals);
       return {
         ...strategy,
         market,

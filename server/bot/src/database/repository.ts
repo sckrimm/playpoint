@@ -1,6 +1,7 @@
 import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, MarketState, OrderRecord, StrategyConfig, StrategyRecord, StrategyTemplateRecord } from "../types/strategy.js";
 import type { SymbolRules } from "../binance/binanceService.js";
 import type { TestnetEvidence } from "../services/testnetEvidence.js";
+import type { ProfitWithdrawalRequest } from "../services/profitWithdrawal.js";
 
 export interface StrategyStore {
   initialize(): Promise<void>;
@@ -25,7 +26,10 @@ export interface StrategyStore {
   releaseLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<void>;
   completeBuy(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, externalOrderId: string): Promise<void>;
   completeSell(strategyId: number, levelPercent: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void>;
-  withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void>;
+  beginProfitWithdrawal(strategyId: number, amount: number, requestKey: string, allowSale: boolean): Promise<ProfitWithdrawalRequest>;
+  getProfitWithdrawals(strategyId: number): Promise<ProfitWithdrawalRequest[]>;
+  cancelProfitWithdrawal(strategyId: number, requestKey: string): Promise<void>;
+  withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string, requestKey?: string): Promise<void>;
   failLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, error: unknown): Promise<void>;
   countOrders(strategyId: number): Promise<number>;
   getOrders(strategyId: number): Promise<OrderRecord[]>;

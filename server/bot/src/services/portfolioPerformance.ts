@@ -1,7 +1,7 @@
 import type { OrderRecord, StrategyRecord } from "../types/strategy.js";
 
 export function periodPerformance(strategy: StrategyRecord, orders: OrderRecord[], currentPnl: number | null,
-  referencePrice: number | null, targetTime: number) {
+  referencePrice: number | null, targetTime: number, cashWithdrawals: Array<{ amount: number; createdAt: string }> = []) {
   if (currentPnl === null || !Number.isFinite(currentPnl)) return null;
   if (Date.parse(strategy.createdAt) > targetTime) {
     return { change: currentPnl, startingEquity: strategy.totalBudget,
@@ -11,6 +11,9 @@ export function periodPerformance(strategy: StrategyRecord, orders: OrderRecord[
   let invested = 0;
   let proceeds = 0;
   let withdrawn = 0;
+  for (const withdrawal of cashWithdrawals) {
+    if (Date.parse(withdrawal.createdAt) <= targetTime) withdrawn += withdrawal.amount;
+  }
   for (const order of orders) {
     if (new Date(order.createdAt).getTime() > targetTime) continue;
     if (order.side === "BUY") {

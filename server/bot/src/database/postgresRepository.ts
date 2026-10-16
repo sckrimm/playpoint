@@ -3,6 +3,7 @@ import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, Marke
 import type { StrategyStore } from "./repository.js";
 import type { SymbolRules } from "../binance/binanceService.js";
 import { emptyTestnetEvidence, nextTestnetEvidence, type TestnetEvidence } from "../services/testnetEvidence.js";
+import { mapProfitRequest, planProfitWithdrawal, validateProfitRequestKey, type ProfitWithdrawalRequest } from "../services/profitWithdrawal.js";
 
 type PgStrategyRow = {
   id: number; symbol: string; initial_entry_price: string; total_budget: string; initial_purchase_amount: string; final_reserve_percent: string; total_invested: string;
@@ -67,6 +68,11 @@ export class PostgresStrategyRepository implements StrategyStore {
         remaining_cost_basis NUMERIC NOT NULL DEFAULT 0,
         average_entry_price NUMERIC NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'ACTIVE', created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS bot_profit_withdrawals (
+        request_key TEXT PRIMARY KEY, strategy_id BIGINT NOT NULL REFERENCES bot_strategies(id),
+        amount NUMERIC NOT NULL, cash_amount NUMERIC NOT NULL, sale_amount NUMERIC NOT NULL,
+        actual_amount NUMERIC NOT NULL DEFAULT 0, status TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL
       );
       CREATE TABLE IF NOT EXISTS bot_testnet_evidence (
         strategy_id BIGINT PRIMARY KEY REFERENCES bot_strategies(id),
@@ -249,9 +255,17 @@ export class PostgresStrategyRepository implements StrategyStore {
   }
 
   async setStrategyStatus(id: number, status: "ACTIVE" | "PAUSED"): Promise<StrategyRecord> {
-    const result = await this.pool.query(`UPDATE bot_strategies SET status = $1, updated_at = NOW()
-      WHERE id = $2 AND status IN ('ACTIVE', 'PAUSED')`, [status, id]);
-    if (result.rowCount !== 1) throw new Error(`Strategy ${id} is not active or paused`);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT id FROM bot_strategies WHERE id = $1 FOR UPDATE", [id]);
+      if (status === "ACTIVE" && (await client.query("SELECT 1 FROM bot_profit_withdrawals WHERE strategy_id = $1 AND status = 'PENDING'", [id])).rows.length) throw new Error("მოგების აღების ორდერი ჯერ გადამოწმებას ელოდება");
+      const result = await client.query(`UPDATE bot_strategies SET status = $1, updated_at = NOW()
+        WHERE id = $2 AND status IN ('ACTIVE', 'PAUSED')`, [status, id]);
+      if (result.rowCount !== 1) throw new Error(`Strategy ${id} is not active or paused`);
+      await client.query("COMMIT");
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
     return this.getById(id);
   }
 
@@ -263,9 +277,17 @@ export class PostgresStrategyRepository implements StrategyStore {
   }
 
   async archiveStrategy(id: number): Promise<StrategyRecord> {
-    const result = await this.pool.query(`UPDATE bot_strategies SET status = 'COMPLETED', updated_at = NOW()
-      WHERE id = $1 AND status IN ('ACTIVE', 'PAUSED')`, [id]);
-    if (result.rowCount !== 1) throw new Error(`Strategy ${id} is not active or paused`);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT id FROM bot_strategies WHERE id = $1 FOR UPDATE", [id]);
+      if ((await client.query("SELECT 1 FROM bot_profit_withdrawals WHERE strategy_id = $1 AND status = 'PENDING'", [id])).rows.length) throw new Error("მოგების აღების ორდერი ჯერ გადამოწმებას ელოდება");
+      const result = await client.query(`UPDATE bot_strategies SET status = 'COMPLETED', updated_at = NOW()
+        WHERE id = $1 AND status IN ('ACTIVE', 'PAUSED')`, [id]);
+      if (result.rowCount !== 1) throw new Error(`Strategy ${id} is not active or paused`);
+      await client.query("COMMIT");
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
     return this.getById(id);
   }
 
@@ -276,6 +298,7 @@ export class PostgresStrategyRepository implements StrategyStore {
       const currentResult = await client.query<PgStrategyRow>("SELECT * FROM bot_strategies WHERE id = $1 FOR UPDATE", [id]);
       const current = currentResult.rows[0];
       if (!current) throw new Error(`Strategy ${id} not found`);
+      if ((await client.query("SELECT 1 FROM bot_profit_withdrawals WHERE strategy_id = $1 AND status = 'PENDING'", [id])).rows.length) throw new Error("მოგების აღების ორდერი ჯერ გადამოწმებას ელოდება");
       if (current.execution_environment !== "SIMULATION") throw new Error("მხოლოდ SIMULATION სტრატეგიის განულებაა შესაძლებელი");
       if (!["ACTIVE", "PAUSED"].includes(current.status)) throw new Error(`Strategy ${id} is already archived`);
       await client.query("UPDATE bot_strategies SET status = 'COMPLETED', updated_at = NOW() WHERE id = $1", [id]);
@@ -479,7 +502,43 @@ export class PostgresStrategyRepository implements StrategyStore {
     }
   }
 
-  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void> {
+  async getProfitWithdrawals(strategyId: number): Promise<ProfitWithdrawalRequest[]> {
+    return (await this.pool.query("SELECT * FROM bot_profit_withdrawals WHERE strategy_id = $1 ORDER BY created_at", [strategyId])).rows.map(mapProfitRequest);
+  }
+
+  async cancelProfitWithdrawal(strategyId: number, requestKey: string): Promise<void> {
+    await this.pool.query("UPDATE bot_profit_withdrawals SET status = 'CANCELLED' WHERE strategy_id = $1 AND request_key = $2 AND status = 'PENDING'", [strategyId, requestKey]);
+  }
+
+  async beginProfitWithdrawal(strategyId: number, amount: number, requestKey: string, allowSale: boolean): Promise<ProfitWithdrawalRequest> {
+    validateProfitRequestKey(requestKey);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const row = (await client.query<PgStrategyRow>("SELECT * FROM bot_strategies WHERE id = $1 FOR UPDATE", [strategyId])).rows[0];
+      if (!row) throw new Error("Strategy not found");
+      const existing = (await client.query("SELECT * FROM bot_profit_withdrawals WHERE request_key = $1", [requestKey])).rows[0];
+      if (existing) {
+        if (Number(existing.strategy_id) !== strategyId || Number(existing.amount) !== amount || (Number(existing.sale_amount) > 0 && !allowSale)) throw new Error("მოთხოვნის იდენტიფიკატორი უკვე გამოყენებულია");
+        if (existing.status === "CANCELLED") throw new Error("მოთხოვნა გაუქმებულია; თავიდან სცადე");
+        await client.query("COMMIT");
+        return mapProfitRequest(existing);
+      }
+      if ((await client.query("SELECT 1 FROM bot_profit_withdrawals WHERE strategy_id = $1 AND status = 'PENDING'", [strategyId])).rows.length) throw new Error("წინა მოგების აღება ჯერ გადამოწმებას ელოდება");
+      if ((await client.query("SELECT 1 FROM bot_executed_levels WHERE strategy_id = $1 AND (status = 'EXECUTING' OR (status = 'FAILED' AND error_message LIKE '[NO_AUTO_RETRY]%'))", [strategyId])).rows.length) throw new Error("ჯერ გადაამოწმე მიმდინარე ორდერები");
+      const plan = planProfitWithdrawal(this.map(row), amount, allowSale);
+      const now = new Date().toISOString();
+      const status = plan.saleAmount > 0 ? "PENDING" : "COMPLETED";
+      await client.query(`INSERT INTO bot_profit_withdrawals (request_key, strategy_id, amount, cash_amount, sale_amount, actual_amount, status, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [requestKey, strategyId, amount, plan.cashAmount, plan.saleAmount, status === "COMPLETED" ? amount : 0, status, now]);
+      if (status === "COMPLETED") await client.query("UPDATE bot_strategies SET withdrawn_profit = withdrawn_profit + $1, updated_at = $2 WHERE id = $3", [amount, now, strategyId]);
+      await client.query("COMMIT");
+      return { requestKey, amount, ...plan, actualAmount: status === "COMPLETED" ? amount : 0, status, createdAt: now, isNew: true };
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  }
+
+  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string, requestKey?: string): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -487,6 +546,11 @@ export class PostgresStrategyRepository implements StrategyStore {
       const row = result.rows[0];
       if (!row) throw new Error(`Strategy ${strategyId} not found`);
       const strategy = this.map(row);
+      const request = requestKey ? (await client.query("SELECT * FROM bot_profit_withdrawals WHERE strategy_id = $1 AND request_key = $2", [strategyId, requestKey])).rows[0] : undefined;
+      if (requestKey && !request) throw new Error("მოგების აღების მოთხოვნა ვერ მოიძებნა");
+      if (request?.status === "COMPLETED") { await client.query("COMMIT"); return; }
+      if (request && request.status !== "PENDING") throw new Error("მოთხოვნა გაუქმებულია");
+      const cashAmount = Number(request?.cash_amount ?? 0);
       const existing = await client.query("SELECT 1 FROM bot_orders WHERE strategy_id = $1 AND execution_environment = $2 AND external_order_id = $3",
         [strategyId, strategy.executionEnvironment, externalOrderId]);
       if (existing.rows[0]) {
@@ -503,14 +567,15 @@ export class PostgresStrategyRepository implements StrategyStore {
       const now = new Date();
       await client.query(`UPDATE bot_strategies SET total_asset_quantity = $1,
         total_sold_quantity = total_sold_quantity + $2, total_sale_proceeds = total_sale_proceeds + $3,
-        realized_profit = realized_profit + $4, withdrawn_profit = withdrawn_profit + $3,
+        realized_profit = realized_profit + $4, withdrawn_profit = withdrawn_profit + $9,
         remaining_cost_basis = $5, average_entry_price = $6, updated_at = $7 WHERE id = $8`,
       [remainingQuantity, assetQuantity, quoteAmount, quoteAmount - costBasisSold,
-        remainingCostBasis, averageEntryPrice, now, strategyId]);
+        remainingCostBasis, averageEntryPrice, now, strategyId, quoteAmount + cashAmount]);
       await client.query(`INSERT INTO bot_orders (strategy_id, external_order_id, side, level_percent,
         market_price, quote_amount, asset_quantity, mode, execution_environment, created_at)
         VALUES ($1, $2, 'SELL', 0, $3, $4, $5, $6, $6, $7)`,
       [strategyId, externalOrderId, price, quoteAmount, assetQuantity, strategy.executionEnvironment, now]);
+      if (requestKey) await client.query("UPDATE bot_profit_withdrawals SET status = 'COMPLETED', actual_amount = $1, created_at = $2 WHERE request_key = $3", [quoteAmount + cashAmount, now, requestKey]);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");

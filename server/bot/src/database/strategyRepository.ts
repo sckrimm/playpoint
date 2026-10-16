@@ -3,6 +3,7 @@ import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, Marke
 import type { StrategyStore } from "./repository.js";
 import type { SymbolRules } from "../binance/binanceService.js";
 import { emptyTestnetEvidence, nextTestnetEvidence, type TestnetEvidence } from "../services/testnetEvidence.js";
+import { mapProfitRequest, planProfitWithdrawal, validateProfitRequestKey, type ProfitWithdrawalRequest } from "../services/profitWithdrawal.js";
 
 type StrategyRow = {
   id: number; symbol: string; initial_entry_price: number; total_budget: number; initial_purchase_amount: number; final_reserve_percent: number; total_invested: number;
@@ -111,9 +112,14 @@ export class StrategyRepository implements StrategyStore {
   }
 
   async setStrategyStatus(id: number, status: "ACTIVE" | "PAUSED"): Promise<StrategyRecord> {
-    const result = this.db.prepare(`UPDATE strategies SET status = ?, updated_at = ?
-      WHERE id = ? AND status IN ('ACTIVE', 'PAUSED')`).run(status, new Date().toISOString(), id);
-    if (result.changes !== 1) throw new Error(`Strategy ${id} is not active or paused`);
+    this.db.transaction(() => {
+      if (status === "ACTIVE" && this.db.prepare("SELECT 1 FROM profit_withdrawals WHERE strategy_id = ? AND status = 'PENDING'").get(id)) {
+        throw new Error("მოგების აღების ორდერი ჯერ გადამოწმებას ელოდება");
+      }
+      const result = this.db.prepare(`UPDATE strategies SET status = ?, updated_at = ?
+        WHERE id = ? AND status IN ('ACTIVE', 'PAUSED')`).run(status, new Date().toISOString(), id);
+      if (result.changes !== 1) throw new Error(`Strategy ${id} is not active or paused`);
+    })();
     return this.getById(id);
   }
 
@@ -125,9 +131,12 @@ export class StrategyRepository implements StrategyStore {
   }
 
   async archiveStrategy(id: number): Promise<StrategyRecord> {
-    const result = this.db.prepare(`UPDATE strategies SET status = 'COMPLETED', updated_at = ?
-      WHERE id = ? AND status IN ('ACTIVE', 'PAUSED')`).run(new Date().toISOString(), id);
-    if (result.changes !== 1) throw new Error(`Strategy ${id} is not active or paused`);
+    this.db.transaction(() => {
+      if (this.db.prepare("SELECT 1 FROM profit_withdrawals WHERE strategy_id = ? AND status = 'PENDING'").get(id)) throw new Error("მოგების აღების ორდერი ჯერ გადამოწმებას ელოდება");
+      const result = this.db.prepare(`UPDATE strategies SET status = 'COMPLETED', updated_at = ?
+        WHERE id = ? AND status IN ('ACTIVE', 'PAUSED')`).run(new Date().toISOString(), id);
+      if (result.changes !== 1) throw new Error(`Strategy ${id} is not active or paused`);
+    })();
     return this.getById(id);
   }
 
@@ -136,6 +145,7 @@ export class StrategyRepository implements StrategyStore {
     this.db.transaction(() => {
       const current = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(id) as StrategyRow | undefined;
       if (!current) throw new Error(`Strategy ${id} not found`);
+      if (this.db.prepare("SELECT 1 FROM profit_withdrawals WHERE strategy_id = ? AND status = 'PENDING'").get(id)) throw new Error("მოგების აღების ორდერი ჯერ გადამოწმებას ელოდება");
       if (current.execution_environment !== "SIMULATION") throw new Error("მხოლოდ SIMULATION სტრატეგიის განულებაა შესაძლებელი");
       if (!["ACTIVE", "PAUSED"].includes(current.status)) throw new Error(`Strategy ${id} is already archived`);
       const now = new Date().toISOString();
@@ -316,10 +326,46 @@ export class StrategyRepository implements StrategyStore {
     transaction();
   }
 
-  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string): Promise<void> {
+  async getProfitWithdrawals(strategyId: number): Promise<ProfitWithdrawalRequest[]> {
+    return (this.db.prepare("SELECT * FROM profit_withdrawals WHERE strategy_id = ? ORDER BY created_at").all(strategyId) as Record<string, unknown>[]).map(mapProfitRequest);
+  }
+
+  async cancelProfitWithdrawal(strategyId: number, requestKey: string): Promise<void> {
+    this.db.prepare("UPDATE profit_withdrawals SET status = 'CANCELLED' WHERE strategy_id = ? AND request_key = ? AND status = 'PENDING'").run(strategyId, requestKey);
+  }
+
+  async beginProfitWithdrawal(strategyId: number, amount: number, requestKey: string, allowSale: boolean): Promise<ProfitWithdrawalRequest> {
+    validateProfitRequestKey(requestKey);
+    return this.db.transaction(() => {
+      const row = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
+      if (!row) throw new Error("Strategy not found");
+      const existing = this.db.prepare("SELECT * FROM profit_withdrawals WHERE request_key = ?").get(requestKey) as Record<string, unknown> | undefined;
+      if (existing) {
+        if (Number(existing.strategy_id) !== strategyId || Number(existing.amount) !== amount || (Number(existing.sale_amount) > 0 && !allowSale)) throw new Error("მოთხოვნის იდენტიფიკატორი უკვე გამოყენებულია");
+        if (existing.status === "CANCELLED") throw new Error("მოთხოვნა გაუქმებულია; თავიდან სცადე");
+        return mapProfitRequest(existing);
+      }
+      if (this.db.prepare("SELECT 1 FROM profit_withdrawals WHERE strategy_id = ? AND status = 'PENDING'").get(strategyId)) throw new Error("წინა მოგების აღება ჯერ გადამოწმებას ელოდება");
+      if (this.db.prepare("SELECT 1 FROM executed_levels WHERE strategy_id = ? AND (status = 'EXECUTING' OR (status = 'FAILED' AND error_message LIKE '[NO_AUTO_RETRY]%'))").get(strategyId)) throw new Error("ჯერ გადაამოწმე მიმდინარე ორდერები");
+      const plan = planProfitWithdrawal(this.map(row), amount, allowSale);
+      const now = new Date().toISOString();
+      const status: ProfitWithdrawalRequest["status"] = plan.saleAmount > 0 ? "PENDING" : "COMPLETED";
+      this.db.prepare(`INSERT INTO profit_withdrawals (request_key, strategy_id, amount, cash_amount, sale_amount, actual_amount, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(requestKey, strategyId, amount, plan.cashAmount, plan.saleAmount, status === "COMPLETED" ? amount : 0, status, now);
+      if (status === "COMPLETED") this.db.prepare("UPDATE strategies SET withdrawn_profit = withdrawn_profit + ?, updated_at = ? WHERE id = ?").run(amount, now, strategyId);
+      return { requestKey, amount, ...plan, actualAmount: status === "COMPLETED" ? amount : 0, status, createdAt: now, isNew: true };
+    })();
+  }
+
+  async withdrawProfit(strategyId: number, price: number, quoteAmount: number, assetQuantity: number, minimumReserveQuantity: number, externalOrderId: string, requestKey?: string): Promise<void> {
     const transaction = this.db.transaction(() => {
       const strategy = this.db.prepare("SELECT * FROM strategies WHERE id = ?").get(strategyId) as StrategyRow | undefined;
       if (!strategy) throw new Error(`Strategy ${strategyId} not found`);
+      const request = requestKey ? this.db.prepare("SELECT * FROM profit_withdrawals WHERE strategy_id = ? AND request_key = ?").get(strategyId, requestKey) as Record<string, unknown> | undefined : undefined;
+      if (requestKey && !request) throw new Error("მოგების აღების მოთხოვნა ვერ მოიძებნა");
+      if (request?.status === "COMPLETED") return;
+      if (request && request.status !== "PENDING") throw new Error("მოთხოვნა გაუქმებულია");
+      const cashAmount = Number(request?.cash_amount ?? 0);
       const existing = this.db.prepare("SELECT 1 FROM orders WHERE strategy_id = ? AND execution_environment = ? AND external_order_id = ?")
         .get(strategyId, strategy.execution_environment, externalOrderId);
       if (existing) return;
@@ -335,12 +381,13 @@ export class StrategyRepository implements StrategyStore {
         total_sale_proceeds = total_sale_proceeds + ?, realized_profit = realized_profit + ?,
         withdrawn_profit = withdrawn_profit + ?, remaining_cost_basis = ?, average_entry_price = ?, updated_at = ? WHERE id = ?`)
         .run(remainingQuantity, assetQuantity, quoteAmount, quoteAmount - costBasisSold,
-          quoteAmount, remainingCostBasis, averageEntryPrice, now, strategyId);
+          quoteAmount + cashAmount, remainingCostBasis, averageEntryPrice, now, strategyId);
       this.db.prepare(`INSERT INTO orders (strategy_id, external_order_id, side, level_percent,
         market_price, quote_amount, asset_quantity, mode, execution_environment, created_at)
         VALUES (?, ?, 'SELL', 0, ?, ?, ?, ?, ?, ?)`)
         .run(strategyId, externalOrderId, price, quoteAmount, assetQuantity,
           strategy.execution_environment, strategy.execution_environment, now);
+      if (requestKey) this.db.prepare("UPDATE profit_withdrawals SET status = 'COMPLETED', actual_amount = ?, created_at = ? WHERE request_key = ?").run(quoteAmount + cashAmount, now, requestKey);
     });
     transaction();
   }

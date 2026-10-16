@@ -30,6 +30,15 @@ test("an existing position with missing historical price has no fabricated retur
   assert.equal(periodPerformance(strategy, [buy], 50, null, target), null);
 });
 
+test("cash-only profit allocation changes working equity, not trading PnL", () => {
+  const result = periodPerformance(strategy, [buy], 50, 12, target, [
+    { amount: 5, createdAt: "2026-10-09T12:00:00Z" },
+    { amount: 7, createdAt: "2026-10-11T12:00:00Z" },
+  ])!;
+  assert.equal(result.startingEquity, 215);
+  assert.equal(result.change, 30);
+});
+
 test("a new bot contributes its real return since creation without requiring pre-creation prices", () => {
   const recent = { ...strategy, createdAt: "2026-10-11T12:00:00Z" };
   const result = periodPerformance(recent, [], 50, null, target)!;
