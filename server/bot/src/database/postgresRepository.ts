@@ -2,6 +2,7 @@ import { Pool, type PoolClient } from "pg";
 import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, MarketState, OrderRecord, StrategyConfig, StrategyRecord, StrategyTemplateRecord } from "../types/strategy.js";
 import type { StrategyStore } from "./repository.js";
 import type { SymbolRules } from "../binance/binanceService.js";
+import { emptyTestnetEvidence, nextTestnetEvidence, type TestnetEvidence } from "../services/testnetEvidence.js";
 
 type PgStrategyRow = {
   id: number; symbol: string; initial_entry_price: string; total_budget: string; initial_purchase_amount: string; final_reserve_percent: string; total_invested: string;
@@ -20,6 +21,36 @@ export class PostgresStrategyRepository implements StrategyStore {
     this.pool = pool ?? new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 5 });
   }
 
+  async getTestnetEvidence(id: number): Promise<TestnetEvidence> {
+    return this.mapEvidence((await this.pool.query("SELECT * FROM bot_testnet_evidence WHERE strategy_id = $1", [id])).rows[0]);
+  }
+
+  private mapEvidence(row?: Record<string, unknown>): TestnetEvidence {
+    return row ? { observedMs: Number(row.observed_ms), lastObservedMs: Number(row.last_observed_ms), workerId: String(row.worker_id),
+      restarts: Number(row.restarts), gapRecoveries: Number(row.gap_recoveries), completedCycles: Number(row.completed_cycles) } : emptyTestnetEvidence();
+  }
+
+  async recordTestnetObservation(id: number, now: number, workerId: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const strategy = (await client.query("SELECT status, execution_environment FROM bot_strategies WHERE id = $1 FOR UPDATE", [id])).rows[0];
+      const blocked = (await client.query("SELECT 1 FROM bot_executed_levels WHERE strategy_id = $1 AND status IN ('FAILED', 'EXECUTING') LIMIT 1", [id])).rows.length;
+      if (strategy?.status === "ACTIVE" && strategy.execution_environment === "TESTNET" && !blocked) {
+        const previous = this.mapEvidence((await client.query("SELECT * FROM bot_testnet_evidence WHERE strategy_id = $1", [id])).rows[0]);
+        const next = nextTestnetEvidence(previous, now, workerId);
+        await client.query(`INSERT INTO bot_testnet_evidence (strategy_id, observed_ms, last_observed_ms, worker_id, restarts, gap_recoveries)
+          VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT(strategy_id) DO UPDATE SET observed_ms = excluded.observed_ms,
+          last_observed_ms = excluded.last_observed_ms, worker_id = excluded.worker_id, restarts = excluded.restarts, gap_recoveries = excluded.gap_recoveries`,
+        [id, next.observedMs, next.lastObservedMs, next.workerId, next.restarts, next.gapRecoveries]);
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+  }
+
   async initialize(): Promise<void> {
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS bot_strategies (
@@ -36,6 +67,12 @@ export class PostgresStrategyRepository implements StrategyStore {
         remaining_cost_basis NUMERIC NOT NULL DEFAULT 0,
         average_entry_price NUMERIC NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'ACTIVE', created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS bot_testnet_evidence (
+        strategy_id BIGINT PRIMARY KEY REFERENCES bot_strategies(id),
+        observed_ms BIGINT NOT NULL DEFAULT 0, last_observed_ms BIGINT NOT NULL DEFAULT 0,
+        worker_id TEXT NOT NULL DEFAULT '', restarts INTEGER NOT NULL DEFAULT 0,
+        gap_recoveries INTEGER NOT NULL DEFAULT 0, completed_cycles INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS bot_orders (
         id BIGSERIAL PRIMARY KEY, strategy_id BIGINT NOT NULL REFERENCES bot_strategies(id),
@@ -188,6 +225,7 @@ export class PostgresStrategyRepository implements StrategyStore {
       [config.symbol, config.baseAsset, config.quoteAsset, config.initialEntryPrice,
         config.totalBudget, config.initialPurchaseAmount ?? 0, config.finalReservePercent, id]);
       await client.query("DELETE FROM bot_executed_levels WHERE strategy_id = $1", [id]);
+      await client.query("DELETE FROM bot_testnet_evidence WHERE strategy_id = $1", [id]);
       for (const level of config.buyLevels) {
         await client.query(`INSERT INTO bot_executed_levels
           (strategy_id, side, level_percent, trigger_price, allocation_percent)
@@ -425,6 +463,8 @@ export class PostgresStrategyRepository implements StrategyStore {
       const remainingSells = await client.query<{ count: number }>(`SELECT COUNT(*)::int AS count
         FROM bot_executed_levels WHERE strategy_id = $1 AND side = 'SELL' AND status <> 'EXECUTED'`, [strategyId]);
       if (remainingSells.rows[0]!.count === 0) {
+        if (strategy.executionEnvironment === "TESTNET") await client.query(`INSERT INTO bot_testnet_evidence (strategy_id, completed_cycles)
+          VALUES ($1, 1) ON CONFLICT(strategy_id) DO UPDATE SET completed_cycles = bot_testnet_evidence.completed_cycles + 1`, [strategyId]);
         await client.query(`UPDATE bot_executed_levels SET status = 'WAITING', executed_at = NULL,
           error_message = NULL, client_order_id = NULL, execution_started_at = NULL
           WHERE strategy_id = $1 AND side = 'BUY'`, [strategyId]);

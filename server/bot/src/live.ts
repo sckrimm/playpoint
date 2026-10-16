@@ -12,7 +12,7 @@ import { money } from "./utils/format.js";
 import { telegramAlerts } from "./services/telegramAlertService.js";
 import { getRuntimeUsers } from "./auth/runtimeUsers.js";
 import { resolveCredentials } from "./auth/accountCredentials.js";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isFreshMarketEvent } from "./services/marketSafety.js";
 import { hasTestnetAccess } from "./auth/liveAccess.js";
 
@@ -25,6 +25,8 @@ const feeds = {
   TESTNET: new BinancePriceFeed("wss://stream.testnet.binance.vision/ws", "Binance Spot Testnet"),
 };
 const engines = new Map<number, StrategyEngine>();
+const workerId = randomUUID();
+const lastObservedAt = new Map<number, number>();
 const strategiesByEnvironment = {
   SIMULATION: new Map<string, StrategyRecord[]>(),
   TESTNET: new Map<string, StrategyRecord[]>(),
@@ -96,6 +98,7 @@ async function syncStrategies(): Promise<void> {
     if (!retainedIds.has(id)) {
       engines.delete(id);
       executorVersions.delete(id);
+      lastObservedAt.delete(id);
     }
   }
   feeds.SIMULATION.setSymbols([...strategiesByEnvironment.SIMULATION.keys()]);
@@ -178,6 +181,10 @@ function startFeed(environment: "SIMULATION" | "TESTNET"): void {
   }
   for (const strategy of strategiesByEnvironment[environment].get(symbol) ?? []) {
     await engines.get(strategy.id)?.onPrice(price, eventTime);
+    if (environment === "TESTNET" && engines.has(strategy.id) && now - (lastObservedAt.get(strategy.id) ?? 0) >= 10_000) {
+      await store.recordTestnetObservation(strategy.id, now, workerId);
+      lastObservedAt.set(strategy.id, now);
+    }
   }
   });
 }

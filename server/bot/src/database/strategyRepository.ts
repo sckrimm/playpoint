@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, MarketState, OrderRecord, StrategyConfig, StrategyRecord, StrategyTemplateRecord } from "../types/strategy.js";
 import type { StrategyStore } from "./repository.js";
 import type { SymbolRules } from "../binance/binanceService.js";
+import { emptyTestnetEvidence, nextTestnetEvidence, type TestnetEvidence } from "../services/testnetEvidence.js";
 
 type StrategyRow = {
   id: number; symbol: string; initial_entry_price: number; total_budget: number; initial_purchase_amount: number; final_reserve_percent: number; total_invested: number;
@@ -17,6 +18,28 @@ export class StrategyRepository implements StrategyStore {
   constructor(private readonly db: Database.Database) {}
 
   async initialize(): Promise<void> {}
+
+  async getTestnetEvidence(id: number): Promise<TestnetEvidence> {
+    const row = this.db.prepare("SELECT * FROM testnet_evidence WHERE strategy_id = ?").get(id) as Record<string, number | string> | undefined;
+    return row ? { observedMs: Number(row.observed_ms), lastObservedMs: Number(row.last_observed_ms), workerId: String(row.worker_id),
+      restarts: Number(row.restarts), gapRecoveries: Number(row.gap_recoveries), completedCycles: Number(row.completed_cycles) } : emptyTestnetEvidence();
+  }
+
+  async recordTestnetObservation(id: number, now: number, workerId: string): Promise<void> {
+    this.db.transaction(() => {
+      const strategy = this.db.prepare("SELECT status, execution_environment FROM strategies WHERE id = ?").get(id) as StrategyRow | undefined;
+      if (strategy?.status !== "ACTIVE" || strategy.execution_environment !== "TESTNET") return;
+      if (this.db.prepare("SELECT 1 FROM executed_levels WHERE strategy_id = ? AND status IN ('FAILED', 'EXECUTING') LIMIT 1").get(id)) return;
+      const row = this.db.prepare("SELECT * FROM testnet_evidence WHERE strategy_id = ?").get(id) as Record<string, number | string> | undefined;
+      const previous = row ? { observedMs: Number(row.observed_ms), lastObservedMs: Number(row.last_observed_ms), workerId: String(row.worker_id),
+        restarts: Number(row.restarts), gapRecoveries: Number(row.gap_recoveries), completedCycles: Number(row.completed_cycles) } : emptyTestnetEvidence();
+      const next = nextTestnetEvidence(previous, now, workerId);
+      this.db.prepare(`INSERT INTO testnet_evidence (strategy_id, observed_ms, last_observed_ms, worker_id, restarts, gap_recoveries)
+        VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(strategy_id) DO UPDATE SET observed_ms = excluded.observed_ms,
+        last_observed_ms = excluded.last_observed_ms, worker_id = excluded.worker_id, restarts = excluded.restarts, gap_recoveries = excluded.gap_recoveries`)
+        .run(id, next.observedMs, next.lastObservedMs, next.workerId, next.restarts, next.gapRecoveries);
+    })();
+  }
 
   async findOrCreate(config: StrategyConfig): Promise<StrategyRecord> {
     const existing = this.db.prepare(`SELECT * FROM strategies WHERE symbol = ? AND execution_environment = ?
@@ -75,6 +98,7 @@ export class StrategyRepository implements StrategyStore {
         .run(config.symbol, config.baseAsset, config.quoteAsset, config.initialEntryPrice,
           config.totalBudget, config.initialPurchaseAmount ?? 0, config.finalReservePercent, new Date().toISOString(), id);
       this.db.prepare("DELETE FROM executed_levels WHERE strategy_id = ?").run(id);
+      this.db.prepare("DELETE FROM testnet_evidence WHERE strategy_id = ?").run(id);
       const insert = this.db.prepare(`INSERT INTO executed_levels
         (strategy_id, side, level_percent, trigger_price, allocation_percent) VALUES (?, ?, ?, ?, ?)`);
       for (const level of config.buyLevels) insert.run(id, "BUY", level.dropPercent,
@@ -281,6 +305,8 @@ export class StrategyRepository implements StrategyStore {
       const remainingSells = (this.db.prepare(`SELECT COUNT(*) AS count FROM executed_levels
         WHERE strategy_id = ? AND side = 'SELL' AND status <> 'EXECUTED'`).get(strategyId) as { count: number }).count;
       if (remainingSells === 0) {
+        if (strategy.execution_environment === "TESTNET") this.db.prepare(`INSERT INTO testnet_evidence (strategy_id, completed_cycles)
+          VALUES (?, 1) ON CONFLICT(strategy_id) DO UPDATE SET completed_cycles = completed_cycles + 1`).run(strategyId);
         this.db.prepare(`UPDATE executed_levels SET status = 'WAITING', executed_at = NULL,
           error_message = NULL, client_order_id = NULL, execution_started_at = NULL
           WHERE strategy_id = ? AND side = 'BUY'`).run(strategyId);

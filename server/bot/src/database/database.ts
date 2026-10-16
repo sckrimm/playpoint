@@ -33,6 +33,15 @@ export function openDatabase(filename: string): Database.Database {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS testnet_evidence (
+      strategy_id INTEGER PRIMARY KEY REFERENCES strategies(id),
+      observed_ms INTEGER NOT NULL DEFAULT 0,
+      last_observed_ms INTEGER NOT NULL DEFAULT 0,
+      worker_id TEXT NOT NULL DEFAULT '',
+      restarts INTEGER NOT NULL DEFAULT 0,
+      gap_recoveries INTEGER NOT NULL DEFAULT 0,
+      completed_cycles INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       strategy_id INTEGER NOT NULL REFERENCES strategies(id),

@@ -8,6 +8,7 @@ import { BinanceMarketHistoryService, type BinanceCandle, type HistoricalPrice }
 import { appConfig } from "../config/env.js";
 import { BUILT_IN_STRATEGY_TEMPLATES, DEFAULT_BUY_LEVELS, validateStrategyConfig } from "../config/strategy.js";
 import { createStore } from "../database/createStore.js";
+import { needsOrderReconciliation } from "../strategy/strategyEngine.js";
 import { SimulationOrderService } from "../services/simulationOrderService.js";
 import { BinanceTestnetOrderService } from "../services/binanceTestnetOrderService.js";
 import { runStrategyBacktest } from "../services/strategyBacktestService.js";
@@ -233,20 +234,26 @@ async function getReadinessReport(user: DashboardUser | null) {
       : { id: "live-lock", label: "LIVE უსაფრთხოების ჩამკეტი", status: "ERROR", detail: `${liveStrategies.length} LIVE სტრატეგია აქტიურია` });
 
     const strategyReports = await Promise.all(testnetStrategies.map(async (strategy) => {
-      const [levels, orders, market] = await Promise.all([
-        repository.getLevels(strategy.id), repository.getOrders(strategy.id), repository.getMarketState(strategy.symbol),
+      const [levels, orders, market, evidence] = await Promise.all([
+        repository.getLevels(strategy.id), repository.getOrders(strategy.id), repository.getMarketState(strategy.symbol), repository.getTestnetEvidence(strategy.id),
       ]);
       const buyCount = orders.filter((order) => order.side === "BUY").length;
       const sellCount = orders.filter((order) => order.side === "SELL").length;
-      const completedCycles = Math.min(buyCount, sellCount);
+      const completedCycles = evidence.completedCycles;
       const failedLevelCount = levels.filter((level) => level.status === "FAILED").length;
-      const pendingExecutionCount = levels.filter((level) => level.status === "EXECUTING").length;
-      const invalidOrderCount = orders.filter((order) => order.executionEnvironment !== "TESTNET" || order.marketPrice <= 0 || order.quoteAmount <= 0 || order.assetQuantity <= 0).length;
-      const observationHours = Math.max(0, (Date.now() - Date.parse(strategy.createdAt)) / 3_600_000);
-      const marketAgeMinutes = market ? Math.max(0, (Date.now() - Date.parse(market.updatedAt)) / 60_000) : null;
-      const budgetUsedPercent = strategy.totalBudget > 0 ? strategy.totalInvested / strategy.totalBudget * 100 : 0;
+      const pendingExecutionCount = levels.filter(needsOrderReconciliation).length;
+      const invalidOrderCount = orders.filter((order) => order.executionEnvironment !== "TESTNET" ||
+        [order.marketPrice, order.quoteAmount, order.assetQuantity].some((value) => !Number.isFinite(value) || value <= 0)).length;
+      const observationHours = evidence.observedMs / 3_600_000;
+      const marketAge = market ? Date.now() - Date.parse(market.eventTime) : NaN;
+      const marketAgeMinutes = Number.isFinite(marketAge) && marketAge >= -5_000 ? Math.max(0, marketAge / 60_000) : null;
+      const cash = strategy.totalBudget + strategy.totalSaleProceeds - strategy.totalInvested - strategy.withdrawnProfit;
+      const capital = strategy.totalBudget + Math.max(0, strategy.realizedProfit - strategy.withdrawnProfit);
+      const budgetUsedPercent = capital > 0 ? Math.max(0, capital - cash) / capital * 100 : 0;
       return { id: strategy.id, symbol: strategy.symbol, status: strategy.status, observationHours, orderCount: orders.length,
-        buyCount, sellCount, completedCycles, failedLevelCount, pendingExecutionCount, invalidOrderCount, marketAgeMinutes, budgetUsedPercent };
+        buyCount, sellCount, completedCycles, failedLevelCount, pendingExecutionCount, invalidOrderCount, marketAgeMinutes, budgetUsedPercent,
+        restarts: evidence.restarts, gapRecoveries: evidence.gapRecoveries,
+        workerFresh: evidence.lastObservedMs > 0 && Date.now() >= evidence.lastObservedMs && Date.now() - evidence.lastObservedMs <= 30_000 };
     }));
 
     const activeReports = strategyReports.filter((strategy) => strategy.status === "ACTIVE");
@@ -255,13 +262,19 @@ async function getReadinessReport(user: DashboardUser | null) {
       : 0;
     checks.push(activeReports.length > 0 && shortestObservation >= TESTNET_OBSERVATION_TARGET_HOURS
       ? { id: "observation", label: "ყველა სტრატეგიის 48-საათიანი დაკვირვება", status: "OK", detail: `მინიმუმ ${shortestObservation.toFixed(1)} საათი დაგროვდა თითოეულზე` }
-      : { id: "observation", label: "ყველა სტრატეგიის 48-საათიანი დაკვირვება", status: "WAITING", detail: `${shortestObservation.toFixed(1)} / ${TESTNET_OBSERVATION_TARGET_HOURS} საათი ყველაზე ახალ აქტიურ სტრატეგიაზე` });
+      : { id: "observation", label: "ყველა სტრატეგიის 48-საათიანი დაკვირვება", status: "WAITING", detail: `${shortestObservation.toFixed(1)} / ${TESTNET_OBSERVATION_TARGET_HOURS} სთ დადასტურებული მუშაობა; დათვლა ახალი მონიტორით დაიწყო` });
 
-    const totalCycles = strategyReports.reduce((sum, strategy) => sum + strategy.completedCycles, 0);
+    const totalCycles = activeReports.reduce((sum, strategy) => sum + strategy.completedCycles, 0);
     const strategiesWithoutCycle = activeReports.filter((strategy) => strategy.completedCycles < 1);
     checks.push(totalCycles >= TESTNET_CYCLE_TARGET && strategiesWithoutCycle.length === 0 && activeReports.length > 0
       ? { id: "cycles", label: "TESTNET BUY → SELL ციკლები", status: "OK", detail: `${totalCycles} სრული ციკლი; ყველა აქტიური სტრატეგია მონაწილეობდა` }
       : { id: "cycles", label: "TESTNET BUY → SELL ციკლები", status: "WAITING", detail: `${totalCycles} / ${TESTNET_CYCLE_TARGET} სრული ციკლი; ${strategiesWithoutCycle.length} სტრატეგიას სრული ციკლი ჯერ არ აქვს` });
+
+    for (const [id, label, passed] of [
+      ["worker", "სავაჭრო პროცესის მუშაობა", activeReports.length > 0 && activeReports.every((report) => report.workerFresh)],
+      ["restart", "restart / deploy-ის შემდეგ აღდგენა", activeReports.length > 0 && activeReports.every((report) => report.restarts > 0)],
+      ["gap-recovery", "მონაცემთა პაუზის შემდეგ აღდგენა", activeReports.length > 0 && activeReports.every((report) => report.gapRecoveries > 0)],
+    ] as const) checks.push({ id, label, status: passed ? "OK" : "WAITING", detail: passed ? "შენახული დაკვირვებით დადასტურებულია" : "რეალური პროცესიდან დადასტურებას ელოდება" });
 
     const failedCount = strategyReports.reduce((sum, strategy) => sum + strategy.failedLevelCount, 0);
     checks.push(failedCount === 0

@@ -1,5 +1,6 @@
 import type { AccountBalance, BinanceConnectionState, ExecutedLevelRecord, MarketState, OrderRecord, StrategyConfig, StrategyRecord, StrategyTemplateRecord } from "../types/strategy.js";
 import type { SymbolRules } from "../binance/binanceService.js";
+import type { TestnetEvidence } from "../services/testnetEvidence.js";
 
 export interface StrategyStore {
   initialize(): Promise<void>;
@@ -16,6 +17,8 @@ export interface StrategyStore {
   createStrategyTemplate(template: Omit<StrategyTemplateRecord, "id" | "builtIn" | "createdAt">, ownerUserId?: number): Promise<StrategyTemplateRecord>;
   deleteStrategyTemplate(id: number): Promise<void>;
   getById(id: number): Promise<StrategyRecord>;
+  getTestnetEvidence(id: number): Promise<TestnetEvidence>;
+  recordTestnetObservation(id: number, now: number, workerId: string): Promise<void>;
   initializeBuyLevels(strategyId: number, config: StrategyConfig): Promise<void>;
   getLevels(strategyId: number): Promise<ExecutedLevelRecord[]>;
   claimLevel(strategyId: number, side: "BUY" | "SELL", levelPercent: number, clientOrderId: string): Promise<boolean>;
